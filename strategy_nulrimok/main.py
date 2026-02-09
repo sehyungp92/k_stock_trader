@@ -168,10 +168,9 @@ async def run_nulrimok():
     logger.info("Starting Nulrimok Strategy")
     cfg = load_config()
 
-    # Load switches from YAML if configured (not default — only when SWITCHES_CONFIG is set)
-    switches_path = os.getenv("SWITCHES_CONFIG")
-    if switches_path:
-        nulrimok_switches.update_from_yaml(switches_path)
+    # Load conservative switches if CONSERVATIVE_MODE=true
+    if os.getenv("CONSERVATIVE_MODE", "false").lower() == "true":
+        nulrimok_switches.update_from_yaml("/app/config/conservative.yaml")
     nulrimok_switches.log_active_config()
 
     env = KoreaInvestEnv(build_kis_config_from_env())

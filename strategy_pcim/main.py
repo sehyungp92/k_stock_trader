@@ -174,10 +174,9 @@ async def run_pcim():
 
     cfg = load_config()
 
-    # Load switches from YAML if configured (not default — only when SWITCHES_CONFIG is set)
-    switches_path = os.getenv("SWITCHES_CONFIG")
-    if switches_path:
-        pcim_switches.update_from_yaml(switches_path)
+    # Load conservative switches if CONSERVATIVE_MODE=true
+    if os.getenv("CONSERVATIVE_MODE", "false").lower() == "true":
+        pcim_switches.update_from_yaml("/app/config/conservative.yaml")
     pcim_switches.log_active_config()
 
     channels = load_channels()
