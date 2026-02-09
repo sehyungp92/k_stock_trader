@@ -42,9 +42,7 @@ def load_config() -> dict:
     config_path = os.getenv("PCIM_CONFIG", "config/settings.yaml")
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
-    if not cfg:
-        raise ValueError(f"Config file {config_path} is empty or invalid")
-    return cfg
+    return cfg or {}
 
 
 def load_channels() -> List[ChannelConfig]:
