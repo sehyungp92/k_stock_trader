@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "mcp__kis-code-assistant-mcp__search_domestic_stock_api",
+      "mcp__kis-code-assistant-mcp__read_source_code",
+      "mcp__kis-code-assistant-mcp__search_auth_api",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(while read f)",
+      "Bash(do grep -H \"regime\\\\|sector\\\\|liq\" \"$f\")",
+      "Bash(done)",
+      "Bash(test:*)",
+      "Bash(find:*)"
+    ]
+  }
+}

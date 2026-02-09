@@ -1,0 +1,127 @@
+# =============================================
+# Environment & Secrets
+# =============================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+secrets.yaml
+
+# =============================================
+# Python
+# =============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+.conda/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =============================================
+# IDE & Editors
+# =============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# =============================================
+# OS Files
+# =============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================
+# Data & Logs
+# =============================================
+data/
+logs/
+*.log
+*.log.*
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# State files
+*.state
+*.json.bak
+
+# =============================================
+# Docker
+# =============================================
+docker-compose.override.yml
+postgres_data/
+metabase_data/
+
+# =============================================
+# Project Specific
+# =============================================
+# YouTube watcher state
+youtube_state.json
+
+# Strategy data directories (contain trading data)
+strategy_*/data/
+strategy_*/logs/
+
+# Local config overrides
+config/local/
+*.local.yaml

@@ -1,0 +1,54 @@
+# PCIM Influencer Whitelist
+# These channels are monitored for stock recommendations.
+#
+# influencer_id is NOT unique — the same influencer can appear on
+# multiple channels, and the same channel can host multiple influencers.
+
+channels:
+  - channel_id: "UCadSWH0pDXxEatvLHEHCWlg"
+    name: "한균수의 주식사용설명서"
+    influencer_id: "han_kyunsu"
+    keywords: []
+    notify_all: true
+
+  - channel_id: "UCepFegYKLcFmPBsAZ0ACwbA"
+    name: "빅이슈 여인수tv"
+    influencer_id: "yeo_insu"
+    keywords: []
+    notify_all: true
+
+  - channel_id: "UCgJ5pT6S2NuTVP-6-AlLZew"
+    name: "TomatoTV"
+    influencer_id: "yeo_insu"
+    keywords: ["여인수"]
+    notify_all: false
+
+  - channel_id: "UCgJ5pT6S2NuTVP-6-AlLZew"
+    name: "TomatoTV"
+    influencer_id: "lee_kwonhee"
+    keywords: ["이권희"]
+    notify_all: false
+
+  - channel_id: "UCF8AeLlUbEpKju6v1H6p8Eg"
+    name: "한국경제TV"
+    influencer_id: "lee_kwonhee"
+    keywords: ["이권희"]
+    notify_all: false
+
+  - channel_id: "UCnfwIKyFYRuqZzzKBDt6JOA"
+    name: "매일경제TV"
+    influencer_id: "lee_kwonhee"
+    keywords: ["이권희"]
+    notify_all: false
+
+  - channel_id: "UCnfwIKyFYRuqZzzKBDt6JOA"
+    name: "매일경제TV"
+    influencer_id: "kim_junho"
+    keywords: ["김준호"]
+    notify_all: false
+
+  - channel_id: "UCLldNXR78GTOse5CH4XNkIQ"
+    name: "프리티"
+    influencer_id: "pretty"
+    keywords: []
+    notify_all: true

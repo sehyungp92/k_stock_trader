@@ -1,0 +1,1 @@
+"""KPR strategy unit tests."""

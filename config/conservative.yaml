@@ -1,0 +1,37 @@
+# Conservative Configuration for All Strategies
+#
+# This file restores original conservative (strict) behavior.
+# Load with: KMPSwitches.load_from_yaml("config/conservative.yaml")
+#
+# Current defaults are set to MAXIMIZE trade frequency.
+# Use this file to restore stricter filtering.
+
+kmp:
+  require_held_support: true
+  quality_min_threshold: 40
+  or_range_max: 0.055
+  min_surge_slope: 0.04
+  enable_rvol_hard_gate: true
+
+kpr:
+  enable_lunch_block: true
+  conflict_is_red: true
+  vwap_depth_min: 0.02
+  vwap_depth_max: 0.05
+  tod_late_mult: 0.5
+  enable_stale_flow_acceptance_adder: true
+  enable_late_acceptance_adder: true
+
+nulrimok:
+  allow_tier_c_reduced: false
+  leader_tier_a_pct: 60
+  leader_tier_b_pct: 70
+  flow_persistence_min: 0.60
+  confirm_bars: 2
+
+pcim:
+  t3_bucket_a_allowed: false
+  entry_cutoff: [10, 0]
+  gap_reversal_threshold: 0.60
+  spread_veto_pct: 0.006
+  enable_adtv_soft_penalty: true

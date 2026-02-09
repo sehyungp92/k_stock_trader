@@ -1,0 +1,192 @@
+version: "3.8"
+
+x-common-env: &common-env
+  KIS_APP_KEY: ${KIS_APP_KEY}
+  KIS_APP_SECRET: ${KIS_APP_SECRET}
+  KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO}
+  KIS_ACCOUNT_PROD_CODE: ${KIS_ACCOUNT_PROD_CODE:-01}
+  KIS_IS_PAPER: ${KIS_IS_PAPER:-true}
+  KIS_HTS_ID: ${KIS_HTS_ID:-}
+  KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
+  KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
+  KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
+
+x-common: &common
+  restart: unless-stopped
+  env_file:
+    - .env
+  networks:
+    - kstock
+
+x-strategy-base: &strategy-base
+  <<: *common
+  depends_on:
+    oms:
+      condition: service_healthy
+  environment:
+    <<: *common-env
+    OMS_URL: http://oms:8000
+
+services:
+  # ===========================================
+  # OMS Service (always runs)
+  # ===========================================
+  oms:
+    <<: *common
+    build:
+      context: .
+      dockerfile: oms/Dockerfile
+    container_name: oms
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+      OMS_PORT: "8000"
+      DATABASE_URL: postgresql://trading_writer:${POSTGRES_WRITER_PASSWORD:-changeme}@postgres:5432/trading
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================
+  # Strategy: KMP
+  # ===========================================
+  kmp:
+    <<: *strategy-base
+    build:
+      context: .
+      dockerfile: strategy_kmp/Dockerfile
+    container_name: kmp
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/kmp:/app/data
+    environment:
+      <<: *common-env
+      OMS_URL: http://oms:8000
+      KMP_CONFIG: /app/config/settings.yaml
+    profiles:
+      - kmp
+      - all
+
+  # ===========================================
+  # Strategy: KPR
+  # ===========================================
+  kpr:
+    <<: *strategy-base
+    build:
+      context: .
+      dockerfile: strategy_kpr/Dockerfile
+    container_name: kpr
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/kpr:/app/data
+    environment:
+      <<: *common-env
+      OMS_URL: http://oms:8000
+      KPR_CONFIG: /app/config/settings.yaml
+    profiles:
+      - kpr
+      - all
+
+  # ===========================================
+  # Strategy: Nulrimok
+  # ===========================================
+  nulrimok:
+    <<: *strategy-base
+    build:
+      context: .
+      dockerfile: strategy_nulrimok/Dockerfile
+    container_name: nulrimok
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/nulrimok:/app/data
+      - ./data/nulrimok/lrs.db:/app/lrs.db
+    environment:
+      <<: *common-env
+      OMS_URL: http://oms:8000
+      NULRIMOK_CONFIG: /app/config/nulrimok.yaml
+    profiles:
+      - nulrimok
+      - all
+
+  # ===========================================
+  # Strategy: PCIM
+  # ===========================================
+  pcim:
+    <<: *strategy-base
+    build:
+      context: .
+      dockerfile: strategy_pcim/Dockerfile
+    container_name: pcim
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/pcim:/app/data
+    environment:
+      <<: *common-env
+      OMS_URL: http://oms:8000
+      PCIM_CONFIG: /app/config/pcim.yaml
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    profiles:
+      - pcim
+      - all
+
+  # ===========================================
+  # Postgres Database
+  # ===========================================
+  postgres:
+    <<: *common
+    image: postgres:16-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: trading
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ===========================================
+  # Metabase Dashboard
+  # ===========================================
+  metabase:
+    <<: *common
+    image: metabase/metabase:latest
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+    volumes:
+      - metabase_data:/metabase-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - dashboard
+      - all
+
+networks:
+  kstock:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  metabase_data:

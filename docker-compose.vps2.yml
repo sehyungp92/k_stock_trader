@@ -1,0 +1,131 @@
+# docker-compose.vps2.yml - VPS 2: KPR + PCIM + Database (Account 2)
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trading_db
+    environment:
+      POSTGRES_DB: trading
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d trading"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  oms:
+    build:
+      context: .
+      dockerfile: oms/Dockerfile
+    container_name: oms_vps2
+    env_file:
+      - .env
+    environment:
+      OMS_PORT: "8000"
+      DATABASE_URL: postgresql://trading_writer:${POSTGRES_WRITER_PASSWORD}@postgres:5432/trading
+      KIS_APP_KEY: ${KIS_APP_KEY}
+      KIS_APP_SECRET: ${KIS_APP_SECRET}
+      KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO}
+      KIS_ACCOUNT_PROD_CODE: ${KIS_ACCOUNT_PROD_CODE:-01}
+      KIS_IS_PAPER: ${KIS_IS_PAPER:-true}
+      KIS_HTS_ID: ${KIS_HTS_ID}
+      KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
+      KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
+      KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  kpr:
+    build:
+      context: .
+      dockerfile: strategy_kpr/Dockerfile
+    container_name: strategy_kpr
+    env_file:
+      - .env
+    environment:
+      OMS_URL: http://oms:8000
+      KIS_APP_KEY: ${KIS_APP_KEY}
+      KIS_APP_SECRET: ${KIS_APP_SECRET}
+      KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO}
+      KIS_ACCOUNT_PROD_CODE: ${KIS_ACCOUNT_PROD_CODE:-01}
+      KIS_IS_PAPER: ${KIS_IS_PAPER:-true}
+      KIS_HTS_ID: ${KIS_HTS_ID}
+      KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
+      KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
+      KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
+      KPR_CONFIG: /app/config/settings.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/kpr:/app/data
+    depends_on:
+      oms:
+        condition: service_healthy
+    restart: unless-stopped
+
+  pcim:
+    build:
+      context: .
+      dockerfile: strategy_pcim/Dockerfile
+    container_name: strategy_pcim
+    env_file:
+      - .env
+    environment:
+      OMS_URL: http://oms:8000
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      KIS_APP_KEY: ${KIS_APP_KEY}
+      KIS_APP_SECRET: ${KIS_APP_SECRET}
+      KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO}
+      KIS_ACCOUNT_PROD_CODE: ${KIS_ACCOUNT_PROD_CODE:-01}
+      KIS_IS_PAPER: ${KIS_IS_PAPER:-true}
+      KIS_HTS_ID: ${KIS_HTS_ID}
+      KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
+      KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
+      KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
+      PCIM_CONFIG: /app/config/pcim.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - pcim_data:/app/data
+    depends_on:
+      oms:
+        condition: service_healthy
+    restart: unless-stopped
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  pcim_data:

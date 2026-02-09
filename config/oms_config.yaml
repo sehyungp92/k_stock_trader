@@ -1,0 +1,81 @@
+# OMS Configuration
+# This file configures the Order Management System for multi-strategy trading.
+
+# Strategy Budgets
+# Each strategy has its own risk budget limiting positions and risk exposure.
+# - max_positions: Maximum concurrent positions for this strategy
+# - max_risk_pct: Maximum risk per trade as percentage of equity
+
+strategy_budgets:
+  KMP:
+    # KMP: Korean Market Opening Breakdown Strategy
+    # Trades 09:15-14:30, heavy activity at open
+    max_positions: 4
+    max_risk_pct: 0.015  # 1.5% of equity per trade
+    capital_allocation_pct: 0.25  # 25% of capital
+
+  KPR:
+    # KPR: VWAP Pullback Reversion Strategy
+    # Trades 09:10-14:00, moderate activity throughout
+    max_positions: 3
+    max_risk_pct: 0.015  # 1.5% of equity per trade
+    capital_allocation_pct: 0.25  # 25% of capital
+
+  NULRIMOK:
+    # Nulrimok: Swing/Multi-day Strategy
+    # Trades 08:00-15:10, light activity
+    max_positions: 5
+    max_risk_pct: 0.08   # 8% of equity per trade (larger swings)
+    capital_allocation_pct: 0.25  # 25% of capital
+
+  PCIM:
+    # PCIM: YouTube Signal Strategy
+    # Evening + 08:00-15:00, varies by signals
+    max_positions: 8
+    max_risk_pct: 0.10   # 10% of equity per trade
+    capital_allocation_pct: 0.25  # 25% of capital
+
+
+# Risk Configuration
+# Global risk parameters applied to all strategies
+
+risk:
+  # Daily circuit breakers
+  daily_loss_warn_pct: 0.02   # 2% daily loss triggers warning, halts new entries
+  daily_loss_halt_pct: 0.03   # 3% daily loss triggers hard halt
+
+  # Exposure limits
+  max_gross_exposure_pct: 0.80  # Max 80% gross exposure
+  max_net_exposure_pct: 0.60    # Max 60% net exposure
+  max_position_pct: 0.15        # Max 15% per single position
+  max_positions_count: 10       # Max 10 total positions across all strategies
+  max_sector_pct: 0.30          # Max 30% in single sector
+
+  # Microstructure
+  max_spread_bps: 50.0      # Max 50bps spread for entry
+  vi_cooldown_sec: 600.0    # 10 min cooldown after VI trigger
+
+
+# Regime-based exposure caps
+# PCIM sets the regime at 08:30 based on market conditions.
+# These caps override the static max_gross_exposure_pct.
+
+regime_exposure_caps:
+  CRISIS: 0.20   # Max 20% exposure in crisis
+  WEAK: 0.50     # Max 50% exposure in weak market
+  NORMAL: 0.80   # Max 80% exposure in normal market
+  STRONG: 1.00   # Full exposure in strong market
+
+
+# Rate Limiting Priority Windows (KST)
+# During priority windows, the specified strategy gets 2x API rate budget,
+# while others get 0.5x. Outside windows, all get equal access.
+
+priority_windows:
+  KMP:
+    - start: "09:15"
+      end: "10:00"
+  NULRIMOK:
+    - start: "08:00"
+      end: "08:30"
+  # KPR and PCIM have no priority windows

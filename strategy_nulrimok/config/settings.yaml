@@ -1,0 +1,16 @@
+kis:
+  custtype: "P"
+  my_agent: "Nulrimok/1.0"
+  is_paper_trading: true
+  htsid: "your_hts_id"
+  paper_url: "https://openapivts.koreainvestment.com:29443"
+  paper_api_key: "your_key"
+  paper_api_secret_key: "your_secret"
+  paper_stock_account_number: "50000000-01"
+
+lrs_path: "/data/lrs.db"
+
+universe:
+  - "005930"
+  - "000660"
+  - "035420"
