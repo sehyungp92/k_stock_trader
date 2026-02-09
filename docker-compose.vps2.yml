@@ -75,6 +75,7 @@ services:
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       KPR_CONFIG: /app/config/kpr.yaml
+      SWITCHES_CONFIG: ${SWITCHES_CONFIG:-}
     volumes:
       - ./config:/app/config:ro
       - ./data/kpr:/app/data
@@ -104,6 +105,7 @@ services:
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       PCIM_CONFIG: /app/config/pcim.yaml
+      SWITCHES_CONFIG: ${SWITCHES_CONFIG:-}
     volumes:
       - ./config:/app/config:ro
       - pcim_data:/app/data

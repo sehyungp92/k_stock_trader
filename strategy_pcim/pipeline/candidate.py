@@ -60,4 +60,4 @@ class Candidate:
     def compute_priority_key(self) -> Tuple:
         """Lower is better: (bucket_rank, -conviction_score, gap_pct, -adtv)"""
         bucket_rank = 0 if self.bucket == "A" else 1
-        return (bucket_rank, -self.conviction_score, self.gap_pct or 1.0, -self.adtv_20d)
+        return (bucket_rank, -self.conviction_score, self.gap_pct if self.gap_pct is not None else 1.0, -self.adtv_20d)

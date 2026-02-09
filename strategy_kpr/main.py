@@ -14,6 +14,7 @@ from kis_core import (
 )
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon
 
+from .config.switches import kpr_switches
 from .config.constants import (
     STRATEGY_ID, COLD_POLL_SEC, VWAP_DEPTH_MIN, VWAP_DEPTH_MAX,
     WARM_POLL_DEFAULT, WARM_POLL_MICRO, FLOW_STALE_DEFAULT, FLOW_STALE_MICRO,
@@ -36,8 +37,16 @@ from .adapters.ws_handler import (
 def load_config() -> dict:
     import os
     import yaml
-    with open(os.getenv("KPR_CONFIG", "config/settings.yaml")) as f:
-        return yaml.safe_load(f)
+    config_path = os.getenv("KPR_CONFIG", "config/settings.yaml")
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    if not cfg:
+        raise ValueError(f"Config file {config_path} is empty or invalid")
+    if not cfg.get("universe"):
+        raise ValueError(f"Config file {config_path} missing required 'universe' list")
+    if not cfg.get("sector_map"):
+        logger.warning(f"Config {config_path}: no 'sector_map' — sector tracking disabled")
+    return cfg
 
 
 def get_kst_now() -> datetime:
@@ -68,6 +77,12 @@ def in_micro_window(now: datetime) -> bool:
 async def run_kpr():
     logger.info("Starting KPR v4.3")
     cfg = load_config()
+
+    # Load switches from YAML if configured (not default — only when SWITCHES_CONFIG is set)
+    switches_path = os.getenv("SWITCHES_CONFIG")
+    if switches_path:
+        kpr_switches.update_from_yaml(switches_path)
+    kpr_switches.log_active_config()
 
     env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)

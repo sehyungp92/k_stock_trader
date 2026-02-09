@@ -191,7 +191,7 @@ async def alpha_step(
             return None
 
         # Structure stop
-        s.structure_stop = round_to_tick(s.retest_low * 0.999)
+        s.structure_stop = round_to_tick(s.retest_low * 0.997)
         if s.structure_stop >= entry_trigger:
             return None
 

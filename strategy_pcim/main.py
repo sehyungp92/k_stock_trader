@@ -41,7 +41,10 @@ from .analytics.hit_tracker import BucketAHitTracker
 def load_config() -> dict:
     config_path = os.getenv("PCIM_CONFIG", "config/settings.yaml")
     with open(config_path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    if not cfg:
+        raise ValueError(f"Config file {config_path} is empty or invalid")
+    return cfg
 
 
 def load_channels() -> List[ChannelConfig]:
@@ -170,6 +173,13 @@ async def run_pcim():
     logger.info("Starting PCIM-Alpha v1.3.1")
 
     cfg = load_config()
+
+    # Load switches from YAML if configured (not default — only when SWITCHES_CONFIG is set)
+    switches_path = os.getenv("SWITCHES_CONFIG")
+    if switches_path:
+        pcim_switches.update_from_yaml(switches_path)
+    pcim_switches.log_active_config()
+
     channels = load_channels()
 
     env = KoreaInvestEnv(build_kis_config_from_env())

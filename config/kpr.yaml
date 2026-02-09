@@ -16,9 +16,10 @@ universe:
   - "036570"   # NCSoft
   - "259960"   # Krafton
   - "263750"   # Pearl Abyss
-  - "352820"   # HYBE
   - "323410"   # Kakao Bank
   - "377300"   # Kakao Pay
+  # --- Entertainment ---
+  - "352820"   # HYBE
   # --- Automotive ---
   - "005380"   # Hyundai Motor
   - "000270"   # Kia

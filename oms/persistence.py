@@ -26,6 +26,8 @@ class OMSPersistence:
             "postgresql://trading_writer:changeme@postgres:5432/trading"
         )
         self.pool: Optional[asyncpg.Pool] = None
+        self.consecutive_failures: int = 0
+        self.total_failures: int = 0
 
     async def connect(self) -> None:
         """Initialize connection pool."""
@@ -44,6 +46,15 @@ class OMSPersistence:
 
     def _is_connected(self) -> bool:
         return self.pool is not None
+
+    def _record_success(self) -> None:
+        """Reset consecutive failure counter on success."""
+        self.consecutive_failures = 0
+
+    def _record_failure(self) -> None:
+        """Track persistence failures."""
+        self.consecutive_failures += 1
+        self.total_failures += 1
 
     # ------------------------------------------------------------------
     # Intent Recording
@@ -101,7 +112,9 @@ class OMSPersistence:
                 result.order_id,
                 result.cooldown_until,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to record intent: {e}")
 
     # ------------------------------------------------------------------
@@ -148,7 +161,9 @@ class OMSPersistence:
                 intent_id,
                 int(order.cancel_after_sec) if order.cancel_after_sec else None,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to record order: {e}")
 
     async def update_order_status(
@@ -173,7 +188,9 @@ class OMSPersistence:
                 """,
                 order_id, status.name, filled_qty, avg_fill_price,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to update order status: {e}")
 
     # ------------------------------------------------------------------
@@ -211,7 +228,9 @@ class OMSPersistence:
                 status_before,
                 status_after,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to record order event: {e}")
 
     # ------------------------------------------------------------------
@@ -246,7 +265,9 @@ class OMSPersistence:
                 kis_exec_id, order_id, strategy_id, symbol,
                 side, qty, price, commission, tax, fill_ts,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to record fill: {e}")
 
     # ------------------------------------------------------------------
@@ -286,7 +307,9 @@ class OMSPersistence:
                 pos.vi_cooldown_until,
                 pos.frozen,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to sync position: {e}")
 
     async def sync_allocation(self, symbol: str, alloc: StrategyAllocation) -> None:

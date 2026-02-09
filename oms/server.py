@@ -270,12 +270,26 @@ async def health():
         overall_status = "degraded"
     elif drift_count > 0:
         overall_status = "warn"
+
+    # Check reconciliation loop health
+    recon_status = "WARN" if drift_count > 0 else "OK"
+    if hasattr(oms, '_reconcile_task') and oms._reconcile_task and oms._reconcile_task.done():
+        overall_status = "error"
+        recon_status = "DEAD"
+
+    # Check persistence health
+    if oms.persistence and hasattr(oms.persistence, 'consecutive_failures'):
+        if oms.persistence.consecutive_failures >= 5:
+            if overall_status == "ok":
+                overall_status = "degraded"
+            recon_status = f"{recon_status},PERSIST_FAIL({oms.persistence.consecutive_failures})"
+
     return HealthResponse(
         status=overall_status,
         uptime_sec=time.time() - _start_time,
         positions_count=len(oms.state.get_all_positions()),
         kis_circuit_breaker=cb_state,
-        recon_status="WARN" if drift_count > 0 else "OK",
+        recon_status=recon_status,
     )
 
 

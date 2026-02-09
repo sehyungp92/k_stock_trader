@@ -27,6 +27,7 @@ x-strategy-base: &strategy-base
   environment:
     <<: *common-env
     OMS_URL: http://oms:8000
+    SWITCHES_CONFIG: ${SWITCHES_CONFIG:-}
 
 services:
   # ===========================================

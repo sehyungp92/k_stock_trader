@@ -52,6 +52,7 @@ services:
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       KMP_CONFIG: /app/config/kmp.yaml
+      SWITCHES_CONFIG: ${SWITCHES_CONFIG:-}
     volumes:
       - ./config:/app/config:ro
       - ./data/kmp:/app/data
@@ -81,6 +82,7 @@ services:
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       NULRIMOK_CONFIG: /app/config/nulrimok.yaml
+      SWITCHES_CONFIG: ${SWITCHES_CONFIG:-}
     volumes:
       - ./config:/app/config:ro
       - ./data/nulrimok:/app/data

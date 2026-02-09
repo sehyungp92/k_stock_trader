@@ -32,7 +32,8 @@ def check_bucket_b_trigger(bars_1m: List[dict]) -> BucketBSignal:
     window = BUCKET_B["TOUCH_RECLAIM_WINDOW_MINS"]
 
     touch_idx = None
-    for i in range(len(bars_1m) - 1, max(-1, len(bars_1m) - 6), -1):
+    search_depth = BUCKET_B.get("TOUCH_SEARCH_BARS", 10)
+    for i in range(len(bars_1m) - 1, max(-1, len(bars_1m) - search_depth - 1), -1):
         if check_vwap_touch(bars_1m[i], vwap_series[i]):
             touch_idx = i
             break

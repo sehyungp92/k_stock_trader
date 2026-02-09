@@ -23,7 +23,7 @@ class PCIMSwitches:
     # HIGH PRIORITY: T3 Bucket A trading
     # True = allow T3 tier Bucket A trades (more trades)
     # False = block T3 tier from Bucket A (conservative)
-    t3_bucket_a_allowed: bool = False  # Conservative: False
+    t3_bucket_a_allowed: bool = True  # Conservative: False
 
     # HIGH PRIORITY: Entry cutoff time (hour, minute)
     # (10, 30) = later cutoff (more trades)
@@ -113,6 +113,34 @@ class PCIMSwitches:
                 f"PCIM session would-block stats: "
                 f"total={stats['total']}, by_reason={stats['by_reason']}"
             )
+
+    def update_from_yaml(self, path: str) -> None:
+        """Load switches from YAML and update this instance in-place."""
+        import yaml
+        from dataclasses import fields as dc_fields
+        with open(path, "r") as f:
+            data = yaml.safe_load(f) or {}
+        section = data.get("pcim", {})
+        configurable = {
+            f.name for f in dc_fields(self)
+            if f.name not in ("would_block_count", "would_block_log")
+        }
+        for key, value in section.items():
+            if key in configurable:
+                if isinstance(getattr(self, key, None), tuple) and isinstance(value, list):
+                    value = tuple(value)
+                setattr(self, key, value)
+        logger.info(f"Switches updated from {path}")
+
+    def log_active_config(self) -> None:
+        """Log all active switch values at startup."""
+        from dataclasses import fields as dc_fields
+        active = {
+            f.name: getattr(self, f.name)
+            for f in dc_fields(self)
+            if f.name not in ("would_block_count", "would_block_log")
+        }
+        logger.info(f"Active switches: {active}")
 
     @classmethod
     def load_from_yaml(cls, path: str) -> "PCIMSwitches":

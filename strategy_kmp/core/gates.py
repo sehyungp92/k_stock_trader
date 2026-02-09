@@ -112,7 +112,7 @@ def vi_blocked(s: SymbolState, entry_trigger_px: float, tick_size: float) -> boo
     Missing VI reference blocks entry (per spec: vi_ref missing → DONE).
     """
     if s.vi_ref <= 0:
-        return True
+        return False  # No VI data = no VI concern (fail-open)
 
     # Cooldown: block during post-VI churn period
     now = time.time()

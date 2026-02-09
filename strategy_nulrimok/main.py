@@ -51,8 +51,16 @@ def compute_total_open_risk(
 def load_config() -> dict:
     import os
     import yaml
-    with open(os.getenv("NULRIMOK_CONFIG", "config/settings.yaml")) as f:
-        return yaml.safe_load(f)
+    config_path = os.getenv("NULRIMOK_CONFIG", "config/settings.yaml")
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    if not cfg:
+        raise ValueError(f"Config file {config_path} is empty or invalid")
+    if not cfg.get("universe"):
+        raise ValueError(f"Config file {config_path} missing required 'universe' list")
+    if not cfg.get("sector_map"):
+        logger.warning(f"Config {config_path}: no 'sector_map' — sector tracking disabled")
+    return cfg
 
 
 def get_kst_now() -> datetime:
@@ -159,6 +167,12 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState]) -
 async def run_nulrimok():
     logger.info("Starting Nulrimok Strategy")
     cfg = load_config()
+
+    # Load switches from YAML if configured (not default — only when SWITCHES_CONFIG is set)
+    switches_path = os.getenv("SWITCHES_CONFIG")
+    if switches_path:
+        nulrimok_switches.update_from_yaml(switches_path)
+    nulrimok_switches.log_active_config()
 
     env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)

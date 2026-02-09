@@ -35,8 +35,15 @@ def check_time_exit(pos: PCIMPosition, today: date, is_trading_day: Optional[Cal
     Check if Day 15 time exit triggered.
 
     Uses KRX trading calendar if is_trading_day function provided,
-    otherwise falls back to weekday-only counting.
+    otherwise falls back to KIS trading calendar or weekday-only counting.
     """
+    if is_trading_day is None:
+        try:
+            from kis_core.trading_calendar import get_trading_calendar
+            cal = get_trading_calendar()
+            is_trading_day = cal.is_trading_day
+        except ImportError:
+            pass  # Fall through to weekday-only counting
     days_held = trading_days_between(pos.entry_date, today, is_trading_day)
 
     if days_held >= EXITS["TIME_EXIT_DAY"]:

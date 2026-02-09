@@ -32,7 +32,7 @@ class DailySelectionEngine:
         regime = compute_regime(self.lrs)
         logger.info(f"DSE: Regime tier={regime.tier}, score={regime.score:.2f}")
 
-        if regime.tier == "C":
+        if regime.tier == "C" and not nulrimok_switches.allow_tier_c_reduced:
             # Still compute flow reversal flags for held positions even in Tier C
             positions = [PositionArtifact(
                 ticker=p["ticker"], entry_time=p.get("entry_time", ""), avg_price=p.get("avg_price", 0),
@@ -197,16 +197,17 @@ class DailySelectionEngine:
 
     def _compute_rs_percentile(self, ticker: str) -> float:
         closes = self.lrs.get_closes(ticker, 60)
-        if len(closes) < 60:
-            return 0.0
+        if len(closes) < 20:
+            return 0.0  # Truly insufficient data
         stock_return = (closes[-1] / closes[0]) - 1
         sector = self.lrs.get_sector(ticker)
         if not sector:
             return 50.0
+        min_bars = min(len(closes), 60)
         sector_returns = []
         for t in self.lrs.get_sector_members(sector):
             t_closes = self.lrs.get_closes(t, 60)
-            if len(t_closes) >= 60:
+            if len(t_closes) >= min_bars:
                 sector_returns.append((t_closes[-1] / t_closes[0]) - 1)
         return percentile_rank(stock_return, sector_returns) if sector_returns else 50.0
 
@@ -258,7 +259,7 @@ class DailySelectionEngine:
     def _select_tradable(self, candidates: List[TickerArtifact], regime_tier: str) -> List[TickerArtifact]:
         if not candidates:
             return []
-        cut = int(len(candidates) * (TRADABLE_TIER_A_PCT if regime_tier == "A" else TRADABLE_TIER_B_PCT))
+        cut = max(1, int(len(candidates) * (TRADABLE_TIER_A_PCT if regime_tier == "A" else TRADABLE_TIER_B_PCT)))
         tradable = candidates[:cut]
         for t in tradable:
             t.tradable = True

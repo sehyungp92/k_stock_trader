@@ -1,7 +1,7 @@
 # KMP Strategy Configuration
 # KIS credentials are loaded from environment variables.
 
-max_per_sector: 1
+max_per_sector: 2
 
 # Baselines are computed dynamically at startup from daily OHLCV data
 # by strategy_kmp/premarket.py (no config values needed).
@@ -25,14 +25,15 @@ universe:
   - "259960"   # Krafton
   - "263750"   # Pearl Abyss
   - "251270"   # Netmarble
-  - "035900"   # JYP Entertainment
-  - "041510"   # SM Entertainment
-  - "352820"   # HYBE
   - "053800"   # AhnLab
   - "030520"   # Hanwha Ocean
   - "293490"   # Kakao Games
   - "377300"   # Kakao Pay
   - "323410"   # Kakao Bank
+  # --- Entertainment ---
+  - "035900"   # JYP Entertainment
+  - "041510"   # SM Entertainment
+  - "352820"   # HYBE
   # --- Automotive ---
   - "005380"   # Hyundai Motor
   - "000270"   # Kia

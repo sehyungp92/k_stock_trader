@@ -70,3 +70,27 @@ class SymbolState:
     def reset_setup(self):
         self.setup_low = self.reclaim_level = self.stop_level = self.setup_time = self.setup_type = None
         self.accept_closes = 0
+
+    def reset_for_new_day(self):
+        """Reset state for a new trading day."""
+        self.fsm = FSMState.IDLE
+        self.hod = 0.0
+        self.hod_time = None
+        self.lod = math.inf
+        self.vwap = 0.0
+        self.reset_setup()
+        self.entry_px = 0.0
+        self.entry_ts = None
+        self.qty = 0
+        self.remaining_qty = 0
+        self.max_price = 0.0
+        self.trail_stop = 0.0
+        self.partial_filled = False
+        self.confidence = "YELLOW"
+        self.entry_order_id = None
+        self.order_submit_ts = 0.0
+        self.investor_signal = "NEUTRAL"
+        self.micro_signal = "NEUTRAL"
+        self.program_signal = "NEUTRAL"
+        self.drop_from_open = 0.0
+        self.in_vwap_band = False

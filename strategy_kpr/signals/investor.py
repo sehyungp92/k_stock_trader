@@ -130,7 +130,7 @@ class InvestorFlowProvider:
             foreign_net = sum(d.get('net_buy', 0) for d in foreign[:5])
             inst_net = sum(d.get('net_buy', 0) for d in inst[:5])
 
-            self._cache[ticker] = InvestorFlowData(ticker, foreign_net, inst_net, datetime.now())
+            self._cache[ticker] = InvestorFlowData(ticker, foreign_net, inst_net, datetime.now(), epoch_ts=time.time())
             return self._classify(self._cache[ticker])
         except Exception:
             return InvestorSignal.UNAVAILABLE

@@ -172,6 +172,12 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
     if now.time() < time(ENTRY_START[0], ENTRY_START[1]) or in_lunch(now) or after_entry_end(now) or not regime_ok:
         return None
 
+    # Reset INVALIDATED symbols so they can generate new setups
+    if s.fsm == FSMState.INVALIDATED:
+        s.reset_setup()
+        s.fsm = FSMState.IDLE
+        return None
+
     # Invalidation: stop breach
     if s.fsm in (FSMState.SETUP_DETECTED, FSMState.ACCEPTING) and s.stop_level and low <= s.stop_level:
         s.fsm = FSMState.INVALIDATED
@@ -285,8 +291,8 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 # Track order for timeout detection
                 s.entry_order_id = intent.intent_id
                 s.order_submit_ts = time_module.time()
-                # Track sector exposure
+                # Track sector exposure (on_fill since entry is confirmed)
                 if sector_exposure:
-                    sector_exposure.reserve(s.code, qty, close)
+                    sector_exposure.on_fill(s.code, qty, close)
                 return intent.intent_id
     return None

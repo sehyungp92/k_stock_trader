@@ -18,6 +18,7 @@ from kis_core import (
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, RiskPayload, IntentStatus
 
 from .config.constants import STRATEGY_ID, FLATTEN_TIME, RVOL_MIN
+from .config.switches import kmp_switches
 from .core.gates import is_past_entry_cutoff
 from .config.universe_meta import load_universe_meta
 from .core.state import SymbolState, State
@@ -38,7 +39,14 @@ def load_config() -> dict:
 
     config_path = os.getenv("KMP_CONFIG", "config/settings.yaml")
     with open(config_path) as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    if not cfg:
+        raise ValueError(f"Config file {config_path} is empty or invalid")
+    if not cfg.get("universe"):
+        raise ValueError(f"Config file {config_path} missing required 'universe' list")
+    if not cfg.get("sector_map"):
+        logger.warning(f"Config {config_path}: no 'sector_map' — sector tracking disabled")
+    return cfg
 
 
 def get_kst_now() -> datetime:
@@ -261,6 +269,12 @@ async def run_kmp():
     logger.info("Starting KMP v2.3.4")
 
     cfg = load_config()
+
+    # Load switches from YAML if configured (not default — only when SWITCHES_CONFIG is set)
+    switches_path = os.getenv("SWITCHES_CONFIG")
+    if switches_path:
+        kmp_switches.update_from_yaml(switches_path)
+    kmp_switches.log_active_config()
 
     # Initialize KIS API
     env = KoreaInvestEnv(build_kis_config_from_env())

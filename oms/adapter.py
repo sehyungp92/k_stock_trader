@@ -173,8 +173,17 @@ class KISExecutionAdapter:
         return AdapterResult(False, error=AdapterError.TEMP_ERROR, message="Max retries exhausted")
 
     async def cancel_order(self, order_id: str, symbol: str, qty: int, branch: str = "") -> AdapterResult:
-        """Cancel order. Uses stored branch code if available."""
+        """Cancel order. Looks up branch from open orders if not provided."""
         try:
+            # If branch not stored, look it up from get_orders()
+            if not branch:
+                try:
+                    orders_df = self.api.get_orders()
+                    if orders_df is not None and order_id in orders_df.index:
+                        branch = str(orders_df.loc[order_id, '주문점'])
+                except Exception as e:
+                    logger.debug(f"Branch lookup failed for {order_id}: {e}")
+
             kwargs = {}
             if branch:
                 kwargs['order_branch'] = branch
