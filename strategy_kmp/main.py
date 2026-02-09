@@ -266,6 +266,11 @@ def make_askbid_handler(states: Dict[str, SymbolState]):
 
 async def run_kmp():
     """Main KMP strategy entry point."""
+    logger.add(
+        "/app/data/logs/kmp_{time:YYYY-MM-DD}.log",
+        rotation="00:00", retention="30 days", compression="gz",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    )
     logger.info("Starting KMP v2.3.4")
 
     cfg = load_config()

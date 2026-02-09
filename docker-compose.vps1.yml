@@ -9,6 +9,8 @@ services:
     container_name: oms_vps1
     env_file:
       - .env
+    volumes:
+      - ./data/oms:/app/data
     environment:
       OMS_PORT: "8000"
       KIS_APP_KEY: ${KIS_APP_KEY}

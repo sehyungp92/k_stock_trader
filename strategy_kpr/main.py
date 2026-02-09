@@ -75,6 +75,11 @@ def in_micro_window(now: datetime) -> bool:
 
 
 async def run_kpr():
+    logger.add(
+        "/app/data/logs/kpr_{time:YYYY-MM-DD}.log",
+        rotation="00:00", retention="30 days", compression="gz",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    )
     logger.info("Starting KPR v4.3")
     cfg = load_config()
 

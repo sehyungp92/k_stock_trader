@@ -220,6 +220,11 @@ def get_oms() -> OMSCore:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _oms
+    logger.add(
+        "/app/data/logs/oms_{time:YYYY-MM-DD}.log",
+        rotation="00:00", retention="30 days", compression="gz",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    )
     logger.info("OMS Server starting...")
 
     # Load OMS configuration from file

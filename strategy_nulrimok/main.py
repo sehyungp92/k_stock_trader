@@ -165,6 +165,11 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState]) -
 
 
 async def run_nulrimok():
+    logger.add(
+        "/app/data/logs/nulrimok_{time:YYYY-MM-DD}.log",
+        rotation="00:00", retention="30 days", compression="gz",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    )
     logger.info("Starting Nulrimok Strategy")
     cfg = load_config()
 

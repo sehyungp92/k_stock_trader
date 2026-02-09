@@ -170,6 +170,11 @@ async def _cancel_and_handle_partial_fills(
 
 async def run_pcim():
     """Main PCIM strategy orchestration."""
+    logger.add(
+        "/app/data/logs/pcim_{time:YYYY-MM-DD}.log",
+        rotation="00:00", retention="30 days", compression="gz",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    )
     logger.info("Starting PCIM-Alpha v1.3.1")
 
     cfg = load_config()

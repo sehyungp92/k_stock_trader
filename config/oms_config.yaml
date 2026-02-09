@@ -10,29 +10,29 @@ strategy_budgets:
   KMP:
     # KMP: Korean Market Opening Breakdown Strategy
     # Trades 09:15-14:30, heavy activity at open
-    max_positions: 4
-    max_risk_pct: 0.015  # 1.5% of equity per trade
+    max_positions: 8
+    max_risk_pct: 0.025  # 2.5% of equity per trade
     capital_allocation_pct: 0.25  # 25% of capital
 
   KPR:
     # KPR: VWAP Pullback Reversion Strategy
     # Trades 09:10-14:00, moderate activity throughout
-    max_positions: 3
-    max_risk_pct: 0.015  # 1.5% of equity per trade
+    max_positions: 5
+    max_risk_pct: 0.025  # 2.5% of equity per trade
     capital_allocation_pct: 0.25  # 25% of capital
 
   NULRIMOK:
     # Nulrimok: Swing/Multi-day Strategy
     # Trades 08:00-15:10, light activity
     max_positions: 5
-    max_risk_pct: 0.08   # 8% of equity per trade (larger swings)
+    max_risk_pct: 0.025   # 2.5% of equity per trade (larger swings)
     capital_allocation_pct: 0.25  # 25% of capital
 
   PCIM:
     # PCIM: YouTube Signal Strategy
     # Evening + 08:00-15:00, varies by signals
     max_positions: 8
-    max_risk_pct: 0.10   # 10% of equity per trade
+    max_risk_pct: 0.025   # 2.5% of equity per trade
     capital_allocation_pct: 0.25  # 25% of capital
 
 
@@ -41,14 +41,14 @@ strategy_budgets:
 
 risk:
   # Daily circuit breakers
-  daily_loss_warn_pct: 0.02   # 2% daily loss triggers warning, halts new entries
-  daily_loss_halt_pct: 0.03   # 3% daily loss triggers hard halt
+  daily_loss_warn_pct: 0.03   # 3% daily loss triggers warning, halts new entries
+  daily_loss_halt_pct: 0.05   # 5% daily loss triggers hard halt
 
   # Exposure limits
-  max_gross_exposure_pct: 0.80  # Max 80% gross exposure
-  max_net_exposure_pct: 0.60    # Max 60% net exposure
+  max_gross_exposure_pct: 0.90  # Max 90% gross exposure
+  max_net_exposure_pct: 0.70    # Max 70% net exposure
   max_position_pct: 0.15        # Max 15% per single position
-  max_positions_count: 10       # Max 10 total positions across all strategies
+  max_positions_count: 15       # Max 15 total positions across all strategies
   max_sector_pct: 0.30          # Max 30% in single sector
 
   # Microstructure
@@ -73,7 +73,7 @@ regime_exposure_caps:
 
 priority_windows:
   KMP:
-    - start: "09:15"
+    - start: "09:10"
       end: "10:00"
   NULRIMOK:
     - start: "08:00"
