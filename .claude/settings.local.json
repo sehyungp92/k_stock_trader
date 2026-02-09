@@ -10,7 +10,8 @@
       "Bash(do grep -H \"regime\\\\|sector\\\\|liq\" \"$f\")",
       "Bash(done)",
       "Bash(test:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebSearch"
     ]
   }
 }

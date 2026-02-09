@@ -234,7 +234,7 @@ async def lifespan(app: FastAPI):
 
     kis_config = {
         "custtype": "P",
-        "my_agent": "k_stock_trader/1.0",
+        "my_agent": os.environ.get("KIS_MY_AGENT", "Mozilla/5.0"),
         "is_paper_trading": is_paper,
         "htsid": os.environ.get("KIS_HTS_ID", ""),
     }
