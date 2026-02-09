@@ -134,8 +134,8 @@ def _check_ticker(
 
     # Market type check (KOSPI/KOSDAQ only)
     if config.exclude_non_equity:
-        mrkt_name = data.get("rprs_mrkt_kor_name")
-        if mrkt_name is not None and mrkt_name not in _EQUITY_MARKETS:
+        mrkt_name = data.get("rprs_mrkt_kor_name") or ""
+        if mrkt_name and not mrkt_name.startswith(("KOSPI", "KOSDAQ")):
             return {"ticker": ticker, "reason": "NOT_EQUITY", "value": 0.0}
         # If field is absent → skip check (fail-open)
 
