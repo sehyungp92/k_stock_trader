@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from loguru import logger
 
-from kis_core import KoreaInvestEnv, KoreaInvestAPI
+from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env
 from .oms_core import OMSCore
 from .intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, TimeHorizon, IntentConstraints, RiskPayload
 from .state import StrategyAllocation
@@ -230,41 +230,8 @@ async def lifespan(app: FastAPI):
         logger.info(f"Loaded strategy budgets: {list(oms_config['strategy_budgets'].keys())}")
 
     # Load KIS credentials from environment
-    is_paper = os.environ.get("KIS_IS_PAPER", "true").lower() == "true"
-
-    kis_config = {
-        "custtype": "P",
-        "my_agent": os.environ.get("KIS_MY_AGENT", "Mozilla/5.0"),
-        "is_paper_trading": is_paper,
-        "htsid": os.environ.get("KIS_HTS_ID", ""),
-    }
-
-    if is_paper:
-        # Paper trading: prefer KIS_PAPER_* env vars, fall back to KIS_* primary keys
-        kis_config.update({
-            "paper_url": "https://openapivts.koreainvestment.com:29443",
-            "paper_api_key": os.environ.get("KIS_PAPER_APP_KEY") or os.environ.get("KIS_APP_KEY", ""),
-            "paper_api_secret_key": os.environ.get("KIS_PAPER_APP_SECRET") or os.environ.get("KIS_APP_SECRET", ""),
-            "paper_stock_account_number": os.environ.get("KIS_PAPER_ACCOUNT_NO") or os.environ.get("KIS_ACCOUNT_NO", ""),
-        })
-        # Optional: real API fallback for endpoints not supported by paper server
-        real_key = os.environ.get("KIS_APP_KEY", "")
-        real_secret = os.environ.get("KIS_APP_SECRET", "")
-        if real_key and real_secret:
-            kis_config.update({
-                "url": "https://openapi.koreainvestment.com:9443",
-                "api_key": real_key,
-                "api_secret_key": real_secret,
-            })
-    else:
-        kis_config.update({
-            "url": "https://openapi.koreainvestment.com:9443",
-            "api_key": os.environ.get("KIS_APP_KEY", ""),
-            "api_secret_key": os.environ.get("KIS_APP_SECRET", ""),
-            "stock_account_number": os.environ.get("KIS_ACCOUNT_NO", ""),
-        })
-
-    logger.info(f"Trading mode: {'PAPER' if is_paper else 'LIVE'}")
+    kis_config = build_kis_config_from_env()
+    logger.info(f"Trading mode: {'PAPER' if kis_config['is_paper_trading'] else 'LIVE'}")
     env = KoreaInvestEnv(kis_config)
     api = KoreaInvestAPI(env)
 

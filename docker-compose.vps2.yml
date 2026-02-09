@@ -74,7 +74,7 @@ services:
       KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
-      KPR_CONFIG: /app/config/settings.yaml
+      KPR_CONFIG: /app/config/kpr.yaml
     volumes:
       - ./config:/app/config:ro
       - ./data/kpr:/app/data

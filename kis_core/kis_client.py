@@ -788,6 +788,28 @@ class KoreaInvestAPI:
             logger.debug(f"Inst trend error for {ticker}: {e}")
         return []
 
+    def get_investor_trend(self, ticker: str, days: int = 20) -> List[Dict]:
+        """Get daily foreign + institutional net buying in a single call."""
+        url = "/uapi/domestic-stock/v1/quotations/inquire-investor"
+        tr_id = "FHKST01010900"
+        params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": ticker}
+
+        try:
+            result = self._url_fetch(url, tr_id, params)
+            if result and result.is_ok():
+                output = getattr(result.get_body(), 'output', []) or []
+                return [
+                    {
+                        'date': row.get('stck_bsop_date', ''),
+                        'foreign_net': int(row.get('frgn_ntby_qty', 0)),
+                        'inst_net': int(row.get('orgn_ntby_qty', 0)),
+                    }
+                    for row in output[:days]
+                ]
+        except Exception as e:
+            logger.debug(f"Investor trend error for {ticker}: {e}")
+        return []
+
     # =========================================================================
     # ACCOUNT - BALANCE & POSITIONS
     # =========================================================================

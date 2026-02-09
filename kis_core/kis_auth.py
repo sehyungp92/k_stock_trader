@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import threading
 import time
 from typing import Any, Dict, Optional
@@ -456,6 +457,13 @@ class KoreaInvestEnv:
     def is_paper_trading(self) -> bool:
         """Whether this environment is configured for paper trading."""
         return self._is_paper_trading
+
+    @property
+    def ws_url(self) -> str:
+        """WebSocket URL derived from trading mode (paper vs live)."""
+        if self._is_paper_trading:
+            return "ws://ops.koreainvestment.com:31000"
+        return "ws://ops.koreainvestment.com:21000"
     
     @property
     def account_num(self) -> str:
@@ -471,3 +479,51 @@ class KoreaInvestEnv:
         mode = "paper" if self._is_paper_trading else "live"
         masked_account = self.account_num[:4] + "****" if self.account_num else "N/A"
         return f"KoreaInvestEnv(mode={mode}, account={masked_account})"
+
+
+def build_kis_config_from_env() -> Dict[str, Any]:
+    """Build KoreaInvestEnv config dict from environment variables.
+
+    Reads KIS_IS_PAPER, KIS_APP_KEY, KIS_APP_SECRET, KIS_ACCOUNT_NO,
+    KIS_PAPER_APP_KEY, KIS_PAPER_APP_SECRET, KIS_PAPER_ACCOUNT_NO,
+    KIS_HTS_ID, and KIS_MY_AGENT from the environment.
+
+    When paper trading, prefers KIS_PAPER_* vars and falls back to KIS_*.
+    Live API credentials are included as fallback for paper-unsupported endpoints.
+
+    Returns:
+        Config dict ready for KoreaInvestEnv(cfg).
+    """
+    is_paper = os.environ.get("KIS_IS_PAPER", "true").lower() == "true"
+
+    cfg: Dict[str, Any] = {
+        "custtype": "P",
+        "my_agent": os.environ.get("KIS_MY_AGENT", "Mozilla/5.0"),
+        "is_paper_trading": is_paper,
+        "htsid": os.environ.get("KIS_HTS_ID", ""),
+    }
+
+    if is_paper:
+        cfg.update({
+            "paper_url": "https://openapivts.koreainvestment.com:29443",
+            "paper_api_key": os.environ.get("KIS_PAPER_APP_KEY") or os.environ.get("KIS_APP_KEY", ""),
+            "paper_api_secret_key": os.environ.get("KIS_PAPER_APP_SECRET") or os.environ.get("KIS_APP_SECRET", ""),
+            "paper_stock_account_number": os.environ.get("KIS_PAPER_ACCOUNT_NO") or os.environ.get("KIS_ACCOUNT_NO", ""),
+        })
+        real_key = os.environ.get("KIS_APP_KEY", "")
+        real_secret = os.environ.get("KIS_APP_SECRET", "")
+        if real_key and real_secret:
+            cfg.update({
+                "url": "https://openapi.koreainvestment.com:9443",
+                "api_key": real_key,
+                "api_secret_key": real_secret,
+            })
+    else:
+        cfg.update({
+            "url": "https://openapi.koreainvestment.com:9443",
+            "api_key": os.environ.get("KIS_APP_KEY", ""),
+            "api_secret_key": os.environ.get("KIS_APP_SECRET", ""),
+            "stock_account_number": os.environ.get("KIS_ACCOUNT_NO", ""),
+        })
+
+    return cfg

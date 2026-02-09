@@ -151,3 +151,77 @@ class LRSDatabase:
             row = conn.execute("SELECT artifact_json FROM watchlist_artifact WHERE date = ?",
                                (artifact_date.isoformat(),)).fetchone()
             return json.loads(row['artifact_json']) if row else None
+
+    # =========================================================================
+    # WRITE / UPSERT METHODS (used by LRS loader)
+    # =========================================================================
+
+    def get_max_date(self, table: str, key_col: str = "ticker", key_val: str = "") -> Optional[str]:
+        """Get the maximum date string in a table, optionally filtered by key."""
+        allowed_tables = {"daily_ohlcv", "daily_flow", "index_ohlcv", "fx_rates"}
+        if table not in allowed_tables:
+            return None
+        with self._conn() as conn:
+            if key_val:
+                row = conn.execute(
+                    f"SELECT MAX(date) AS md FROM {table} WHERE {key_col} = ?", (key_val,)
+                ).fetchone()
+            else:
+                row = conn.execute(f"SELECT MAX(date) AS md FROM {table}").fetchone()
+            return row["md"] if row and row["md"] else None
+
+    def upsert_daily_bars(self, ticker: str, bars: List[Dict]) -> int:
+        """Bulk INSERT OR REPLACE into daily_ohlcv. Returns rows written."""
+        if not bars:
+            return 0
+        with self._conn() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO daily_ohlcv (ticker, date, open, high, low, close, volume) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (ticker, b["date"], b["open"], b["high"], b["low"], b["close"], b["volume"])
+                    for b in bars
+                ],
+            )
+            return len(bars)
+
+    def upsert_daily_flow(self, ticker: str, flows: List[Dict]) -> int:
+        """Bulk INSERT OR REPLACE into daily_flow. Returns rows written."""
+        if not flows:
+            return 0
+        with self._conn() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO daily_flow (ticker, date, foreign_net, inst_net) "
+                "VALUES (?, ?, ?, ?)",
+                [
+                    (ticker, f["date"], f["foreign_net"], f["inst_net"])
+                    for f in flows
+                ],
+            )
+            return len(flows)
+
+    def upsert_index(self, index_code: str, bars: List[Dict]) -> int:
+        """Bulk INSERT OR REPLACE into index_ohlcv. Returns rows written."""
+        if not bars:
+            return 0
+        with self._conn() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO index_ohlcv (index_code, date, open, high, low, close, volume) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (index_code, b["date"], b["open"], b["high"], b["low"], b["close"], b["volume"])
+                    for b in bars
+                ],
+            )
+            return len(bars)
+
+    def upsert_sector_map(self, mapping: Dict[str, str]) -> int:
+        """Bulk INSERT OR REPLACE into sector_map. Returns rows written."""
+        if not mapping:
+            return 0
+        with self._conn() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO sector_map (ticker, sector) VALUES (?, ?)",
+                list(mapping.items()),
+            )
+            return len(mapping)

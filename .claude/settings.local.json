@@ -11,7 +11,9 @@
       "Bash(done)",
       "Bash(test:*)",
       "Bash(find:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(python:*)",
+      "Bash(ls:*)"
     ]
   }
 }

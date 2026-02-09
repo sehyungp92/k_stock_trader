@@ -8,7 +8,7 @@ Shared library for interacting with KIS API:
 - Paper trading support with TR_ID mapping
 """
 
-from .kis_auth import KoreaInvestEnv
+from .kis_auth import KoreaInvestEnv, build_kis_config_from_env
 from .kis_client import (
     KoreaInvestAPI,
     CircuitBreaker,
@@ -54,6 +54,7 @@ from .universe_filter import UniverseFilterConfig, filter_universe
 __all__ = [
     # Auth
     'KoreaInvestEnv',
+    'build_kis_config_from_env',
     # Client
     'KoreaInvestAPI',
     'CircuitBreaker',

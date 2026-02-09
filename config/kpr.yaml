@@ -1,0 +1,136 @@
+# KPR Strategy Configuration
+# KIS credentials are loaded from environment variables.
+# VWAP pullback strategy - needs liquid names for reliable VWAP.
+
+universe:
+  # --- Semiconductors ---
+  - "005930"   # Samsung Electronics
+  - "000660"   # SK Hynix
+  - "006400"   # Samsung SDI
+  - "009150"   # Samsung Electro-Mechanics
+  - "042700"   # Hanmi Semiconductor
+  - "403870"   # HPSP
+  # --- IT / Internet ---
+  - "035420"   # NAVER
+  - "035720"   # Kakao
+  - "036570"   # NCSoft
+  - "259960"   # Krafton
+  - "263750"   # Pearl Abyss
+  - "352820"   # HYBE
+  - "323410"   # Kakao Bank
+  - "377300"   # Kakao Pay
+  # --- Automotive ---
+  - "005380"   # Hyundai Motor
+  - "000270"   # Kia
+  - "012330"   # Hyundai Mobis
+  - "161390"   # Hankook Tire
+  # --- Battery / Energy ---
+  - "373220"   # LG Energy Solution
+  - "051910"   # LG Chem
+  - "003670"   # POSCO Future M
+  - "247540"   # Ecopro BM
+  - "086520"   # Ecopro
+  - "267260"   # HD Hyundai Electric
+  - "112610"   # CS Wind
+  # --- Bio / Pharma ---
+  - "207940"   # Samsung Biologics
+  - "068270"   # Celltrion
+  - "326030"   # SK Biopharmaceuticals
+  - "128940"   # Hanmi Pharm
+  - "196170"   # Alteogen
+  # --- Financial ---
+  - "105560"   # KB Financial
+  - "055550"   # Shinhan Financial
+  - "086790"   # Hana Financial
+  - "316140"   # Woori Financial
+  - "138040"   # Meritz Financial
+  # --- Shipbuilding / Heavy ---
+  - "329180"   # HD Hyundai Heavy
+  - "009540"   # HD Korea Shipbuilding
+  - "267250"   # HD Hyundai
+  - "034020"   # Doosan Enerbility
+  # --- Steel / Materials ---
+  - "005490"   # POSCO Holdings
+  - "010130"   # Korea Zinc
+  # --- Consumer ---
+  - "028260"   # Samsung C&T
+  - "051900"   # LG H&H
+  - "097950"   # CJ CheilJedang
+  - "383220"   # F&F
+  # --- Defense ---
+  - "012450"   # Hanwha Aerospace
+  - "047810"   # Korea Aerospace Industries
+  - "079550"   # LIG Nex1
+  # --- Telecom ---
+  - "017670"   # SK Telecom
+  - "030200"   # KT Corp
+  # --- Electronics ---
+  - "066570"   # LG Electronics
+  - "034220"   # LG Display
+  - "018260"   # Samsung SDS
+  # --- Others ---
+  - "096770"   # SK Innovation
+  - "011200"   # HMM
+  - "015760"   # Korea Electric Power
+  - "034730"   # SK Inc
+  - "180640"   # Hanwha Solutions
+
+sector_map:
+  "005930": "Semiconductor"
+  "000660": "Semiconductor"
+  "006400": "Semiconductor"
+  "009150": "Semiconductor"
+  "042700": "Semiconductor"
+  "403870": "Semiconductor"
+  "035420": "IT"
+  "035720": "IT"
+  "036570": "IT"
+  "259960": "IT"
+  "263750": "IT"
+  "352820": "Entertainment"
+  "323410": "Financial"
+  "377300": "IT"
+  "005380": "Automotive"
+  "000270": "Automotive"
+  "012330": "Automotive"
+  "161390": "Automotive"
+  "373220": "Battery"
+  "051910": "Battery"
+  "003670": "Battery"
+  "247540": "Battery"
+  "086520": "Battery"
+  "267260": "Battery"
+  "112610": "Battery"
+  "207940": "Biotech"
+  "068270": "Biotech"
+  "326030": "Biotech"
+  "128940": "Biotech"
+  "196170": "Biotech"
+  "105560": "Financial"
+  "055550": "Financial"
+  "086790": "Financial"
+  "316140": "Financial"
+  "138040": "Financial"
+  "329180": "Shipbuilding"
+  "009540": "Shipbuilding"
+  "267250": "Shipbuilding"
+  "034020": "HeavyIndustry"
+  "005490": "Steel"
+  "010130": "Steel"
+  "028260": "Consumer"
+  "051900": "Consumer"
+  "097950": "Consumer"
+  "383220": "Consumer"
+  "012450": "Defense"
+  "047810": "Defense"
+  "079550": "Defense"
+  "017670": "Telecom"
+  "030200": "Telecom"
+  "066570": "Electronics"
+  "034220": "Display"
+  "018260": "IT"
+  "096770": "Energy"
+  "011200": "Shipping"
+  "015760": "Energy"
+  "034730": "Conglomerate"
+  "180640": "Chemicals"

@@ -1,0 +1,277 @@
+# KMP Strategy Configuration
+# KIS credentials are loaded from environment variables.
+
+max_per_sector: 1
+
+# Baselines are computed dynamically at startup from daily OHLCV data
+# by strategy_kmp/premarket.py (no config values needed).
+
+universe:
+  # --- Semiconductors ---
+  - "005930"   # Samsung Electronics
+  - "000660"   # SK Hynix
+  - "006400"   # Samsung SDI
+  - "009150"   # Samsung Electro-Mechanics
+  - "042700"   # Hanmi Semiconductor
+  - "058470"   # Rino Industrial
+  - "357780"   # Solbrain
+  - "240810"   # Won Ik IPS
+  - "108320"   # LX Semicon
+  - "403870"   # HPSP
+  # --- IT / Internet / Software ---
+  - "035420"   # NAVER
+  - "035720"   # Kakao
+  - "036570"   # NCSoft
+  - "259960"   # Krafton
+  - "263750"   # Pearl Abyss
+  - "251270"   # Netmarble
+  - "035900"   # JYP Entertainment
+  - "041510"   # SM Entertainment
+  - "352820"   # HYBE
+  - "053800"   # AhnLab
+  - "030520"   # Hanwha Ocean
+  - "293490"   # Kakao Games
+  - "377300"   # Kakao Pay
+  - "323410"   # Kakao Bank
+  # --- Automotive ---
+  - "005380"   # Hyundai Motor
+  - "000270"   # Kia
+  - "012330"   # Hyundai Mobis
+  - "018880"   # Hanon Systems
+  - "161390"   # Hankook Tire
+  - "298040"   # Hyundai Autoever
+  - "204320"   # Mando
+  # --- Battery / Energy ---
+  - "373220"   # LG Energy Solution
+  - "051910"   # LG Chem
+  - "003670"   # POSCO Future M
+  - "247540"   # Ecopro BM
+  - "086520"   # Ecopro
+  - "006260"   # LS Electric
+  - "010120"   # LS Holdings
+  - "267260"   # HD Hyundai Electric
+  - "112610"   # CS Wind
+  # --- Bio / Pharma ---
+  - "207940"   # Samsung Biologics
+  - "068270"   # Celltrion
+  - "326030"   # SK Biopharmaceuticals
+  - "128940"   # Hanmi Pharm
+  - "302440"   # SK Bioscience
+  - "145020"   # Hugel
+  - "196170"   # Alteogen
+  - "141080"   # Regen Biotech
+  - "000100"   # Yuhan
+  - "185750"   # Jeongkwan Jeon
+  - "214370"   # Care Labs
+  - "950160"   # Koentec
+  - "091990"   # Celltrion Healthcare
+  # --- Financial ---
+  - "105560"   # KB Financial
+  - "055550"   # Shinhan Financial
+  - "000810"   # Samsung Fire & Marine
+  - "316140"   # Woori Financial
+  - "086790"   # Hana Financial
+  - "024110"   # Industrial Bank of Korea
+  - "138930"   # BNK Financial
+  - "175330"   # JB Financial
+  - "005830"   # DB Insurance
+  - "032830"   # Samsung Life Insurance
+  # --- Heavy Industry / Shipbuilding ---
+  - "329180"   # HD Hyundai Heavy
+  - "009540"   # HD Korea Shipbuilding
+  - "267250"   # HD Hyundai
+  - "042660"   # Daewoo Shipbuilding (Hanwha Ocean)
+  - "034020"   # Doosan Enerbility
+  - "298050"   # Doosan Fuel Cell
+  # --- Steel / Materials ---
+  - "005490"   # POSCO Holdings
+  - "004020"   # Hyundai Steel
+  - "001040"   # CJ Corp
+  - "010130"   # Korea Zinc
+  # --- Consumer / Retail ---
+  - "051900"   # LG H&H
+  - "090430"   # Amorepacific
+  - "090435"   # Amorepacific Pref
+  - "004170"   # SPC Samlip
+  - "280360"   # CJ Logistics
+  - "028260"   # Samsung C&T
+  - "069960"   # Hyundai Department Store
+  - "004990"   # Lotte Corp
+  # --- Telecom ---
+  - "017670"   # SK Telecom
+  - "030200"   # KT Corp
+  - "032640"   # LG Uplus
+  # --- Construction / Engineering ---
+  - "028050"   # Samsung Engineering
+  - "000720"   # Hyundai E&C
+  - "047040"   # Daewoo E&C
+  - "006360"   # GS E&C
+  - "375500"   # DL E&C
+  # --- Chemicals ---
+  - "011170"   # Lotte Chemical
+  - "005300"   # Lotte Chilsung
+  - "096770"   # SK Innovation
+  - "010950"   # S-Oil
+  - "003490"   # Korean Air
+  - "020560"   # Asiana Airlines
+  # --- Electronics / Display ---
+  - "034220"   # LG Display
+  - "066570"   # LG Electronics
+  - "011790"   # SKC
+  - "003550"   # LG Corp
+  - "034730"   # SK Inc
+  - "036460"   # Korea Gas
+  - "015760"   # Korea Electric Power
+  # --- Defense ---
+  - "012450"   # Hanwha Aerospace
+  - "047810"   # Korea Aerospace Industries
+  - "079550"   # LIG Nex1
+  - "064350"   # Hyundai Rotem
+  # --- Media / Entertainment ---
+  - "034830"   # Media S
+  - "078930"   # GS Holdings
+  - "021240"   # Coway
+  - "018260"   # Samsung SDS
+  # --- Others ---
+  - "030000"   # Cheil Worldwide
+  - "097950"   # CJ CheilJedang
+  - "271560"   # Orion
+  - "004800"   # Hyosung
+  - "241560"   # Doosan Bobcat
+  - "383220"   # F&F
+  - "002790"   # Amore G
+  - "011200"   # HMM
+  - "180640"   # Hanwha Solutions
+  - "036830"   # Solbrain Holdings
+  - "272210"   # Hanwha System
+  - "000880"   # Hanwha
+  - "138040"   # Meritz Financial
+  - "003410"   # SSangyong C&E
+  - "307950"   # Hyundai Oilbank (SK Discovery)
+
+sector_map:
+  "005930": "Semiconductor"
+  "000660": "Semiconductor"
+  "006400": "Semiconductor"
+  "009150": "Semiconductor"
+  "042700": "Semiconductor"
+  "058470": "Semiconductor"
+  "357780": "Semiconductor"
+  "240810": "Semiconductor"
+  "108320": "Semiconductor"
+  "403870": "Semiconductor"
+  "035420": "IT"
+  "035720": "IT"
+  "036570": "IT"
+  "259960": "IT"
+  "263750": "IT"
+  "251270": "IT"
+  "035900": "Entertainment"
+  "041510": "Entertainment"
+  "352820": "Entertainment"
+  "053800": "IT"
+  "030520": "Shipbuilding"
+  "293490": "IT"
+  "377300": "IT"
+  "323410": "Financial"
+  "005380": "Automotive"
+  "000270": "Automotive"
+  "012330": "Automotive"
+  "018880": "Automotive"
+  "161390": "Automotive"
+  "298040": "Automotive"
+  "204320": "Automotive"
+  "373220": "Battery"
+  "051910": "Battery"
+  "003670": "Battery"
+  "247540": "Battery"
+  "086520": "Battery"
+  "006260": "Battery"
+  "010120": "Battery"
+  "267260": "Battery"
+  "112610": "Battery"
+  "207940": "Biotech"
+  "068270": "Biotech"
+  "326030": "Biotech"
+  "128940": "Biotech"
+  "302440": "Biotech"
+  "145020": "Biotech"
+  "196170": "Biotech"
+  "141080": "Biotech"
+  "000100": "Biotech"
+  "185750": "Biotech"
+  "214370": "Biotech"
+  "950160": "Biotech"
+  "091990": "Biotech"
+  "105560": "Financial"
+  "055550": "Financial"
+  "000810": "Financial"
+  "316140": "Financial"
+  "086790": "Financial"
+  "024110": "Financial"
+  "138930": "Financial"
+  "175330": "Financial"
+  "005830": "Financial"
+  "032830": "Financial"
+  "329180": "Shipbuilding"
+  "009540": "Shipbuilding"
+  "267250": "Shipbuilding"
+  "042660": "Shipbuilding"
+  "034020": "HeavyIndustry"
+  "298050": "HeavyIndustry"
+  "005490": "Steel"
+  "004020": "Steel"
+  "001040": "Consumer"
+  "010130": "Steel"
+  "051900": "Consumer"
+  "090430": "Consumer"
+  "090435": "Consumer"
+  "004170": "Consumer"
+  "280360": "Consumer"
+  "028260": "Consumer"
+  "069960": "Consumer"
+  "004990": "Consumer"
+  "017670": "Telecom"
+  "030200": "Telecom"
+  "032640": "Telecom"
+  "028050": "Construction"
+  "000720": "Construction"
+  "047040": "Construction"
+  "006360": "Construction"
+  "375500": "Construction"
+  "011170": "Chemicals"
+  "005300": "Consumer"
+  "096770": "Energy"
+  "010950": "Energy"
+  "003490": "Airline"
+  "020560": "Airline"
+  "034220": "Display"
+  "066570": "Electronics"
+  "011790": "Chemicals"
+  "003550": "Electronics"
+  "034730": "Conglomerate"
+  "036460": "Energy"
+  "015760": "Energy"
+  "012450": "Defense"
+  "047810": "Defense"
+  "079550": "Defense"
+  "064350": "Defense"
+  "034830": "Entertainment"
+  "078930": "Conglomerate"
+  "021240": "Consumer"
+  "018260": "IT"
+  "030000": "Consumer"
+  "097950": "Consumer"
+  "271560": "Consumer"
+  "004800": "Conglomerate"
+  "241560": "HeavyIndustry"
+  "383220": "Consumer"
+  "002790": "Consumer"
+  "011200": "Shipping"
+  "180640": "Chemicals"
+  "036830": "Semiconductor"
+  "272210": "Defense"
+  "000880": "Conglomerate"
+  "138040": "Financial"
+  "003410": "Construction"
+  "307950": "Energy"

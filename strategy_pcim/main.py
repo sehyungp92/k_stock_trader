@@ -8,7 +8,7 @@ from loguru import logger
 
 import yaml
 
-from kis_core import KoreaInvestEnv, KoreaInvestAPI, RateBudget
+from kis_core import KoreaInvestEnv, KoreaInvestAPI, RateBudget, build_kis_config_from_env
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, RiskPayload
 
 from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION
@@ -172,7 +172,7 @@ async def run_pcim():
     cfg = load_config()
     channels = load_channels()
 
-    env = KoreaInvestEnv(cfg["kis"])
+    env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)
 
     # Connect to OMS service

@@ -13,7 +13,7 @@ import os
 from kis_core import (
     KoreaInvestEnv, KoreaInvestAPI, RateBudget, KISWebSocketClient, TickMessage, AskBidMessage,
     SectorExposure, SectorExposureConfig,
-    filter_universe,
+    filter_universe, build_kis_config_from_env,
 )
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, RiskPayload, IntentStatus
 
@@ -28,6 +28,7 @@ from .core.reconcile import reconcile_exposure
 from .adapters.program_regime import MarketProgramRegime, program_poll_task
 from .adapters.ws_manager import SubscriptionManager, refresh_focus_list, release_non_position_slots
 from .adapters.tick_dispatch import on_tick, on_ask_bid
+from .premarket import compute_baselines
 
 
 def load_config() -> dict:
@@ -262,7 +263,7 @@ async def run_kmp():
     cfg = load_config()
 
     # Initialize KIS API
-    env = KoreaInvestEnv(cfg["kis"])
+    env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)
 
     # Rate budget for REST calls
@@ -331,9 +332,8 @@ async def run_kmp():
         logger.warning(f"Failed to fetch KOSPI prior close: {e}")
     chop_detector = ChopDetector()
 
-    # Load baselines
-    baseline_15m = cfg.get("baseline_15m_value", {})
-    baseline_1m_vol = cfg.get("baseline_1m_vol", {})
+    # Compute baselines from daily data (reuses daily_data fetched for trend anchor)
+    baseline_15m, baseline_1m_vol = compute_baselines(daily_data)
     for t, s in states.items():
         s.avg_1m_vol = baseline_1m_vol.get(t, 0.0)
 
@@ -342,7 +342,7 @@ async def run_kmp():
 
     # --- Connect WebSocket ---
     subs = None
-    ws_url = cfg.get("ws_url", "")
+    ws_url = env.ws_url
     if ws_url:
         if await ws_client.connect(ws_url):
             ws_client.on_tick(make_tick_handler(states, last_prices))

@@ -10,7 +10,7 @@ import os
 from kis_core import (
     KoreaInvestEnv, KoreaInvestAPI, VWAPLedger, RateBudget, KISWebSocketClient,
     SectorExposure, SectorExposureConfig,
-    filter_universe,
+    filter_universe, build_kis_config_from_env,
 )
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon
 
@@ -69,7 +69,7 @@ async def run_kpr():
     logger.info("Starting KPR v4.3")
     cfg = load_config()
 
-    env = KoreaInvestEnv(cfg["kis"])
+    env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)
 
     # Connect to OMS service
@@ -118,7 +118,7 @@ async def run_kpr():
     tick_states: Dict[str, KPRTickState] = {}
     prev_hot_set: Set[str] = set()
     hot_set_ref: Set[str] = set()  # Reference updated when HOT tier changes
-    ws_url = cfg.get("ws_url", "")
+    ws_url = env.ws_url
 
     def _on_hot_tick(ticker: str, msg) -> None:
         """Feed HOT tier ticks to MicroPressureProvider."""

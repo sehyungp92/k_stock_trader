@@ -11,7 +11,7 @@ from kis_core import (
     KoreaInvestEnv, KoreaInvestAPI, RateBudget, RollingSMA, aggregate_bars,
     KISWebSocketClient, BaseSubscriptionManager, TickMessage,
     SectorExposure, SectorExposureConfig,
-    filter_universe,
+    filter_universe, build_kis_config_from_env,
 )
 from oms_client import OMSClient
 
@@ -160,7 +160,7 @@ async def run_nulrimok():
     logger.info("Starting Nulrimok Strategy")
     cfg = load_config()
 
-    env = KoreaInvestEnv(cfg["kis"])
+    env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)
 
     # Connect to OMS service
@@ -170,11 +170,18 @@ async def run_nulrimok():
     # Rate budget for REST calls (market data only - order flow goes via OMS)
     rate_budget = RateBudget()
 
-    lrs = LRSDatabase(cfg.get("lrs_path", "lrs.db"))
+    lrs_path = os.environ.get("LRS_DB_PATH") or cfg.get("lrs_path", "lrs.db")
+    lrs = LRSDatabase(lrs_path)
     raw_universe = cfg.get("universe", [])
     filtered_universe, rejected = filter_universe(api, raw_universe)
     for r in rejected:
         logger.warning(f"Universe filter: {r['ticker']} rejected ({r['reason']})")
+
+    # Populate LRS from KIS API (skips if already fresh today)
+    from .lrs.loader import populate_lrs
+    sector_map_cfg = cfg.get("sector_map", {})
+    populate_lrs(lrs, api, filtered_universe, sector_map_cfg, rate_budget)
+
     dse = DailySelectionEngine(lrs, filtered_universe)
 
     artifact: Optional[WatchlistArtifact] = None
@@ -200,7 +207,7 @@ async def run_nulrimok():
     ws_subs: BaseSubscriptionManager | None = None
     active_set_ref: set = set()  # Reference for tick handler (updated when active_set changes)
     prev_active_set: set = set()
-    ws_url = cfg.get("ws_url", "")
+    ws_url = env.ws_url
 
     def _on_nulrimok_tick(msg: TickMessage) -> None:
         """Real-time tick handler for band proximity detection."""
@@ -266,6 +273,9 @@ async def run_nulrimok():
 
         # DSE Phase
         if time(DSE_START[0], DSE_START[1]) <= now.time() <= time(DSE_END[0], DSE_END[1]) and not dse_ran_today:
+            # Refresh LRS data for today (skips instantly if already fresh)
+            populate_lrs(lrs, api, filtered_universe, sector_map_cfg, rate_budget)
+
             # Refresh position state from OMS before DSE
             await _recover_positions(oms, position_states)
             held = [{"ticker": t, "entry_time": p.entry_time.isoformat(), "avg_price": p.entry_price,

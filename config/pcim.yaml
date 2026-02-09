@@ -1,0 +1,3 @@
+# PCIM Strategy Configuration
+# KIS credentials are loaded from environment variables.
+# Gemini API key should be in environment: GEMINI_API_KEY
