@@ -21,7 +21,7 @@ services:
       KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
-      # No DATABASE_URL = in-memory state only
+      DATABASE_URL: ${DATABASE_URL:-}  # Points to VPS 2's Postgres; if empty, falls back to in-memory
     ports:
       - "8000:8000"
     healthcheck:
