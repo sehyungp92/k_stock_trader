@@ -24,8 +24,5 @@ google-genai>=0.5.0
 # Timezone
 pytz>=2024.1
 
-# Nulrimok: LRS backfill (historical KRX data)
-pykrx>=1.0.0
-
 # Optional: CLI
 rich>=13.0.0
