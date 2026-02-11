@@ -221,6 +221,8 @@ async def run_pcim():
     # Phase-completion flags to prevent repeated computation
     stats_done_today = False
     premarket_done_today = False
+    day_reset_done = False  # Guard: reset-for-next-day runs once per day
+    processed_video_ids: set = set()  # Dedup: skip already-extracted videos
     import time as _time
     last_night_pipeline_ts = 0.0
     night_pipeline_interval = 3600.0  # seconds (1 hour)
@@ -231,6 +233,10 @@ async def run_pcim():
         now = get_kst_now()
         today = now.date()
         now_ts = _time.time()
+
+        # Clear day_reset_done flag in the morning so reset can fire again at 18:00
+        if now.time() < time(18, 0):
+            day_reset_done = False
 
         # Periodic heartbeat
         if now_ts - last_heartbeat_ts > heartbeat_interval:
@@ -253,6 +259,9 @@ async def run_pcim():
 
             new_videos = youtube_watcher.check_all_channels()
             for video in new_videos:
+                if video.video_id in processed_video_ids:
+                    logger.debug(f"Skipping already-processed video {video.video_id}")
+                    continue
                 raw_transcript = fetch_transcript(video.url)
                 if not raw_transcript:
                     continue
@@ -260,6 +269,7 @@ async def run_pcim():
                 # Clean up transcript before extraction
                 transcript = signal_extractor.punctuate_transcript(raw_transcript)
                 result = signal_extractor.extract_signals(transcript, video_id=video.video_id)
+                processed_video_ids.add(video.video_id)
                 if not result or not result.signals:
                     continue
 
@@ -343,7 +353,7 @@ async def run_pcim():
                 five_day_ret = (closes[-1] / closes[-5] - 1) if len(closes) >= 5 else 0
                 c.soft_mult = compute_soft_multiplier(c, five_day_ret)
 
-            kospi_bars = api.get_index_daily("KOSPI", days=120)
+            kospi_bars = api.get_index_daily("KOSPI", days=120) or []
             kospi_closes = [b['close'] for b in kospi_bars]
             kospi_prev_close = kospi_closes[-1] if kospi_closes else None
 
@@ -363,10 +373,12 @@ async def run_pcim():
                     approved_watchlist = eligible
                     logger.info(f"Auto-approved {len(eligible)} candidates")
 
-            # Compute regime
-            if kospi_closes and regime is None:
+            # Compute regime (falls back to NORMAL if KOSPI data unavailable)
+            if regime is None:
                 regime = compute_regime(kospi_closes)
                 await oms.set_regime(regime.name)
+                if not kospi_closes:
+                    logger.warning("KOSPI data unavailable — regime defaulted to NORMAL")
 
         # =================================================================
         # PREMARKET CLASSIFICATION (08:40-09:00) - run once per day
@@ -455,12 +467,13 @@ async def run_pcim():
         if time(9, 1) <= now.time() <= time(cancel_at[0], cancel_at[1]) and not intraday_halted:
             # Intraday halt check
             if kospi_prev_close:
-                kospi_now = api.get_index_realtime("KOSPI")
-                dd = (kospi_now - kospi_prev_close) / kospi_prev_close
-                if dd <= INTRADAY_HALT_KOSPI_DD_PCT:
-                    logger.warning(f"INTRADAY HALT: KOSPI DD {dd:.2%}")
-                    intraday_halted = True
-                    await asyncio.sleep(5)
+                kospi_now = api.get_index_realtime("KOSPI") or 0.0
+                if kospi_now > 0:
+                    dd = (kospi_now - kospi_prev_close) / kospi_prev_close
+                    if dd <= INTRADAY_HALT_KOSPI_DD_PCT:
+                        logger.warning(f"INTRADAY HALT: KOSPI DD {dd:.2%}")
+                        intraday_halted = True
+                        await asyncio.sleep(5)
                     continue
 
             # First, check pending orders for fills
@@ -608,8 +621,9 @@ async def run_pcim():
                     atr20 = api.get_atr_20d(pos.symbol)
                     update_trailing_stop_eod(pos, close_today, atr20)
 
-        # Reset for next day
-        if now.time() >= time(18, 0):
+        # Reset for next day (once, at 18:00 KST)
+        if now.time() >= time(18, 0) and not day_reset_done:
+            day_reset_done = True
             candidates = []
             approved_watchlist = []
             intraday_halted = False
@@ -618,6 +632,7 @@ async def run_pcim():
             cancel_done_today = False
             stats_done_today = False
             premarket_done_today = False
+            processed_video_ids.clear()
             last_night_pipeline_ts = 0.0
             position_manager.reset_daily_state()
             # Save and potentially reset Bucket A hit tracker
@@ -625,6 +640,7 @@ async def run_pcim():
             bucket_a_tracker.save(state_dir)
             logger.info(f"Bucket A adaptive threshold: {bucket_a_tracker.calibrated_threshold():.2f} "
                        f"(hit_rate={bucket_a_tracker.hit_rate:.2%})")
+            logger.info("Day reset complete")
 
         await asyncio.sleep(5)
 

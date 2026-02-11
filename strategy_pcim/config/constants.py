@@ -196,5 +196,5 @@ YOUTUBE = {
     "VIDEO_CUTOFF_HOUR": 15,
     "VIDEO_MORNING_CUTOFF_HOUR": 8,
     "VIDEO_MORNING_CUTOFF_MIN": 30,
-    "STATE_FILE": "pcim_youtube_state.json",
+    "STATE_FILE": "/app/data/pcim_youtube_state.json",
 }

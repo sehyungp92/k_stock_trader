@@ -17,6 +17,9 @@ COPY oms/intent.py /app/oms/intent.py
 # Copy strategy code
 COPY strategy_nulrimok/ /app/strategy_nulrimok/
 
+# Copy backfill script
+COPY scripts/backfill_lrs.py /app/scripts/backfill_lrs.py
+
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "strategy_nulrimok.main"]

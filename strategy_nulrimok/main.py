@@ -3,6 +3,7 @@
 import asyncio
 from collections import defaultdict, deque
 from datetime import datetime, date, time
+from zoneinfo import ZoneInfo
 from typing import Dict, Optional
 from loguru import logger
 
@@ -64,7 +65,6 @@ def load_config() -> dict:
 
 
 def get_kst_now() -> datetime:
-    from zoneinfo import ZoneInfo
     return datetime.now(tz=ZoneInfo("Asia/Seoul"))
 
 
@@ -252,7 +252,7 @@ async def run_nulrimok():
         else:
             logger.warning("Nulrimok WebSocket connect failed; using REST only")
 
-    last_30m_boundary, last_rotation, dse_ran_today = None, datetime.min, False
+    last_30m_boundary, last_rotation, dse_ran_today = None, datetime.min.replace(tzinfo=ZoneInfo("Asia/Seoul")), False
     prev_trade_date: Optional[date] = None
     last_reconcile_cycle = 0
     reconcile_interval = 1  # Reconcile every cycle (~30m) to detect external closes promptly
@@ -339,7 +339,7 @@ async def run_nulrimok():
 
         # IEPE Phase
         # Tier C: blocked unless allow_tier_c_reduced switch is on (0.25x sizing via regime.py)
-        tier_c_blocked = artifact.regime_tier == "C" and not nulrimok_switches.allow_tier_c_reduced
+        tier_c_blocked = artifact is not None and artifact.regime_tier == "C" and not nulrimok_switches.allow_tier_c_reduced
         if (time(IEPE_START[0], IEPE_START[1]) <= now.time() <= time(IEPE_END[0], IEPE_END[1])
                 and artifact and not tier_c_blocked):
 

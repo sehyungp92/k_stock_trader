@@ -215,6 +215,17 @@ class LRSDatabase:
             )
             return len(bars)
 
+    def upsert_fx(self, pair: str, rows: List[Dict]) -> int:
+        """Bulk INSERT OR REPLACE into fx_rates. Returns rows written."""
+        if not rows:
+            return 0
+        with self._conn() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO fx_rates (pair, date, close) VALUES (?, ?, ?)",
+                [(pair, r["date"], r["close"]) for r in rows],
+            )
+            return len(rows)
+
     def upsert_sector_map(self, mapping: Dict[str, str]) -> int:
         """Bulk INSERT OR REPLACE into sector_map. Returns rows written."""
         if not mapping:

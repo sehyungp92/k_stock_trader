@@ -191,11 +191,11 @@ async def run_kpr():
                     s.code: s.qty for s in states.values()
                     if s.fsm == FSMState.IN_POSITION and s.qty > 0
                 }
-                local_orders = {s.entry_order_id for s in states.values() if s.entry_order_id}
 
-                # Check for drift
+                # Check for drift (position-level only; order-level skipped
+                # because OMS has no broker open-orders query endpoint)
                 events = drift_monitor.compute_drift(
-                    local_positions, broker_positions, local_orders, set()
+                    local_positions, broker_positions
                 )
                 if drift_monitor.handle_drift(events):
                     # Reconcile: overwrite local with broker truth

@@ -14,7 +14,14 @@
       "WebSearch",
       "Bash(python:*)",
       "Bash(ls:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:wikidocs.net)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:apiportal.koreainvestment.com)",
+      "WebFetch(domain:unfinishedgod.netlify.app)",
+      "WebFetch(domain:lobehub.com)",
+      "WebFetch(domain:velog.io)"
     ]
   }
 }

@@ -437,7 +437,7 @@ async def run_kmp():
         kospi_price = 0.0
         if rate_budget.try_consume("INDEX"):
             try:
-                kospi_price = api.get_index_realtime("KOSPI")
+                kospi_price = api.get_index_realtime("KOSPI") or 0.0
             except Exception:
                 pass
         if kospi_price > 0:

@@ -484,6 +484,273 @@ Metabase runs on VPS 2 and serves as the **unified dashboard for both VPSes**. S
 
 ---
 
+## Debug Pipeline: Why No Trades?
+
+If a strategy produced zero trades on a trading day, work through its pipeline top-to-bottom. The first step that shows nothing (or an error) is where trades are getting blocked.
+
+> **Note:** Log timestamps are in **UTC**. Add 9 hours for KST (e.g., `00:16 UTC` = `09:16 KST`).
+
+### Quick Health Check (All Strategies)
+
+```bash
+# Is the strategy alive or crash-looping?
+docker logs strategy_kmp 2>&1 | grep -E "Starting KMP|Traceback|Error" | tail -20
+docker logs strategy_nulrimok 2>&1 | grep -E "Starting Nulrimok|Traceback|Error" | tail -20
+docker logs strategy_kpr 2>&1 | grep -E "Starting KPR|Traceback|Error" | tail -20
+docker logs strategy_pcim 2>&1 | grep -E "Starting PCIM|Traceback|Error" | tail -20
+
+# Are heartbeats flowing? (proves strategy is alive and looping)
+docker logs strategy_kmp 2>&1 | grep "heartbeat" | tail -5
+
+# Any OMS rejections?
+docker logs oms_vps1 2>&1 | grep -i "reject\|halt\|frozen\|scaled\|MODIFY" | tail -20
+docker logs oms_vps2 2>&1 | grep -i "reject\|halt\|frozen\|scaled\|MODIFY" | tail -20
+
+# Current positions across all strategies
+curl -s http://localhost:8000/positions | python3 -m json.tool
+```
+
+---
+
+### KMP Debug Pipeline
+
+KMP trades 09:15–14:30 KST. It scans at 09:15, then enters an FSM loop looking for breakout setups.
+
+```bash
+# Step 1: Did it reach market open?
+docker logs strategy_kmp 2>&1 | grep "Waiting for market open\|Entering main loop"
+# Expected: "Waiting..." then "Entering main loop" once (not repeatedly — repeats = crash loop)
+
+# Step 2: Did the 09:15 scan find candidates?
+docker logs strategy_kmp 2>&1 | grep "Scan complete"
+# Expected: "Scan complete. 15 candidates" — if 0, trend anchor or surge filter killed everything
+
+# Step 3: How many tickers passed trend anchor?
+docker logs strategy_kmp 2>&1 | grep "Trend anchor"
+# Expected: "Trend anchor applied. 85 tickers OK" — low number means weak market
+
+# Step 4: Is regime/breadth blocking entries?
+docker logs strategy_kmp 2>&1 | grep -i "breadth\|regime\|chop\|risk_off"
+# If breadth stays < 8 all day, regime gate never opens → no entries possible
+
+# Step 5: Did any symbol reach ARMED (ready to submit)?
+docker logs strategy_kmp 2>&1 | grep -E "WATCH_BREAK|ARMED|WAIT_ACCEPTANCE"
+# If nothing, setups never triggered (market didn't break out)
+
+# Step 6: Were intents submitted to OMS?
+docker logs strategy_kmp 2>&1 | grep "submit_intent\|Intent"
+
+# Step 7: Did OMS reject them?
+docker logs oms_vps1 2>&1 | grep -i "KMP.*reject\|KMP.*modify\|KMP.*scaled"
+```
+
+**Common KMP blockers:**
+| Symptom | Cause |
+|---------|-------|
+| Multiple "Starting KMP" entries | Crash loop — check `grep Traceback` for root cause |
+| Scan complete. 0 candidates | Trend anchor filtered everything (weak/range-bound market) |
+| No WATCH_BREAK/ARMED lines | No breakout setups detected (market too quiet) |
+| breadth < 8 all day | Regime gate blocked — not enough leaders surging |
+
+---
+
+### KPR Debug Pipeline
+
+KPR trades 09:10–14:00 KST. It watches for VWAP pullback setups across tiered universe (HOT/WARM/COLD).
+
+```bash
+# Step 1: Did it start and connect?
+docker logs strategy_kpr 2>&1 | grep "Starting KPR\|WebSocket\|universe"
+# Expected: "KPR WebSocket connected for HOT tier"
+
+# Step 2: Universe filter results
+docker logs strategy_kpr 2>&1 | grep "Universe filter"
+# Expected: "58 passed, 0 rejected"
+
+# Step 3: Are symbols entering VWAP band?
+docker logs strategy_kpr 2>&1 | grep -i "setup detected\|accepting\|entry\|order\|exit"
+# If nothing, no stocks pulled back 2-5% below VWAP (market trending up or flat)
+
+# Step 4: Did any reach ACCEPTING state?
+docker logs strategy_kpr 2>&1 | grep "ACCEPTING"
+# If nothing, setups detected but confirmation bars didn't follow through
+
+# Step 5: Were intents submitted?
+docker logs strategy_kpr 2>&1 | grep "submit_intent\|Intent"
+
+# Step 6: Did OMS reject?
+docker logs oms_vps2 2>&1 | grep -i "KPR.*reject\|KPR.*modify"
+
+# Step 7: Check investor flow availability (key signal for KPR)
+docker logs strategy_kpr 2>&1 | grep -i "investor\|flow\|stale"
+```
+
+**Common KPR blockers:**
+| Symptom | Cause |
+|---------|-------|
+| No SETUP_DETECTED | Market didn't pull back to VWAP band (trending day) |
+| SETUP_DETECTED but no ACCEPTING | Investor flow signal was stale/conflicting |
+| halt_new_entries | OMS daily loss breaker tripped |
+
+---
+
+### Nulrimok Debug Pipeline
+
+Nulrimok is a swing/multi-day strategy. DSE runs at 08:00–08:30 KST, IEPE entries happen on 30-minute bars throughout the day.
+
+```bash
+# Step 1: Did DSE run and produce a watchlist?
+docker logs strategy_nulrimok 2>&1 | grep -i "DSE\|watchlist\|active_set"
+# Expected: "DSE" output showing active set of tickers to watch
+
+# Step 2: What regime tier was assigned?
+docker logs strategy_nulrimok 2>&1 | grep -i "regime\|tier"
+# Tier C with allow_tier_c_reduced=False → IEPE completely blocked
+
+# Step 3: Did IEPE phase start? (requires active_set and correct time window)
+docker logs strategy_nulrimok 2>&1 | grep -i "IEPE\|process_entry\|PENDING_FILL"
+
+# Step 4: Were any tickers near the AVWAP band?
+docker logs strategy_nulrimok 2>&1 | grep -i "near_band\|avwap\|band"
+# If nothing, prices never reached entry zones
+
+# Step 5: Were intents submitted?
+docker logs strategy_nulrimok 2>&1 | grep "submit_intent\|Intent"
+
+# Step 6: Did OMS reject?
+docker logs oms_vps1 2>&1 | grep -i "NULRIMOK.*reject"
+
+# Step 7: Check daily risk budget (may cap entries)
+docker logs strategy_nulrimok 2>&1 | grep -i "risk_budget\|budget"
+
+# Step 8: Check for position recovery on startup
+docker logs strategy_nulrimok 2>&1 | grep "Recovered\|recovered\|Startup"
+
+# Step 9: Check flow reversal exits (pre-market)
+docker logs strategy_nulrimok 2>&1 | grep "flow reversal"
+```
+
+**Common Nulrimok blockers:**
+| Symptom | Cause |
+|---------|-------|
+| DSE didn't run | Strategy started after 08:30 KST window |
+| Tier C blocked | `allow_tier_c_reduced=False` (conservative) in weak market |
+| No near_band | Prices never reached AVWAP entry zones |
+| active_set empty | DSE filtering too strict, or LRS data stale |
+
+---
+
+### PCIM Debug Pipeline
+
+PCIM is an influencer-signal strategy. Night pipeline (20:00–06:00) fetches YouTube videos, premarket (08:40–09:00) classifies, execution (09:01–10:30) trades.
+
+```bash
+# Step 1: Did the night pipeline find videos?
+docker logs strategy_pcim 2>&1 | grep "Night pipeline\|YOUTUBE_FETCH"
+# Expected: "Night pipeline: Checking for new videos" + channel fetches
+
+# Step 2: Were signals extracted from transcripts?
+docker logs strategy_pcim 2>&1 | grep "RECOMMENDATION\|extract_signals\|conviction"
+# If nothing, influencers didn't mention any stocks (or transcript download failed)
+
+# Step 3: How many candidates survived filters?
+docker logs strategy_pcim 2>&1 | grep -E "consolidation|TREND_GATE|INSUFFICIENT|reject_reason|candidates"
+# Check for: "Night pipeline: 5 candidates" then "After consolidation: 3 unique symbols"
+
+# Step 4: Were candidates approved?
+docker logs strategy_pcim 2>&1 | grep "Auto-approved\|Approval\|approval"
+# Expected: "Auto-approved 3 candidates"
+
+# Step 5: Did premarket selection pass? (regime + exposure caps)
+docker logs strategy_pcim 2>&1 | grep "PREMARKET_SELECT"
+# ACCEPTED = will trade, REJECTED = hit max_positions or exposure_cap
+
+# Step 6: Did execution triggers fire?
+docker logs strategy_pcim 2>&1 | grep "ENTRY_DECISION\|EXECUTION_VETO\|bucket"
+# ENTRY_DECISION = order submitted, EXECUTION_VETO = spread/VI/upper-limit blocked
+
+# Step 7: Were orders filled?
+docker logs strategy_pcim 2>&1 | grep "Fill confirmed\|position created\|Partial fill"
+
+# Step 8: Did OMS reject?
+docker logs oms_vps2 2>&1 | grep -i "PCIM.*reject"
+
+# Step 9: Check regime (affects exposure cap)
+docker logs strategy_pcim 2>&1 | grep -i "regime"
+# CRISIS/WEAK = severely limited exposure
+```
+
+**Common PCIM blockers:**
+| Symptom | Cause |
+|---------|-------|
+| Night pipeline: 0 candidates | No new YouTube videos from configured influencers |
+| RECOMMENDATION lines but 0 after filters | Stocks failed trend gate, hard filters, or gap reversal check |
+| PREMARKET_SELECT: all REJECTED | CRISIS/WEAK regime capped exposure, or max positions reached |
+| EXECUTION_VETO | Spread too wide, VI active, or price at upper limit |
+| No Fill confirmed | Orders submitted but didn't fill (paper trading limitation or thin liquidity) |
+
+---
+
+### OMS Debug (Cross-Strategy)
+
+The OMS is the final gatekeeper. If strategies are submitting intents but nothing trades, check here.
+
+```bash
+# All rejections (both VPS)
+docker logs oms_vps1 2>&1 | grep -i "reject" | tail -20
+docker logs oms_vps2 2>&1 | grep -i "reject" | tail -20
+
+# Daily loss circuit breaker (halts ALL new entries)
+docker logs oms_vps1 2>&1 | grep -i "daily_loss\|halt\|circuit"
+docker logs oms_vps2 2>&1 | grep -i "daily_loss\|halt\|circuit"
+
+# Exposure cap hits
+docker logs oms_vps1 2>&1 | grep -i "exposure\|regime.*cap"
+docker logs oms_vps2 2>&1 | grep -i "exposure\|regime.*cap"
+
+# Strategy paused or frozen symbols
+docker logs oms_vps1 2>&1 | grep -i "paused\|frozen\|safe.mode"
+docker logs oms_vps2 2>&1 | grep -i "paused\|frozen\|safe.mode"
+
+# Qty scaled down (trade went through but smaller)
+docker logs oms_vps1 2>&1 | grep -i "scaled\|MODIFY"
+docker logs oms_vps2 2>&1 | grep -i "scaled\|MODIFY"
+```
+
+**OMS rejection reasons:**
+| Reason | Meaning |
+|--------|---------|
+| `Daily loss exceeds halt limit` | PnL dropped > 3% (or 5%) → all entries blocked |
+| `Max positions reached` | Hit global (15) or per-strategy (4/3/5/8) position limit |
+| `Gross exposure would exceed 80%` | Portfolio too concentrated |
+| `Regime CRISIS/WEAK cap exceeded` | Market regime limits total exposure |
+| `Sector exposure exceeded` | Too much in one sector (> 30%) |
+| `Strategy paused` | Manually paused via API |
+| `Symbol frozen` | Allocation drift unresolved |
+| `VI cooldown` | Volatility Interruption, 10-min cooldown |
+
+---
+
+### Using Persistent Log Files
+
+If log persistence is enabled (logs written to `data/*/logs/`), you can search across days without `docker logs`:
+
+```bash
+# Today's KMP log
+cat data/kmp/logs/kmp_2026-02-11.log
+
+# Search across multiple days
+grep "Fill detected" data/kmp/logs/kmp_2026-02-*.log
+
+# Compressed old logs
+zcat data/kmp/logs/kmp_2026-02-01.log.gz | grep "ENTRY"
+
+# Tail live
+tail -f data/kmp/logs/kmp_$(date -u +%Y-%m-%d).log
+```
+
+---
+
 ## Remaining Items
 
 ### TODO
