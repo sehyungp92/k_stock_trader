@@ -19,7 +19,7 @@ VPS 1 (Account 1)                    VPS 2/3 (Account 2)
 │  (PostgreSQL remote)│   :5432      │  (PostgreSQL local) │
 ├─────────────────────┤              ├─────────────────────┤
 │  SQLite (Nulrimok)  │              │  PostgreSQL         │◄── Shared DB
-│  lrs.db (auto-pop)  │              │  + Metabase         │◄── Shared UI
+│  lrs.db (auto-pop)  │              │  + Dashboard        │◄── Monitoring UI
 └─────────────────────┘              └─────────────────────┘
          │                                      │
          └──────────────────┬───────────────────┘
@@ -36,7 +36,7 @@ VPS 1 (Account 1)                    VPS 2/3 (Account 2)
 | Factor | Benefit |
 |--------|---------|
 | **Zero WS time-sharing** | KMP->Nulrimok natural handoff at 10:00; PCIM uses 0 WS |
-| **Shared PostgreSQL** | Both OMS instances log to VPS 2's Postgres; single Metabase dashboard for all 4 strategies |
+| **Shared PostgreSQL** | Both OMS instances log to VPS 2's Postgres; single monitoring dashboard for all 4 strategies |
 | **Nulrimok LRS isolated** | SQLite stays local, no network dependency for strategy data |
 | **KPR exclusive WS** | Full 40 slots all day without contention |
 
@@ -173,14 +173,14 @@ curl http://localhost:8000/health
 
 ```bash
 sudo ufw allow 22/tcp
-# Allow Metabase (restrict to your IP in production)
+# Allow dashboard (restrict to your IP in production)
 sudo ufw allow 3000/tcp
 # Allow VPS 1 OMS to connect to Postgres for logging
 sudo ufw allow from VPS1_IP to any port 5432
 sudo ufw enable
 ```
 
-> **Important:** Replace `VPS1_IP` with VPS 1's actual IP address. This allows VPS 1's OMS to write intents/trades to the shared PostgreSQL database.
+> **Important:** Replace `VPS1_IP` with VPS 1's actual IP address. This allows VPS 1's OMS to write intents/trades to the shared PostgreSQL database, and makes all 4 strategies visible in the dashboard on VPS 2.
 
 **Status: COMPLETED**
 
@@ -231,7 +231,7 @@ KIS_PAPER_ACCOUNT_NO=your_paper_account_1
 DATABASE_URL=postgresql://trading_writer:writer_password@VPS2_IP:5432/trading
 ```
 
-> **Important:** Replace `VPS2_IP` with VPS 2's actual IP address, and `writer_password` with the `POSTGRES_WRITER_PASSWORD` value from VPS 2's `.env`. This allows VPS 1's OMS to log intents and trades to the same database used by VPS 2, enabling a unified Metabase dashboard across both VPSes.
+> **Important:** Replace `VPS2_IP` with VPS 2's actual IP address, and `writer_password` with the `POSTGRES_WRITER_PASSWORD` value from VPS 2's `.env`. This allows VPS 1's OMS to log intents and trades to the same database used by VPS 2, making all 4 strategies visible in the dashboard on VPS 2.
 
 ### 3.3 Start VPS 1 Services
 
@@ -460,27 +460,61 @@ Add:
 0 6 * * 1-5 cd /opt/k_stock_trader && sudo docker compose -f docker-compose.vps1.yml restart >> /var/log/restart.log 2>&1
 ```
 
-### 5.3 Setup Metabase Dashboard (Shared — VPS 2)
+### 5.3 Monitoring Dashboard (VPS 2)
 
-**Status: NOT YET DONE**
+**Status: DONE** — Replaced Metabase with a lightweight Next.js dashboard (`infra/dashboard/`).
 
-Metabase runs on VPS 2 and serves as the **unified dashboard for both VPSes**. Since both OMS instances (VPS 1 remote, VPS 2 local) write to the same PostgreSQL database, all strategies' intents, trades, and positions are visible in a single Metabase instance.
+The dashboard is built into the VPS 2 compose stack and starts automatically with the other services. It proxies OMS API calls server-side (no CORS issues, no internal URL exposed to browser) and auto-refreshes every 10 seconds.
 
-1. Access Metabase: `http://VPS2_IP:3000`
-2. Complete initial setup
-3. Add database connection:
-   - Type: PostgreSQL
-   - Host: `postgres`
-   - Port: `5432`
-   - Database: `trading`
-   - User: `trading_reader`
-   - Password: `${POSTGRES_READER_PASSWORD}`
+**Access:** `http://VPS2_IP:3000`
 
-4. Create dashboards for:
-   - Daily P&L by strategy (all 4: KMP, Nulrimok, KPR, PCIM)
-   - Intent success/rejection rates
-   - Position heat map
-   - Fill latency metrics
+**What it shows:**
+- OMS status badge, PAPER/LIVE mode indicator, uptime, KST clock
+- Safe mode / halt entries / flatten-in-progress alert banners
+- Equity, daily P&L (+%), cash, open positions count
+- Session P&L sparkline (in-memory, resets on page reload)
+- Per-strategy position cards (KMP, NULRIMOK, KPR, PCIM)
+- Full positions table with avg price, entry time, soft stop, hard stop
+- KIS circuit breaker and reconciliation alerts
+
+**Deploy / rebuild:**
+```bash
+# On VPS 2
+cd /opt/k_stock_trader
+git pull
+sudo docker compose -f docker-compose.vps2.yml up -d --build dashboard
+```
+
+**Resource footprint:** ~100–250 MB RAM, ~130 MB image (vs Metabase's ~1.5 GB RAM, ~1.6 GB image).
+
+---
+
+### 5.4 Removing Metabase to Free Disk Space (VPS 2)
+
+If Metabase was previously running, remove it to reclaim ~1.6 GB of disk and ~1.5 GB of RAM:
+
+```bash
+# Stop and remove the container (if still running)
+docker stop metabase 2>/dev/null; docker rm metabase 2>/dev/null
+
+# Remove the image (~1.6 GB)
+docker rmi metabase/metabase:latest
+
+# Remove any dangling layers left behind
+docker image prune -f
+
+# Verify space recovered
+df -h /
+docker system df
+```
+
+If Metabase had already written data to the `metabase` schema in Postgres and you want to clean that up too:
+
+```bash
+sudo docker exec -it trading_db psql -U postgres -d trading -c "DROP SCHEMA IF EXISTS metabase CASCADE;"
+```
+
+> This is safe — the `trading` schema (where intents/trades live) is unaffected. The `metabase` schema only held Metabase's own configuration.
 
 ---
 
@@ -760,7 +794,7 @@ tail -f data/kmp/logs/kmp_$(date -u +%Y-%m-%d).log
 | **Verify KPR drift fix** | High | On VPS-3, run `docker logs strategy_kpr 2>&1 \| grep -i "orphan\|trade_block"` — should return nothing. The old `ORDER_ORPHAN_LOCAL` spam that blocked all trades should be gone. |
 | **Run LRS backfill on VPS-1** | High | Run `docker exec strategy_nulrimok python /app/scripts/backfill_lrs.py` to add 600 days of KOSPI/KOSDAQ history. Logs already show regime tier=A, but backfill provides more robust regime calculations. |
 | **Config audit fixes** | Medium | Pending plan in `.claude/plans/`: (1) Fix `t3_bucket_a_allowed` default mismatch in PCIM switches (`False` should be `True`), (2) Wire `conservative.yaml` loading — currently dead code (no `main.py` ever calls `load_from_yaml()`), (3) Add config validation so bad YAML fails at startup, not mid-trading. |
-| **Metabase setup** | Medium | VPS 2 container is running, needs initial config via web UI. Once configured, serves as unified dashboard for all 4 strategies across both VPSes. |
+| **Remove Metabase from VPS 2** | Medium | Run `docker stop metabase; docker rm metabase; docker rmi metabase/metabase:latest; docker image prune -f` to reclaim ~1.6 GB disk. See §5.4. |
 | **Cron health checks** | Medium | Scripts exist but cron jobs need to be installed on both VPSes |
 | **Alert webhooks** | Low | Health check script supports Slack/Discord webhooks, needs URL configured |
 
@@ -864,7 +898,7 @@ VPS 1's OMS connects to VPS 2's Postgres over the network. If this message appea
 2. VPS 2 firewall allows VPS 1's IP on port 5432 (`sudo ufw status` on VPS 2)
 3. `DATABASE_URL` in VPS 1's `.env` has the correct VPS 2 IP and `POSTGRES_WRITER_PASSWORD`
 
-OMS retries automatically and falls back to in-memory state if the connection cannot be established. Trading is unaffected, but intent/trade history won't be persisted to Postgres (and won't appear in Metabase) until the connection is restored.
+OMS retries automatically and falls back to in-memory state if the connection cannot be established. Trading is unaffected, but intent/trade history won't be persisted to Postgres (and won't appear in the dashboard) until the connection is restored.
 
 ### KIS API Rate-Limiting During Universe Filter
 
@@ -917,9 +951,10 @@ On startup, each strategy runs `filter_universe()` which makes ~2 API calls per 
     | +-------------------+ |    | +-------------------+     |
     +-----------------------+    | | PCIM Container    |     |
                                  | +-------------------+     |
-         Metabase UI             | +-------------------+     |
-    http://VPS2_IP:3000  ◄──────── | Metabase (3000)   |     |
-    (both VPSes' data)           | +-------------------+     |
+         Dashboard UI             | +-------------------+     |
+    http://VPS2_IP:3000  ◄──────── | Dashboard (3000)  |     |
+    (both VPSes' data)           | | Next.js, ~150MB   |     |
+                                 | +-------------------+     |
                                  +---------------------------+
 ```
 
@@ -939,6 +974,7 @@ sudo docker compose -f docker-compose.vps2.yml up -d           # Start all
 sudo docker compose -f docker-compose.vps2.yml logs -f kpr     # KPR logs
 sudo docker compose -f docker-compose.vps2.yml logs -f pcim    # PCIM logs
 sudo docker compose -f docker-compose.vps2.yml exec postgres psql -U postgres -d trading  # DB shell
+sudo docker compose -f docker-compose.vps2.yml logs -f dashboard                          # Dashboard logs
 
 # === Both VPS: Update deployment ===
 git pull

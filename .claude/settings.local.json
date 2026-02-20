@@ -21,7 +21,9 @@
       "WebFetch(domain:apiportal.koreainvestment.com)",
       "WebFetch(domain:unfinishedgod.netlify.app)",
       "WebFetch(domain:lobehub.com)",
-      "WebFetch(domain:velog.io)"
+      "WebFetch(domain:velog.io)",
+      "mcp__plugin_claude-mem_mcp-search__get_observations",
+      "mcp__plugin_claude-mem_mcp-search__save_memory"
     ]
   }
 }
