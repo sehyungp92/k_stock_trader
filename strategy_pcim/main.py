@@ -205,7 +205,8 @@ async def run_pcim():
     logger.info(f"Startup: Reconciled {len(position_manager.get_open_positions())} positions from OMS")
 
     # Load Bucket A hit tracker for adaptive volume threshold
-    state_dir = os.path.dirname(os.getenv("PCIM_CONFIG", "config/settings.yaml"))
+    # Use DATA_DIR (writable) — config dir is mounted read-only in production
+    state_dir = os.getenv("DATA_DIR", "/app/data")
     bucket_a_tracker = BucketAHitTracker.load(state_dir)
     bucket_a_pending: Dict[str, int] = {}  # symbol -> intended_qty for tracking fills
 
@@ -395,6 +396,7 @@ async def run_pcim():
 
                 expected_open = api.get_expected_open(c.symbol)
                 if not expected_open:
+                    logger.warning(f"PREMARKET: {c.symbol} rejected — NO_EXPECTED_OPEN")
                     c.reject_reason = "NO_EXPECTED_OPEN"
                     continue
 

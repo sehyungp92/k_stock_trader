@@ -757,6 +757,9 @@ tail -f data/kmp/logs/kmp_$(date -u +%Y-%m-%d).log
 
 | Item | Priority | Notes |
 |------|----------|-------|
+| **Verify KPR drift fix** | High | On VPS-3, run `docker logs strategy_kpr 2>&1 \| grep -i "orphan\|trade_block"` — should return nothing. The old `ORDER_ORPHAN_LOCAL` spam that blocked all trades should be gone. |
+| **Run LRS backfill on VPS-1** | High | Run `docker exec strategy_nulrimok python /app/scripts/backfill_lrs.py` to add 600 days of KOSPI/KOSDAQ history. Logs already show regime tier=A, but backfill provides more robust regime calculations. |
+| **Config audit fixes** | Medium | Pending plan in `.claude/plans/`: (1) Fix `t3_bucket_a_allowed` default mismatch in PCIM switches (`False` should be `True`), (2) Wire `conservative.yaml` loading — currently dead code (no `main.py` ever calls `load_from_yaml()`), (3) Add config validation so bad YAML fails at startup, not mid-trading. |
 | **Metabase setup** | Medium | VPS 2 container is running, needs initial config via web UI. Once configured, serves as unified dashboard for all 4 strategies across both VPSes. |
 | **Cron health checks** | Medium | Scripts exist but cron jobs need to be installed on both VPSes |
 | **Alert webhooks** | Low | Health check script supports Slack/Discord webhooks, needs URL configured |

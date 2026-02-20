@@ -504,15 +504,15 @@ class KoreaInvestAPI:
                 return None
 
             # Expected match price
-            expected = hoga[0].get('antc_cnpr')
+            expected = hoga[0].get('antc_cnpr') or ''
             if expected and expected != '0':
                 return float(expected)
 
             # Fallback: mid-price
-            bid = hoga[0].get('bidp1', 0)
-            ask = hoga[0].get('askp1', 0)
+            bid = float(hoga[0].get('bidp1') or 0)
+            ask = float(hoga[0].get('askp1') or 0)
             if bid and ask:
-                return (float(bid) + float(ask)) / 2
+                return (bid + ask) / 2
 
         except Exception as e:
             logger.debug(f"Expected open error for {ticker}: {e}")
@@ -759,7 +759,7 @@ class KoreaInvestAPI:
                 return [
                     {
                         'date': row.get('stck_bsop_date', ''),
-                        'net_buy': int(row.get('frgn_ntby_qty', 0)),
+                        'net_buy': int(row.get('frgn_ntby_qty') or 0),
                     }
                     for row in output[:days]
                 ]
@@ -780,7 +780,7 @@ class KoreaInvestAPI:
                 return [
                     {
                         'date': row.get('stck_bsop_date', ''),
-                        'net_buy': int(row.get('orgn_ntby_qty', 0)),
+                        'net_buy': int(row.get('orgn_ntby_qty') or 0),
                     }
                     for row in output[:days]
                 ]
@@ -801,8 +801,8 @@ class KoreaInvestAPI:
                 return [
                     {
                         'date': row.get('stck_bsop_date', ''),
-                        'foreign_net': int(row.get('frgn_ntby_qty', 0)),
-                        'inst_net': int(row.get('orgn_ntby_qty', 0)),
+                        'foreign_net': int(row.get('frgn_ntby_qty') or 0),
+                        'inst_net': int(row.get('orgn_ntby_qty') or 0),
                     }
                     for row in output[:days]
                 ]
