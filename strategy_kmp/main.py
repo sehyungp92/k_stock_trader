@@ -104,7 +104,7 @@ def compute_regime_ok(
         if s.surge >= 3.0 and s.rvol_1m >= LEADER_RVOL_MIN and s.vwap > 0 and price >= s.vwap:
             breadth += 1
 
-    breadth_ok = breadth >= 8
+    breadth_ok = breadth >= 2
 
     # Feed breadth into chop detector and check chop
     is_chop = False

@@ -112,6 +112,7 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
             qty = int((equity * risk_pct) / max(close - stop, 0.01))
 
             if qty <= 0:
+                logger.warning(f"{artifact.ticker}: Entry confirmed ({conf_type}) but qty=0 (close={close:.0f} stop={stop:.0f}), resetting")
                 entry_state.reset()
                 return None
 
@@ -136,8 +137,13 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 logger.info(f"{artifact.ticker}: Entry submitted, awaiting fill ({conf_type})")
                 return intent.intent_id
 
+            # OMS rejected or unreachable — log and do NOT consume a confirmation bar
+            logger.warning(f"{artifact.ticker}: Entry confirmed ({conf_type}) but OMS returned {result.status.name}: {result.message}")
+            return None
+
         entry_state.confirm_bars_remaining -= 1
         if entry_state.confirm_bars_remaining <= 0:
+            logger.info(f"{artifact.ticker}: Confirmation window expired, resetting entry state")
             entry_state.reset()
         return None
 
