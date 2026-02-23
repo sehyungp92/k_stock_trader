@@ -35,7 +35,7 @@ class InvestorFlowData:
     def is_stale(self) -> bool:
         if self.timestamp is None:
             return True
-        return (datetime.now() - self.timestamp).total_seconds() > 120
+        return (datetime.now() - self.timestamp).total_seconds() > 300
 
 
 class InvestorFlowProvider:
@@ -81,6 +81,8 @@ class InvestorFlowProvider:
         """
         if ticker in self._inflight:
             return
+        if self.age_sec(ticker) < 300:
+            return
         if self._rate_budget and not self._rate_budget.try_consume("FLOW"):
             return
 
@@ -88,12 +90,11 @@ class InvestorFlowProvider:
 
         async def _refresh_task():
             try:
-                foreign = self.api.get_foreign_trend(ticker, days=5)
-                inst = self.api.get_inst_trend(ticker, days=5)
+                rows = self.api.get_investor_trend(ticker, days=5)
 
-                if foreign and inst:
-                    foreign_net = sum(d.get('net_buy', 0) for d in foreign[:5])
-                    inst_net = sum(d.get('net_buy', 0) for d in inst[:5])
+                if rows:
+                    foreign_net = sum(d.get('foreign_net', 0) for d in rows[:5])
+                    inst_net = sum(d.get('inst_net', 0) for d in rows[:5])
 
                     self._cache[ticker] = InvestorFlowData(
                         ticker=ticker,
@@ -122,13 +123,12 @@ class InvestorFlowProvider:
             return self._classify(cached) if cached else InvestorSignal.STALE
 
         try:
-            foreign = self.api.get_foreign_trend(ticker, days=5)
-            inst = self.api.get_inst_trend(ticker, days=5)
-            if not foreign or not inst:
+            rows = self.api.get_investor_trend(ticker, days=5)
+            if not rows:
                 return InvestorSignal.UNAVAILABLE
 
-            foreign_net = sum(d.get('net_buy', 0) for d in foreign[:5])
-            inst_net = sum(d.get('net_buy', 0) for d in inst[:5])
+            foreign_net = sum(d.get('foreign_net', 0) for d in rows[:5])
+            inst_net = sum(d.get('inst_net', 0) for d in rows[:5])
 
             self._cache[ticker] = InvestorFlowData(ticker, foreign_net, inst_net, datetime.now(), epoch_ts=time.time())
             return self._classify(self._cache[ticker])

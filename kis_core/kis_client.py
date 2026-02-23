@@ -448,14 +448,22 @@ class KoreaInvestAPI:
     # =========================================================================
 
     def get_hoga_info(self, stock_code: str) -> Optional[Any]:
-        """Get orderbook (호가) data."""
+        """Get orderbook (호가) data.
+
+        Returns list of dicts. The KIS API returns output1 as a single dict
+        for this endpoint; we normalize it to [dict] so callers can use [0].
+        """
         url = "/uapi/domestic-stock/v1/quotations/inquire-asking-price-exp-ccn"
         tr_id = "FHKST01010200"
         params = {'FID_COND_MRKT_DIV_CODE': 'J', 'FID_INPUT_ISCD': stock_code}
 
         result = self._url_fetch(url, tr_id, params)
         if result and result.is_ok():
-            return result.get_body().output1
+            output1 = result.get_body().output1
+            # output1 is a single dict for this endpoint; wrap in list
+            if isinstance(output1, dict):
+                return [output1]
+            return output1
         if result:
             result.print_error()
         return None
@@ -496,27 +504,32 @@ class KoreaInvestAPI:
         """
         Get expected open price (동시호가) during pre-market.
 
-        Returns indicative match price from orderbook.
+        Returns indicative match price from orderbook, falling back to
+        mid-price, then last traded price if hoga data is unavailable
+        (e.g., outside pre-auction hours or on non-trading days).
         """
         try:
             hoga = self.get_hoga_info(ticker)
-            if not hoga or len(hoga) == 0:
-                return None
+            if hoga and len(hoga) > 0:
+                # Expected match price
+                expected = hoga[0].get('antc_cnpr') or ''
+                if expected and expected != '0':
+                    return float(expected)
 
-            # Expected match price
-            expected = hoga[0].get('antc_cnpr') or ''
-            if expected and expected != '0':
-                return float(expected)
-
-            # Fallback: mid-price
-            bid = float(hoga[0].get('bidp1') or 0)
-            ask = float(hoga[0].get('askp1') or 0)
-            if bid and ask:
-                return (bid + ask) / 2
+                # Fallback: mid-price
+                bid = float(hoga[0].get('bidp1') or 0)
+                ask = float(hoga[0].get('askp1') or 0)
+                if bid and ask:
+                    return (bid + ask) / 2
 
         except Exception as e:
             logger.debug(f"Expected open error for {ticker}: {e}")
-        return None
+
+        # Final fallback: last traded price
+        last = self.get_last_price(ticker)
+        if last:
+            logger.debug(f"Expected open for {ticker}: using last_price fallback ({last})")
+        return last
 
     # =========================================================================
     # MARKET DATA - CHARTS

@@ -38,7 +38,7 @@ class RateBudget:
     """Manages rate budgets for different API endpoint classes."""
 
     DEFAULT_BUDGETS = {
-        "QUOTE": (60, 1.0), "CHART": (30, 0.5), "FLOW": (20, 0.33),
+        "QUOTE": (60, 1.0), "CHART": (60, 2.0), "FLOW": (40, 1.0),
         "ORDER": (30, 0.5), "BALANCE": (20, 0.33), "DEFAULT": (30, 0.5),
     }
 

@@ -60,8 +60,8 @@ class TestInvestorFlowData:
         assert data.is_stale is True
 
     def test_is_stale_old_timestamp(self):
-        """Timestamp > 120 seconds ago -> is_stale is True."""
-        old_time = datetime.now() - timedelta(seconds=200)
+        """Timestamp > 300 seconds ago -> is_stale is True."""
+        old_time = datetime.now() - timedelta(seconds=400)
         data = InvestorFlowData(ticker="005930", timestamp=old_time)
         assert data.is_stale is True
 
