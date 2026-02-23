@@ -116,8 +116,8 @@ class TestComputeConfidenceTwoPillar:
         )
         assert result == "GREEN"
 
-    def test_investor_only_is_yellow(self, mock_switches):
-        """Test only investor positive returns YELLOW."""
+    def test_investor_strong_is_green_two_pillar(self, mock_switches):
+        """Test investor STRONG in two-pillar mode returns GREEN (micro doesn't gate)."""
         result = compute_confidence(
             investor=InvestorSignal.STRONG,
             micro=MicroSignal.NEUTRAL,
@@ -125,7 +125,7 @@ class TestComputeConfidenceTwoPillar:
             prog_avail=False,
             switches=mock_switches,
         )
-        assert result == "YELLOW"
+        assert result == "GREEN"
 
     def test_micro_only_is_yellow(self, mock_switches):
         """Test only micro positive returns YELLOW."""

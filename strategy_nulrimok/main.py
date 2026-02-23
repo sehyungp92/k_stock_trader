@@ -255,6 +255,8 @@ async def run_nulrimok():
     last_30m_boundary, last_rotation, dse_ran_today = None, datetime.min.replace(tzinfo=ZoneInfo("Asia/Seoul")), False
     prev_trade_date: Optional[date] = None
     last_reconcile_cycle = 0
+    gross_exposure_pct = 0.0
+    regime_exposure_cap = 1.0
     reconcile_interval = 1  # Reconcile every cycle (~30m) to detect external closes promptly
     import time as _time
     last_heartbeat_ts = 0.0
@@ -350,6 +352,8 @@ async def run_nulrimok():
                 last_reconcile_cycle += 1
                 acct = await oms.get_account_state()
                 equity = acct.equity or 100_000_000
+                gross_exposure_pct = acct.gross_exposure_pct
+                regime_exposure_cap = acct.regime_exposure_cap
 
                 # Periodic reconciliation with OMS
                 if last_reconcile_cycle >= reconcile_interval:
@@ -438,7 +442,9 @@ async def run_nulrimok():
                         # Entry submission: will transition to PENDING_FILL, position created on fill confirm
                         await process_entry(
                             entry_state, ticker_artifact, bar, sma5 or close,
-                            vol_avg, now, equity, oms)
+                            vol_avg, now, equity, oms,
+                            gross_exposure_pct=gross_exposure_pct,
+                            regime_exposure_cap=regime_exposure_cap)
 
                 daily_ranks = {t: artifact.get_ticker(t).daily_rank
                                for t in artifact.active_set if artifact.get_ticker(t)}

@@ -197,13 +197,13 @@ class TestComputeConfidence:
         )
         assert result == "YELLOW"
 
-    def test_two_pillar_yellow_weak_micro(self):
-        """NEUTRAL micro in two-pillar mode -> YELLOW."""
+    def test_two_pillar_green_strong_investor(self):
+        """STRONG investor in two-pillar mode -> GREEN (micro doesn't gate)."""
         result = compute_confidence(
             InvestorSignal.STRONG, MicroSignal.NEUTRAL,
             ProgramSignal.UNAVAILABLE, prog_avail=False,
         )
-        assert result == "YELLOW"
+        assert result == "GREEN"
 
     def test_two_pillar_both_neutral(self):
         """Both neutral in two-pillar mode -> YELLOW."""

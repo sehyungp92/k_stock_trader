@@ -72,7 +72,8 @@ def check_confirmation(entry_state: TickerEntryState, artifact: TickerArtifact, 
 
 
 async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact, bar: dict,
-                        sma5: float, vol_avg: float, now: datetime, equity: float, oms) -> Optional[str]:
+                        sma5: float, vol_avg: float, now: datetime, equity: float, oms,
+                        gross_exposure_pct: float = 0.0, regime_exposure_cap: float = 1.0) -> Optional[str]:
     close = float(bar.get('close', 0))
 
     if entry_state.state == EntryState.IDLE:
@@ -94,6 +95,15 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
             return None
 
         if confirmed:
+            # Pre-check: skip if exposure headroom is exhausted
+            exposure_cap = min(regime_exposure_cap, 0.90)  # Use tighter of regime cap and static 90%
+            headroom_pct = max(exposure_cap - gross_exposure_pct, 0.0)
+            if headroom_pct <= 0.005:  # Less than 0.5% headroom — no room for any entry
+                logger.warning(f"{artifact.ticker}: Entry confirmed ({conf_type}) but exposure headroom exhausted "
+                               f"(gross={gross_exposure_pct:.1%}, cap={exposure_cap:.0%})")
+                # Don't consume confirmation bar — will retry if exposure frees up
+                return None
+
             risk_pct = artifact.recommended_risk or 0.005
             # Intraday volume bonus: +10% size if vol_ratio < 0.40 (very dry)
             volume = float(bar.get('volume', 0))
@@ -110,6 +120,15 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
             else:
                 stop = artifact.band_lower * 0.993
             qty = int((equity * risk_pct) / max(close - stop, 0.01))
+
+            # Cap qty to fit within exposure headroom
+            if close > 0 and equity > 0:
+                max_notional = headroom_pct * equity
+                max_qty_by_exposure = int(max_notional / close)
+                if qty > max_qty_by_exposure > 0:
+                    logger.info(f"{artifact.ticker}: Scaling qty {qty}->{max_qty_by_exposure} to fit exposure headroom "
+                                f"({headroom_pct:.1%} of {equity:.0f})")
+                    qty = max_qty_by_exposure
 
             if qty <= 0:
                 logger.warning(f"{artifact.ticker}: Entry confirmed ({conf_type}) but qty=0 (close={close:.0f} stop={stop:.0f}), resetting")

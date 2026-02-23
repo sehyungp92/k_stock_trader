@@ -1,8 +1,16 @@
 """Tests for Nulrimok Intraday Entry Logic."""
 
 import pytest
-from strategy_nulrimok.iepe.entry import check_entry_conditions, check_confirmation, TickerEntryState, EntryState
+from unittest.mock import AsyncMock
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from strategy_nulrimok.iepe.entry import (
+    check_entry_conditions, check_confirmation, process_entry,
+    TickerEntryState, EntryState,
+)
 from strategy_nulrimok.dse.artifact import TickerArtifact
+from oms.intent import IntentResult, IntentStatus
 
 
 class TestCheckEntryConditions:
@@ -161,3 +169,113 @@ class TestTickerEntryState:
         assert EntryState.PENDING_FILL is not None
         assert EntryState.TRIGGERED is not None
         assert EntryState.DONE is not None
+
+
+class TestProcessEntryExposure:
+    """Tests for process_entry exposure headroom pre-check and qty scaling."""
+
+    def _make_armed_state(self):
+        s = TickerEntryState(ticker="005930")
+        s.state = EntryState.ARMED
+        s.confirm_bars_remaining = 3
+        s.last_30m_low = 99.0
+        return s
+
+    def _make_artifact(self):
+        return TickerArtifact(
+            ticker="005930", band_lower=95, band_upper=105,
+            avwap_ref=100, recommended_risk=0.005,
+            atr30m_est=2.0, acceptance_pass=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_skips_entry_when_exposure_exhausted(self):
+        """Entry skipped when gross exposure >= regime cap (no headroom)."""
+        entry_state = self._make_armed_state()
+        artifact = self._make_artifact()
+        # RECLAIM bar: close > avwap_ref
+        bar = {'close': 101, 'high': 102, 'low': 100, 'volume': 300}
+        oms = AsyncMock()
+        now = datetime(2026, 2, 23, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+        result = await process_entry(
+            entry_state, artifact, bar, sma5=100, vol_avg=1000,
+            now=now, equity=100_000_000, oms=oms,
+            gross_exposure_pct=0.82, regime_exposure_cap=0.80,
+        )
+
+        assert result is None
+        # OMS should NOT be called — skipped before submission
+        oms.submit_intent.assert_not_called()
+        # State stays ARMED (not reset, can retry if exposure frees)
+        assert entry_state.state == EntryState.ARMED
+        # Confirmation bar NOT consumed
+        assert entry_state.confirm_bars_remaining == 3
+
+    @pytest.mark.asyncio
+    async def test_scales_qty_to_fit_headroom(self):
+        """Qty scaled down to fit within exposure headroom."""
+        entry_state = self._make_armed_state()
+        artifact = self._make_artifact()
+        bar = {'close': 101, 'high': 102, 'low': 100, 'volume': 300}
+        oms = AsyncMock()
+        oms.submit_intent = AsyncMock(return_value=IntentResult(
+            intent_id="test", status=IntentStatus.EXECUTED, message="ok",
+        ))
+        now = datetime(2026, 2, 23, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+        # 5% headroom on 100M equity = 5M max notional
+        # close=101, so max_qty_by_exposure = 5M/101 = ~49504
+        # Normal risk-based qty would be much larger
+        result = await process_entry(
+            entry_state, artifact, bar, sma5=100, vol_avg=1000,
+            now=now, equity=100_000_000, oms=oms,
+            gross_exposure_pct=0.75, regime_exposure_cap=0.80,
+        )
+
+        # Should have submitted with scaled qty
+        assert oms.submit_intent.call_count == 1
+        submitted_intent = oms.submit_intent.call_args[0][0]
+        # Qty should be capped to headroom: 5% of 100M / 101 = 49504
+        assert submitted_intent.desired_qty <= 49505
+
+    @pytest.mark.asyncio
+    async def test_normal_entry_with_ample_headroom(self):
+        """Normal entry when plenty of headroom exists."""
+        entry_state = self._make_armed_state()
+        artifact = self._make_artifact()
+        bar = {'close': 101, 'high': 102, 'low': 100, 'volume': 300}
+        oms = AsyncMock()
+        oms.submit_intent = AsyncMock(return_value=IntentResult(
+            intent_id="test", status=IntentStatus.EXECUTED, message="ok",
+        ))
+        now = datetime(2026, 2, 23, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+        result = await process_entry(
+            entry_state, artifact, bar, sma5=100, vol_avg=1000,
+            now=now, equity=100_000_000, oms=oms,
+            gross_exposure_pct=0.20, regime_exposure_cap=0.80,
+        )
+
+        assert oms.submit_intent.call_count == 1
+        assert entry_state.state == EntryState.PENDING_FILL
+
+    @pytest.mark.asyncio
+    async def test_default_exposure_params_allow_entry(self):
+        """Default exposure params (0.0, 1.0) don't block entries."""
+        entry_state = self._make_armed_state()
+        artifact = self._make_artifact()
+        bar = {'close': 101, 'high': 102, 'low': 100, 'volume': 300}
+        oms = AsyncMock()
+        oms.submit_intent = AsyncMock(return_value=IntentResult(
+            intent_id="test", status=IntentStatus.EXECUTED, message="ok",
+        ))
+        now = datetime(2026, 2, 23, 10, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+        # Default params — backwards compatible
+        result = await process_entry(
+            entry_state, artifact, bar, sma5=100, vol_avg=1000,
+            now=now, equity=100_000_000, oms=oms,
+        )
+
+        assert oms.submit_intent.call_count == 1

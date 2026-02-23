@@ -269,12 +269,12 @@ class TestRvolOk:
 class TestViBlocked:
     """Tests for vi_blocked function."""
 
-    def test_no_vi_ref_blocked(self):
-        """Test missing VI reference blocks entry (per spec)."""
+    def test_no_vi_ref_not_blocked(self):
+        """Test missing VI reference does not block (fail-open: no VI data = no VI concern)."""
         state = SymbolState(code="005930")
         state.vi_ref = 0
 
-        assert vi_blocked(state, 72000, 5) is True
+        assert vi_blocked(state, 72000, 5) is False
 
     def test_within_cooldown_blocked(self):
         """Test within VI cooldown is blocked."""

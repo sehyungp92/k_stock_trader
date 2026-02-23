@@ -54,6 +54,8 @@ class AccountState:
     safe_mode: bool = False
     halt_new_entries: bool = False
     flatten_in_progress: bool = False
+    gross_exposure_pct: float = 0.0
+    regime_exposure_cap: float = 1.0
 
 
 class OMSClient:
@@ -99,9 +101,11 @@ class OMSClient:
             await asyncio.sleep(1)
         raise TimeoutError("OMS not ready")
 
+    _SUBMIT_MAX_RETRIES = 3
+    _SUBMIT_BACKOFF_BASE = 0.5  # seconds; doubles each retry (0.5, 1.0, 2.0)
+
     async def submit_intent(self, intent: Intent) -> IntentResult:
-        """Submit intent to OMS."""
-        session = await self._get_session()
+        """Submit intent to OMS with retry on transient connection errors."""
         payload = {
             "intent_type": intent.intent_type.name,
             "strategy_id": intent.strategy_id,
@@ -127,35 +131,48 @@ class OMSClient:
             "signal_hash": intent.signal_hash,
         }
 
-        try:
-            async with session.post(
-                f"{self.base_url}/api/v1/intents",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
+        last_err = None
+        for attempt in range(self._SUBMIT_MAX_RETRIES):
+            try:
+                session = await self._get_session()
+                async with session.post(
+                    f"{self.base_url}/api/v1/intents",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    if resp.status != 200:
+                        text = await resp.text()
+                        return IntentResult(
+                            intent_id=intent.intent_id,
+                            status=IntentStatus.REJECTED,
+                            message=f"OMS error {resp.status}: {text}",
+                        )
+                    data = await resp.json()
                     return IntentResult(
-                        intent_id=intent.intent_id,
-                        status=IntentStatus.REJECTED,
-                        message=f"OMS error {resp.status}: {text}",
+                        intent_id=data["intent_id"],
+                        status=IntentStatus[data["status"]],
+                        message=data.get("message", ""),
+                        modified_qty=data.get("modified_qty"),
+                        order_id=data.get("order_id"),
+                        cooldown_until=data.get("cooldown_until"),
                     )
-                data = await resp.json()
-                return IntentResult(
-                    intent_id=data["intent_id"],
-                    status=IntentStatus[data["status"]],
-                    message=data.get("message", ""),
-                    modified_qty=data.get("modified_qty"),
-                    order_id=data.get("order_id"),
-                    cooldown_until=data.get("cooldown_until"),
-                )
-        except Exception as e:
-            logger.error(f"OMS unreachable: {e}")
-            return IntentResult(
-                intent_id=intent.intent_id,
-                status=IntentStatus.REJECTED,
-                message=f"OMS unreachable: {e}",
-            )
+            except Exception as e:
+                last_err = e
+                if attempt < self._SUBMIT_MAX_RETRIES - 1:
+                    delay = self._SUBMIT_BACKOFF_BASE * (2 ** attempt)
+                    logger.warning(f"OMS unreachable (attempt {attempt + 1}/{self._SUBMIT_MAX_RETRIES}): {e}, retrying in {delay:.1f}s")
+                    # Force session recreation on next attempt
+                    if self._session and not self._session.closed:
+                        await self._session.close()
+                    self._session = None
+                    await asyncio.sleep(delay)
+
+        logger.error(f"OMS unreachable after {self._SUBMIT_MAX_RETRIES} attempts: {last_err}")
+        return IntentResult(
+            intent_id=intent.intent_id,
+            status=IntentStatus.REJECTED,
+            message=f"OMS unreachable: {last_err}",
+        )
 
     async def get_account_state(self) -> AccountState:
         """Get account state from OMS (with capital allocation applied)."""
@@ -176,6 +193,8 @@ class OMSClient:
                     safe_mode=data.get("safe_mode", False),
                     halt_new_entries=data.get("halt_new_entries", False),
                     flatten_in_progress=data.get("flatten_in_progress", False),
+                    gross_exposure_pct=data.get("gross_exposure_pct", 0.0),
+                    regime_exposure_cap=data.get("regime_exposure_cap", 1.0),
                 )
         except Exception as e:
             logger.debug(f"get_account_state failed: {e}")

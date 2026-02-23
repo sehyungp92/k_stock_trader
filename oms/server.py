@@ -170,6 +170,8 @@ class AccountState(BaseModel):
     safe_mode: bool
     halt_new_entries: bool
     flatten_in_progress: bool
+    gross_exposure_pct: float = 0.0
+    regime_exposure_cap: float = 1.0
 
 
 class HealthResponse(BaseModel):
@@ -434,6 +436,16 @@ async def get_account_state(strategy_id: Optional[str] = None):
         alloc_pct = budget.get("capital_allocation_pct", 1.0)
         equity = equity * alloc_pct
 
+    # Compute gross exposure
+    positions = oms.state.get_all_positions()
+    gross = sum(
+        p.real_qty * (p.avg_price or 0.0) + p.working_qty(side="BUY") * (p.avg_price or 0.0)
+        for p in positions.values()
+    )
+    total_equity = max(oms.state.equity, 1.0)
+    gross_pct = gross / total_equity
+    regime_cap = oms.risk.config.regime_exposure_caps.get(oms.risk.config.current_regime, 1.0)
+
     return AccountState(
         equity=equity,
         buyable_cash=oms.state.buyable_cash,
@@ -442,6 +454,8 @@ async def get_account_state(strategy_id: Optional[str] = None):
         safe_mode=oms.risk.safe_mode,
         halt_new_entries=oms.risk.halt_new_entries,
         flatten_in_progress=oms.risk.flatten_in_progress,
+        gross_exposure_pct=round(gross_pct, 4),
+        regime_exposure_cap=regime_cap,
     )
 
 

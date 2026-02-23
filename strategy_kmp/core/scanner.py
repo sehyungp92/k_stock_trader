@@ -84,6 +84,14 @@ async def scan_at_0915(
             state.or_high = bars['high'].max()
             state.or_low = bars['low'].min()
 
+            # Seed VWAP from scan bars so regime breadth gate works before WS ticks arrive
+            cum_val = (bars['close'] * bars['volume']).sum()
+            cum_vol = bars['volume'].sum()
+            if cum_vol > 0:
+                state.cum_val = cum_val
+                state.cum_vol = cum_vol
+                state.vwap = cum_val / cum_vol
+
             # Seed early RVol from last completed 1m bar
             if state.avg_1m_vol > 0 and not bars.empty:
                 last_bar_vol = bars.iloc[-1]['volume']
