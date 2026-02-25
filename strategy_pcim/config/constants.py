@@ -78,7 +78,7 @@ GAP_REVERSAL = {
 HARD_FILTERS = {
     "ADTV_MIN": 5e9,
     "MCAP_MIN": 30e9,
-    "MCAP_MAX": 15e12,
+    "MCAP_MAX": 50e12,
     "EARNINGS_WINDOW_DAYS": 5,
 }
 

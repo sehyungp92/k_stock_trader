@@ -24,10 +24,10 @@ def apply_hard_filters(c: Candidate, has_earnings_soon: bool) -> Optional[str]:
         return "MCAP_LT_30B"
     if c.market_cap > HARD_FILTERS["MCAP_MAX"]:
         logger.info(
-            f"{c.symbol}: REJECTED MCAP_GT_15T "
+            f"{c.symbol}: REJECTED MCAP_GT_50T "
             f"(actual={c.market_cap/1e12:.2f}T > {HARD_FILTERS['MCAP_MAX']/1e12:.0f}T)"
         )
-        return "MCAP_GT_15T"
+        return "MCAP_GT_50T"
     if has_earnings_soon:
         logger.info(f"{c.symbol}: REJECTED EARNINGS_WINDOW (within 5 days)")
         return "EARNINGS_WINDOW"

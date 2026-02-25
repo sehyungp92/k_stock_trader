@@ -321,6 +321,7 @@ async def run_pcim():
                 bars = api.get_daily_ohlcv(c.symbol, days=120)
                 if not bars or len(bars) < 20:
                     c.reject_reason = "INSUFFICIENT_DATA"
+                    logger.info(f"STATS_REJECT: {c.symbol} INSUFFICIENT_DATA (bars={len(bars) if bars else 0})")
                     continue
 
                 closes = [b['close'] for b in bars]
@@ -332,6 +333,7 @@ async def run_pcim():
 
                 if not check_trend_gate(closes):
                     c.reject_reason = "TREND_GATE_FAIL"
+                    logger.info(f"STATS_REJECT: {c.symbol} TREND_GATE_FAIL (close={closes[-1]:.0f} sma20={c.sma20:.0f})")
                     continue
                 c.pass_trend_gate = True
 
@@ -339,6 +341,7 @@ async def run_pcim():
                 reject = apply_hard_filters(c, has_earnings)
                 if reject:
                     c.reject_reason = reject
+                    logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
 
                 gap_result = compute_gap_reversal_rate(bars)
@@ -349,10 +352,17 @@ async def run_pcim():
                 reject = apply_gap_reversal_filter(c)
                 if reject:
                     c.reject_reason = reject
+                    logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
 
                 five_day_ret = (closes[-1] / closes[-5] - 1) if len(closes) >= 5 else 0
                 c.soft_mult = compute_soft_multiplier(c, five_day_ret)
+
+            passed = [c for c in candidates if not c.is_rejected()]
+            rejected = [c for c in candidates if c.is_rejected()]
+            logger.info(f"Stats refresh complete: {len(passed)} passed, {len(rejected)} rejected")
+            for c in rejected:
+                logger.info(f"  REJECTED: {c.symbol} reason={c.reject_reason}")
 
             kospi_bars = api.get_index_daily("KOSPI", days=120) or []
             kospi_closes = [b['close'] for b in kospi_bars]

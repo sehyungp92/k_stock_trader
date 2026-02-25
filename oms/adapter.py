@@ -9,7 +9,7 @@ import asyncio
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 
 
@@ -137,29 +137,36 @@ class KISExecutionAdapter:
             try:
                 if order_type == "MARKET":
                     if side == "BUY":
-                        order_id = self.api.place_market_buy(symbol, qty)
+                        order_id = await asyncio.to_thread(self.api.place_market_buy, symbol, qty)
                     else:
-                        order_id = self.api.place_market_sell(symbol, qty)
+                        order_id = await asyncio.to_thread(self.api.place_market_sell, symbol, qty)
 
                 elif order_type in ("LIMIT", "MARKETABLE_LIMIT"):
                     if side == "BUY":
-                        order_id = self.api.place_limit_buy(symbol, limit_price, qty)
+                        order_id = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price, qty)
                     else:
-                        order_id = self.api.place_limit_sell(symbol, limit_price, qty)
+                        order_id = await asyncio.to_thread(self.api.place_limit_sell, symbol, limit_price, qty)
 
                 elif order_type == "STOP_LIMIT":
                     logger.warning(f"STOP_LIMIT simulated as LIMIT at {stop_price}")
                     if side == "BUY":
-                        order_id = self.api.place_limit_buy(symbol, limit_price or stop_price, qty)
+                        order_id = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price or stop_price, qty)
                     else:
-                        order_id = self.api.place_limit_sell(symbol, limit_price or stop_price, qty)
+                        order_id = await asyncio.to_thread(self.api.place_limit_sell, symbol, limit_price or stop_price, qty)
                 else:
                     return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message=f"Unknown order type: {order_type}")
 
                 if order_id:
                     return AdapterResult(True, order_id=order_id)
                 else:
-                    return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message="Order rejected")
+                    logger.warning(
+                        f"KIS order rejected: {symbol} {side} x{qty} "
+                        f"type={order_type} limit={limit_price}"
+                    )
+                    return AdapterResult(
+                        False, error=AdapterError.REJECTED_INVALID,
+                        message=f"Order rejected by KIS: {symbol} {side} x{qty} type={order_type}",
+                    )
 
             except Exception as e:
                 err_str = str(e).lower()
@@ -178,7 +185,7 @@ class KISExecutionAdapter:
             # If branch not stored, look it up from get_orders()
             if not branch:
                 try:
-                    orders_df = self.api.get_orders()
+                    orders_df = await asyncio.to_thread(self.api.get_orders)
                     if orders_df is not None and order_id in orders_df.index:
                         branch = str(orders_df.loc[order_id, '주문점'])
                 except Exception as e:
@@ -187,7 +194,7 @@ class KISExecutionAdapter:
             kwargs = {}
             if branch:
                 kwargs['order_branch'] = branch
-            result = self.api.cancel_order(order_id, qty, **kwargs)
+            result = await asyncio.to_thread(self.api.cancel_order, order_id, qty, **kwargs)
             if result:
                 return AdapterResult(True)
             return AdapterResult(False, error=AdapterError.REJECTED_INVALID)
@@ -198,7 +205,7 @@ class KISExecutionAdapter:
     async def get_orders(self) -> BrokerQueryResult:
         """Get open orders. Returns BrokerQueryResult — check .ok before using .data."""
         try:
-            df = self.api.get_orders()
+            df = await asyncio.to_thread(self.api.get_orders)
             if df is None:
                 return BrokerQueryResult(ok=True, data=[])
 
@@ -225,7 +232,7 @@ class KISExecutionAdapter:
     async def get_positions(self) -> BrokerQueryResult:
         """Get current positions. Returns BrokerQueryResult — check .ok before using .data."""
         try:
-            _, df = self.api.get_acct_balance()
+            _, df = await asyncio.to_thread(self.api.get_acct_balance)
             if df.empty:
                 return BrokerQueryResult(ok=True, data=[])
 
@@ -243,11 +250,46 @@ class KISExecutionAdapter:
             logger.error(f"Get positions error: {e}")
             return BrokerQueryResult(ok=False, error_message=str(e))
 
+    async def get_balance_snapshot(self) -> Tuple[BrokerQueryResult, Optional[int]]:
+        """Get positions and equity from a single get_acct_balance() call.
+
+        Returns (positions_result, equity) — equity is None on failure.
+        Eliminates the duplicate get_acct_balance() call that previously
+        occurred when get_positions() and get_account_info() were called
+        separately during reconciliation.
+        """
+        try:
+            total_amt, df = await asyncio.to_thread(self.api.get_acct_balance)
+            if df.empty:
+                return BrokerQueryResult(ok=True, data=[]), total_amt
+
+            positions = []
+            for _, row in df.iterrows():
+                positions.append(BrokerPosition(
+                    symbol=row['종목코드'],
+                    qty=int(row['보유수량']),
+                    avg_price=float(row['매입단가']),
+                    current_price=float(row['현재가']),
+                    pnl=float(row['수익률']),
+                ))
+            return BrokerQueryResult(ok=True, data=positions), total_amt
+        except Exception as e:
+            logger.error(f"Get balance snapshot error: {e}")
+            return BrokerQueryResult(ok=False, error_message=str(e)), None
+
+    async def get_buyable_cash(self) -> Optional[int]:
+        """Get buyable cash from KIS API. Returns None on failure."""
+        try:
+            return await asyncio.to_thread(self.api.get_buyable_cash)
+        except Exception as e:
+            logger.error(f"Get buyable cash error: {e}")
+            return None
+
     async def get_account_info(self) -> Dict[str, Any]:
         """Get account balance info. Raises on failure to avoid false equity=0."""
         try:
-            total_amt, df = self.api.get_acct_balance()
-            buyable = self.api.get_buyable_cash()
+            total_amt, df = await asyncio.to_thread(self.api.get_acct_balance)
+            buyable = await asyncio.to_thread(self.api.get_buyable_cash)
 
             return {
                 "equity": total_amt,

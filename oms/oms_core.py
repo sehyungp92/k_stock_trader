@@ -481,15 +481,24 @@ class OMSCore:
     # ------------------------------------------------------------------
 
     async def start_reconciliation_loop(self, interval_sec: float = 5.0):
-        """Start background reconciliation loop."""
+        """Start background reconciliation loop with adaptive interval.
+
+        Interval adapts based on activity:
+        - Active (working orders): interval_sec (default 5s)
+        - Idle (no working orders): 15s
+        - Rate-limited (cycle took >10s): 20s for 2 cycles then back to normal
+        """
         consecutive_failures = 0
         max_failures_before_safe_mode = 5
 
         async def loop():
             nonlocal consecutive_failures
+            cycle_count = 0
+            rate_limit_cooldown = 0
             while True:
+                cycle_start = time.time()
                 try:
-                    await self._reconcile()
+                    await self._reconcile(cycle_count)
                     consecutive_failures = 0
                 except Exception as e:
                     consecutive_failures += 1
@@ -499,7 +508,23 @@ class OMSCore:
                             f"Reconciliation failed {consecutive_failures}x consecutively — entering safe mode"
                         )
                         self.risk.safe_mode = True
-                await asyncio.sleep(interval_sec)
+
+                cycle_count += 1
+                cycle_duration = time.time() - cycle_start
+
+                # Adaptive interval
+                if rate_limit_cooldown > 0:
+                    sleep_sec = 20.0
+                    rate_limit_cooldown -= 1
+                elif cycle_duration > 10.0:
+                    sleep_sec = 20.0
+                    rate_limit_cooldown = 2
+                elif not self.state.get_working_orders():
+                    sleep_sec = 15.0
+                else:
+                    sleep_sec = interval_sec
+
+                await asyncio.sleep(sleep_sec)
 
         self._reconcile_task = asyncio.create_task(loop())
 
@@ -545,22 +570,31 @@ class OMSCore:
                                 wo.order_id, OrderStatus.CANCELLED, wo.filled_qty, wo.price,
                             )
 
-    async def _reconcile(self):
-        """Full reconciliation cycle: orders → timeouts → positions → drift → account."""
+    async def _reconcile(self, cycle_count: int = 0):
+        """Full reconciliation cycle: orders → timeouts → positions → drift → account.
+
+        Args:
+            cycle_count: Current reconciliation cycle number, used to reduce
+                frequency of non-critical API calls (e.g., buyable_cash).
+        """
         # 1. Sync working orders (detect fills) — returns broker data for reuse
         broker_by_id = await self._sync_working_orders()
 
         # 2. Enforce order timeouts (reuse broker data, no extra API call)
         await self._enforce_order_timeouts(broker_by_id)
 
-        # 3. Sync broker positions (skip entirely on API failure)
-        positions_result = await self.adapter.get_positions()
+        # 3. Get positions + equity from a single API call (eliminates duplicate)
+        positions_result, equity = await self.adapter.get_balance_snapshot()
         positions_ok = positions_result.ok
         broker_positions = positions_result.data if positions_ok else []
 
         if not positions_ok:
             logger.warning(f"Skipping position sync: broker query failed ({positions_result.error_message})")
         else:
+            # Update equity from the same call that fetched positions
+            if equity is not None:
+                self.state.equity = equity
+
             for bp in broker_positions:
                 async with self._symbol_locks[bp.symbol]:
                     pos = self.state.get_position(bp.symbol)
@@ -587,13 +621,11 @@ class OMSCore:
             }
             self.risk.reconcile_sector_exposure(sector_positions)
 
-        # 5. Update account info (skip on failure to preserve last known values)
-        try:
-            account = await self.adapter.get_account_info()
-            self.state.equity = account["equity"]
-            self.state.buyable_cash = account["buyable_cash"]
-        except Exception as e:
-            logger.warning(f"Account info unavailable, keeping last known values: {e}")
+        # 5. Update buyable cash (only every 6th cycle — ~30s at 5s interval)
+        if cycle_count % 6 == 0:
+            buyable = await self.adapter.get_buyable_cash()
+            if buyable is not None:
+                self.state.buyable_cash = buyable
 
         # 6. Update daily PnL from broker positions
         prices = {bp.symbol: bp.current_price for bp in broker_positions}

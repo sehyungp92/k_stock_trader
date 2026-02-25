@@ -102,6 +102,9 @@ class SymbolState:
     entry_order_id: str | None = None
     entry_armed_ts: float = 0.0
 
+    # Diagnostic: tracks which gates have been logged per symbol (avoids spam)
+    _gate_logged: set = field(default_factory=set, init=False, repr=False)
+
     def update_vwap(self, price: float, volume: float) -> None:
         """Update VWAP from tick."""
         self.cum_vol += volume

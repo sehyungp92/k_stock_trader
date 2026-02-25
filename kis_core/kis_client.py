@@ -1140,6 +1140,10 @@ class KoreaInvestAPI:
             if order_id:
                 logger.info(f"Market BUY: {stock_code} x{quantity}, order_id={order_id}")
             return order_id
+        if result:
+            logger.warning(f"Market BUY failed: {stock_code} x{quantity} — {result.get_error_message()}")
+        else:
+            logger.warning(f"Market BUY failed: {stock_code} x{quantity} — no response")
         return None
 
     def place_market_sell(self, stock_code: str, quantity: int, **kwargs) -> Optional[str]:
@@ -1150,6 +1154,10 @@ class KoreaInvestAPI:
             if order_id:
                 logger.info(f"Market SELL: {stock_code} x{quantity}, order_id={order_id}")
             return order_id
+        if result:
+            logger.warning(f"Market SELL failed: {stock_code} x{quantity} — {result.get_error_message()}")
+        else:
+            logger.warning(f"Market SELL failed: {stock_code} x{quantity} — no response")
         return None
 
     def place_limit_buy(
@@ -1162,6 +1170,10 @@ class KoreaInvestAPI:
             if order_id:
                 logger.info(f"Limit BUY: {stock_code} x{quantity} @ {price:.0f}, order_id={order_id}")
             return order_id
+        if result:
+            logger.warning(f"Limit BUY failed: {stock_code} x{quantity} @ {price:.0f} — {result.get_error_message()}")
+        else:
+            logger.warning(f"Limit BUY failed: {stock_code} x{quantity} @ {price:.0f} — no response")
         return None
 
     def place_limit_sell(
@@ -1174,6 +1186,10 @@ class KoreaInvestAPI:
             if order_id:
                 logger.info(f"Limit SELL: {stock_code} x{quantity} @ {price:.0f}, order_id={order_id}")
             return order_id
+        if result:
+            logger.warning(f"Limit SELL failed: {stock_code} x{quantity} @ {price:.0f} — {result.get_error_message()}")
+        else:
+            logger.warning(f"Limit SELL failed: {stock_code} x{quantity} @ {price:.0f} — no response")
         return None
 
     def place_order_full(

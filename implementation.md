@@ -565,17 +565,33 @@ docker logs strategy_kmp 2>&1 | grep "Trend anchor"
 
 # Step 4: Is regime/breadth blocking entries?
 docker logs strategy_kmp 2>&1 | grep -i "breadth\|regime\|chop\|risk_off"
+# "blocked by regime gate" = breadth/chop regime preventing FSM progression
+# "blocked by risk_off" = main loop risk_off flag suppressing FSM step
 # If breadth stays < 8 all day, regime gate never opens → no entries possible
 
-# Step 5: Did any symbol reach ARMED (ready to submit)?
-docker logs strategy_kmp 2>&1 | grep -E "WATCH_BREAK|ARMED|WAIT_ACCEPTANCE"
+# Step 5: Are candidates progressing through FSM gates?
+docker logs strategy_kmp 2>&1 | grep -E "WATCH_BREAK|ARMED|WAIT_ACCEPTANCE|blocked by"
+# "blocked by regime gate" / "blocked by spread gate" = FSM stuck at gate
+# "Break detected" → WATCH_BREAK, then looking for acceptance
 # If nothing, setups never triggered (market didn't break out)
 
 # Step 6: Were intents submitted to OMS?
-docker logs strategy_kmp 2>&1 | grep "submit_intent\|Intent"
+docker logs strategy_kmp 2>&1 | grep "submit_intent\|Intent\|Armed entry"
+# "Armed entry at X, qty=Y" = intent constructed and submitted
 
-# Step 7: Did OMS reject them?
+# Step 7: Did OMS or KIS reject?
 docker logs oms_vps1 2>&1 | grep -i "KMP.*reject\|KMP.*modify\|KMP.*scaled"
+docker logs strategy_kmp 2>&1 | grep "Entry rejected\|Entry submission failed"
+# "Entry rejected" = OMS returned rejection with reason
+# "Entry submission failed" = exception during submit (network/timeout)
+
+# Step 8: Did KIS broker reject the underlying order?
+docker logs oms_vps1 2>&1 | grep -i "KIS order rejected\|Limit BUY failed\|Market BUY failed"
+# "KIS order rejected: SYMBOL BUY x100 type=LIMIT" = adapter-level rejection
+# "Limit BUY failed: SYMBOL x100 @ 50000 — ERROR_MSG" = KIS API error with reason
+
+# Step 9: Sector cap / position limits?
+docker logs strategy_kmp 2>&1 | grep -i "Sector cap\|sector"
 ```
 
 **Common KMP blockers:**
@@ -584,7 +600,12 @@ docker logs oms_vps1 2>&1 | grep -i "KMP.*reject\|KMP.*modify\|KMP.*scaled"
 | Multiple "Starting KMP" entries | Crash loop — check `grep Traceback` for root cause |
 | Scan complete. 0 candidates | Trend anchor filtered everything (weak/range-bound market) |
 | No WATCH_BREAK/ARMED lines | No breakout setups detected (market too quiet) |
-| breadth < 8 all day | Regime gate blocked — not enough leaders surging |
+| "blocked by regime gate" all day | Breadth < 8, regime gate never opens |
+| "blocked by risk_off" | Main loop risk_off flag active (market stress) |
+| "blocked by spread gate" | Bid-ask spread too wide for entry |
+| "Entry rejected" | OMS rejected — check message for reason |
+| "Limit BUY failed" | KIS API rejected — now shows specific error from broker |
+| "KIS order rejected" | Adapter got None from KIS — shows symbol/qty/price/type |
 
 ---
 
@@ -635,33 +656,63 @@ Nulrimok is a swing/multi-day strategy. DSE runs at 08:00–08:30 KST, IEPE entr
 ```bash
 # Step 1: Did DSE run and produce a watchlist?
 docker logs strategy_nulrimok 2>&1 | grep -i "DSE\|watchlist\|active_set"
-# Expected: "DSE" output showing active set of tickers to watch
+# Expected: "DSE: Complete. Tradable=N, Active=M"
 
-# Step 2: What regime tier was assigned?
+# Step 2: What regime tier and risk_mult were assigned?
 docker logs strategy_nulrimok 2>&1 | grep -i "regime\|tier"
+# "DSE: Regime tier=A, score=0.75" — risk_mult scales budget (A=1.0, B=0.5, C=0.25)
 # Tier C with allow_tier_c_reduced=False → IEPE completely blocked
 
-# Step 3: Did IEPE phase start? (requires active_set and correct time window)
-docker logs strategy_nulrimok 2>&1 | grep -i "IEPE\|process_entry\|PENDING_FILL"
+# Step 3: Are active candidates getting 30m bar data?
+docker logs strategy_nulrimok 2>&1 | grep -i "30m bar\|bar fetch\|rate budget"
+# "30m bar skipped — CHART rate budget exhausted" = rate limit throttling
+# "30m bar empty from KIS API" = no data returned for ticker
+# "30m bar fetch error" = API exception
+# If nothing for a ticker, it's silently getting data fine
 
-# Step 4: Were any tickers near the AVWAP band?
-docker logs strategy_nulrimok 2>&1 | grep -i "near_band\|avwap\|band"
-# If nothing, prices never reached entry zones
+# Step 4: Why aren't candidates being armed? (entry conditions)
+docker logs strategy_nulrimok 2>&1 | grep -i "Entry conditions not met\|Armed for entry"
+# "Entry conditions not met — not_in_band(...), no_dip(...), vol_high(...)"
+# Shows exactly which gate failed: price outside AVWAP band, no SMA5 dip, or volume too high
+# "Armed for entry" = all conditions passed, waiting for confirmation
 
-# Step 5: Were intents submitted?
-docker logs strategy_nulrimok 2>&1 | grep "submit_intent\|Intent"
+# Step 5: Did armed candidates get confirmed?
+docker logs strategy_nulrimok 2>&1 | grep -i "Entry submitted\|Entry confirmed\|RECLAIM\|HIGHER_LOW\|invalidated\|expired"
+# "Entry submitted, awaiting fill (RECLAIM)" = intent sent to OMS
+# "Entry invalidated (close below band)" = price broke down, disarmed
+# "Confirmation window expired" = no confirmation within N bars
 
-# Step 6: Did OMS reject?
-docker logs oms_vps1 2>&1 | grep -i "NULRIMOK.*reject"
+# Step 6: Were entries blocked by risk budget or sector cap?
+docker logs strategy_nulrimok 2>&1 | grep -i "risk budget\|sector cap"
+# "Skipping entry — daily risk budget exhausted (open_risk >= 2.0%)"
+#   → risk_mult now propagated from regime (was always 1.0 before fix)
+# "Skipping entry — sector cap reached"
 
-# Step 7: Check daily risk budget (may cap entries)
-docker logs strategy_nulrimok 2>&1 | grep -i "risk_budget\|budget"
+# Step 7: Did OMS reject? (now with full context)
+docker logs strategy_nulrimok 2>&1 | grep -i "OMS returned"
+# "Entry confirmed (RECLAIM) but OMS returned REJECTED: Order rejected by KIS: ...
+#  [qty=50, limit=45000, stop=43200, entry_px=44800]"
+# Shows qty, limit price, stop, and entry price for diagnosis
 
-# Step 8: Check for position recovery on startup
+# Step 8: Did KIS broker reject the underlying order?
+docker logs oms_vps1 2>&1 | grep -i "KIS order rejected\|Limit BUY failed"
+# "KIS order rejected: 023530 BUY x50 type=LIMIT limit=45000" = adapter-level
+# "Limit BUY failed: 023530 x50 @ 45000 — 매수가능금액 부족" = KIS error with reason
+
+# Step 9: Check for position recovery on startup
 docker logs strategy_nulrimok 2>&1 | grep "Recovered\|recovered\|Startup"
 
-# Step 9: Check flow reversal exits (pre-market)
+# Step 10: Check flow reversal exits (pre-market)
 docker logs strategy_nulrimok 2>&1 | grep "flow reversal"
+
+# Step 11: Skipped tickers (not tradable or missing from candidates)
+docker logs strategy_nulrimok 2>&1 | grep "not in candidates\|not tradable"
+
+# Step 12: PENDING_FILL tracking
+docker logs strategy_nulrimok 2>&1 | grep "Fill confirmed\|Fill timeout\|PENDING_FILL"
+# "Fill confirmed, qty=50" = position created
+# "Fill timeout, resetting" = no fill after 4 cycles
+# "PENDING_FILL check error" = OMS query failed
 ```
 
 **Common Nulrimok blockers:**
@@ -669,7 +720,14 @@ docker logs strategy_nulrimok 2>&1 | grep "flow reversal"
 |---------|-------|
 | DSE didn't run | Strategy started after 08:30 KST window |
 | Tier C blocked | `allow_tier_c_reduced=False` (conservative) in weak market |
-| No near_band | Prices never reached AVWAP entry zones |
+| "Entry conditions not met — not_in_band" | Prices never reached AVWAP entry zones |
+| "Entry conditions not met — no_dip" | Close above SMA5 (not a dip-buy setup) |
+| "Entry conditions not met — vol_high" | Volume too high (not a dryup/coil pattern) |
+| "risk budget exhausted" | Too much open risk already; regime risk_mult scales budget |
+| "sector cap reached" | Too many positions in same sector |
+| "OMS returned REJECTED" | Check `[qty=, limit=, stop=, entry_px=]` context + KIS logs |
+| "Limit BUY failed" | KIS API error — now shows broker error message |
+| "30m bar skipped — CHART rate budget" | Rate limit hit, ticker data delayed |
 | active_set empty | DSE filtering too strict, or LRS data stale |
 
 ---
@@ -687,13 +745,15 @@ docker logs strategy_pcim 2>&1 | grep "Night pipeline\|YOUTUBE_FETCH"
 docker logs strategy_pcim 2>&1 | grep "RECOMMENDATION\|extract_signals\|conviction"
 # If nothing, influencers didn't mention any stocks (or transcript download failed)
 
-# Step 3: How many candidates survived filters?
-docker logs strategy_pcim 2>&1 | grep -E "consolidation|TREND_GATE|INSUFFICIENT|reject_reason|candidates"
-# Check for: "Night pipeline: 5 candidates" then "After consolidation: 3 unique symbols"
+# Step 3: Did candidates survive daily stats refresh? (00:00-06:00 KST)
+docker logs strategy_pcim 2>&1 | grep "STATS_REJECT\|Stats refresh complete\|REJECTED"
+# Shows per-candidate rejection reason: INSUFFICIENT_DATA, TREND_GATE_FAIL,
+# MCAP_GT_50T, ADTV_LT_5B, EARNINGS_WINDOW, GAP_REV_*, etc.
+# Summary line: "Stats refresh complete: N passed, M rejected"
 
 # Step 4: Were candidates approved?
 docker logs strategy_pcim 2>&1 | grep "Auto-approved\|Approval\|approval"
-# Expected: "Auto-approved 3 candidates"
+# Expected: "Auto-approved 3 candidates" (only fires if Step 3 has >0 passed)
 
 # Step 5: Did premarket selection pass? (regime + exposure caps)
 docker logs strategy_pcim 2>&1 | grep "PREMARKET_SELECT"

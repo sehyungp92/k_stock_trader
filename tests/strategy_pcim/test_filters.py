@@ -50,10 +50,10 @@ class TestApplyHardFilters:
         assert result == "MCAP_LT_30B"
 
     def test_mcap_above_max_rejected(self):
-        """Market cap > 15 T must return 'MCAP_GT_15T'."""
-        c = _make_candidate(market_cap=16e12)
+        """Market cap > 50 T must return 'MCAP_GT_50T'."""
+        c = _make_candidate(market_cap=51e12)
         result = apply_hard_filters(c, has_earnings_soon=False)
-        assert result == "MCAP_GT_15T"
+        assert result == "MCAP_GT_50T"
 
     def test_earnings_soon_rejected(self):
         """Earnings within window must return 'EARNINGS_WINDOW'."""

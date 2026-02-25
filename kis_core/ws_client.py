@@ -185,8 +185,8 @@ class KISWebSocketClient:
         reconnect_delay_base: float = 1.0,
         reconnect_delay_max: float = 30.0,
         connect_timeout: float = 30.0,
-        ping_interval: float = 30.0,
-        ping_timeout: float = 10.0,
+        ping_interval: Optional[float] = None,
+        ping_timeout: Optional[float] = None,
     ):
         """
         Args:
@@ -194,8 +194,10 @@ class KISWebSocketClient:
             reconnect_delay_base: Initial reconnect delay in seconds.
             reconnect_delay_max: Maximum reconnect delay in seconds.
             connect_timeout: Timeout for WebSocket connection in seconds.
-            ping_interval: Interval between ping frames in seconds.
-            ping_timeout: Timeout waiting for pong response in seconds.
+            ping_interval: Interval between ping frames (None=disabled).
+                KIS WS server does not respond to WebSocket ping frames,
+                so enabling this causes repeated disconnects.
+            ping_timeout: Timeout waiting for pong response (None=disabled).
         """
         self.api = api
         self.ws: Any = None
@@ -243,6 +245,7 @@ class KISWebSocketClient:
                 open_timeout=self._connect_timeout,
                 ping_interval=self._ping_interval,
                 ping_timeout=self._ping_timeout,
+                close_timeout=5,
             )
             self._connected = True
             self._connected_since = _time.monotonic()
@@ -431,7 +434,7 @@ class KISWebSocketClient:
                         self._reconnect_attempts = 0
 
                     try:
-                        self._dispatch_message(raw)
+                        await self._dispatch_message(raw)
                     except Exception as e:
                         logger.debug(f"WS dispatch error: {e}")
             except asyncio.CancelledError:
@@ -444,10 +447,21 @@ class KISWebSocketClient:
 
         self._running = False
 
-    def _dispatch_message(self, raw: str) -> None:
+    async def _dispatch_message(self, raw: str) -> None:
         """Parse and dispatch a single WebSocket message."""
+        # KIS application-level PINGPONG keepalive: echo back immediately
+        if "PINGPONG" in raw:
+            try:
+                await self.ws.send(raw)
+                logger.debug("WS PINGPONG echoed")
+            except Exception as e:
+                logger.warning(f"WS PINGPONG echo failed: {e}")
+            return
+
         parsed = parse_ws_message(raw)
         if not parsed:
+            # KIS sends JSON responses for subscription ack/errors (no '|')
+            self._handle_json_response(raw)
             return
 
         tr_id, _, data = parsed
@@ -470,6 +484,31 @@ class KISWebSocketClient:
                         cb(msg)
                     except Exception as e:
                         logger.debug(f"AskBid callback error: {e}")
+
+    def _handle_json_response(self, raw: str) -> None:
+        """Handle JSON subscription ack/error responses from KIS."""
+        try:
+            resp = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            logger.debug(f"WS unknown message format: {raw[:200]}")
+            return
+
+        header = resp.get("header", {})
+        body = resp.get("body", {})
+        tr_id = header.get("tr_id", "")
+        tr_key = header.get("tr_key", "")
+        rt_cd = body.get("rt_cd", "")
+        msg1 = body.get("msg1", "")
+
+        if rt_cd == "0":
+            logger.debug(f"WS subscription OK: {tr_id} {tr_key} - {msg1}")
+        else:
+            logger.warning(f"WS subscription FAILED: {tr_id} {tr_key} rt_cd={rt_cd} - {msg1}")
+            # Remove from subscription tracking so strategy knows it's not receiving data
+            if tr_id == "H0STCNT0" and tr_key:
+                self._tick_subs.discard(tr_key)
+            elif tr_id == "H0STASP0" and tr_key:
+                self._asp_subs.discard(tr_key)
 
 
 class BaseSubscriptionManager:

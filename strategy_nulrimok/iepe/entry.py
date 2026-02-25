@@ -48,7 +48,17 @@ def check_entry_conditions(artifact: TickerArtifact, bar: dict, sma5: float, vol
     in_band = (low <= artifact.band_upper) and (high >= artifact.band_lower)
     is_dip = close < sma5 if sma5 > 0 else False
     vol_ratio = volume / vol_avg if vol_avg > 0 else 1.0
-    return in_band and is_dip and vol_ratio < ENTRY_VOL_DRYUP_PCT
+    passed = in_band and is_dip and vol_ratio < ENTRY_VOL_DRYUP_PCT
+    if not passed:
+        reasons = []
+        if not in_band:
+            reasons.append(f"not_in_band(low={low:.0f},hi={high:.0f},bL={artifact.band_lower:.0f},bU={artifact.band_upper:.0f})")
+        if not is_dip:
+            reasons.append(f"no_dip(close={close:.0f},sma5={sma5:.0f})")
+        if vol_ratio >= ENTRY_VOL_DRYUP_PCT:
+            reasons.append(f"vol_high({vol_ratio:.2f}>={ENTRY_VOL_DRYUP_PCT})")
+        logger.debug(f"{artifact.ticker}: Entry conditions not met — {', '.join(reasons)}")
+    return passed
 
 
 def check_confirmation(entry_state: TickerEntryState, artifact: TickerArtifact, bar: dict) -> tuple:
@@ -157,7 +167,11 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 return intent.intent_id
 
             # OMS rejected or unreachable — log and do NOT consume a confirmation bar
-            logger.warning(f"{artifact.ticker}: Entry confirmed ({conf_type}) but OMS returned {result.status.name}: {result.message}")
+            logger.warning(
+                f"{artifact.ticker}: Entry confirmed ({conf_type}) but OMS returned "
+                f"{result.status.name}: {result.message} "
+                f"[qty={qty}, limit={artifact.avwap_ref:.0f}, stop={stop:.0f}, entry_px={close:.0f}]"
+            )
             return None
 
         entry_state.confirm_bars_remaining -= 1

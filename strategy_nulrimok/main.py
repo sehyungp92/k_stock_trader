@@ -70,18 +70,22 @@ def get_kst_now() -> datetime:
 
 async def fetch_30m_bar(api, ticker: str, rate_budget: Optional[RateBudget] = None) -> Optional[dict]:
     if rate_budget and not rate_budget.try_consume("CHART"):
+        logger.debug(f"{ticker}: 30m bar skipped — CHART rate budget exhausted")
         return None
     try:
         bars_1m = api.get_minute_bars(ticker, minutes=30)
         if bars_1m is None or bars_1m.empty:
+            logger.debug(f"{ticker}: 30m bar empty from KIS API")
             return None
         aggregated = aggregate_bars(bars_1m.to_dict('records'), 30)
         if aggregated:
             bar = aggregated[-1]
             return {'timestamp': bar.timestamp, 'open': bar.open, 'high': bar.high,
                     'low': bar.low, 'close': bar.close, 'volume': bar.volume}
+        logger.debug(f"{ticker}: 30m bar aggregation returned empty")
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug(f"{ticker}: 30m bar fetch error: {e}")
         return None
 
 
@@ -363,10 +367,12 @@ async def run_nulrimok():
                 for ticker in artifact.active_set:
                     ticker_artifact = artifact.get_ticker(ticker)
                     if not ticker_artifact or not ticker_artifact.tradable:
+                        logger.debug(f"{ticker}: Skipping — not in candidates or not tradable")
                         continue
 
                     bar = await fetch_30m_bar(api, ticker, rate_budget)
                     if not bar:
+                        logger.debug(f"{ticker}: Skipping — 30m bar fetch failed")
                         continue
 
                     close = bar['close']
@@ -412,7 +418,8 @@ async def run_nulrimok():
                                 if entry_state.pending_fill_cycles >= PENDING_FILL_MAX_CYCLES:
                                     logger.info(f"{ticker}: Fill timeout, resetting entry state")
                                     entry_state.reset()
-                        except Exception:
+                        except Exception as e:
+                            logger.debug(f"{ticker}: PENDING_FILL check error: {e}")
                             entry_state.pending_fill_cycles += 1
                         continue
 
@@ -428,15 +435,17 @@ async def run_nulrimok():
                             del position_states[ticker]
                     else:
                         # Aggregate daily risk budget check
-                        risk_mult = artifact.risk_mult if hasattr(artifact, 'risk_mult') else 1.0
-                        budget = DAILY_RISK_BUDGET_PCT * risk_mult
+                        budget = DAILY_RISK_BUDGET_PCT * artifact.risk_mult
                         if compute_total_open_risk(position_states, equity) >= budget:
+                            logger.debug(f"{ticker}: Skipping entry — daily risk budget exhausted "
+                                         f"(open_risk >= {budget:.1%})")
                             continue
 
                         # Sector cap check before entry
                         # Estimate entry size for sector check (using close price as proxy)
                         est_qty = int(equity * 0.02 / close) if close > 0 else 0  # ~2% position
                         if sector_exposure and not sector_exposure.can_enter(ticker, est_qty, close, equity):
+                            logger.debug(f"{ticker}: Skipping entry — sector cap reached")
                             continue
 
                         # Entry submission: will transition to PENDING_FILL, position created on fill confirm

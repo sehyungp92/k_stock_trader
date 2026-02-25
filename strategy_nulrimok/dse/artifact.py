@@ -48,6 +48,7 @@ class WatchlistArtifact:
     date: str
     regime_tier: str = "C"
     regime_score: float = 0.0
+    risk_mult: float = 1.0
     candidates: List[TickerArtifact] = field(default_factory=list)
     tradable: List[str] = field(default_factory=list)
     active_set: List[str] = field(default_factory=list)
@@ -56,7 +57,7 @@ class WatchlistArtifact:
 
     def to_dict(self) -> dict:
         return {
-            "date": self.date, "regime_tier": self.regime_tier, "regime_score": self.regime_score,
+            "date": self.date, "regime_tier": self.regime_tier, "regime_score": self.regime_score, "risk_mult": self.risk_mult,
             "candidates": [asdict(c) for c in self.candidates], "tradable": self.tradable,
             "active_set": self.active_set, "overflow": self.overflow,
             "positions": [asdict(p) for p in self.positions],

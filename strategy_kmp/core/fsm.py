@@ -91,6 +91,9 @@ async def alpha_step(
     """
     # Global regime gate
     if not regime_ok:
+        if "regime" not in s._gate_logged:
+            logger.debug(f"{s.code}: blocked by regime gate (fsm={s.fsm.name})")
+            s._gate_logged.add("regime")
         if s.fsm == State.ARMED and s.entry_order_id:
             result = await oms.submit_intent(Intent(
                 intent_type=IntentType.CANCEL_ORDERS,
@@ -106,26 +109,44 @@ async def alpha_step(
     # Entry cutoff
     if is_past_entry_cutoff(now_kst):
         if s.fsm in (State.WATCH_BREAK, State.WAIT_ACCEPTANCE, State.ARMED):
+            logger.info(f"{s.code}: gate entry_cutoff, {s.fsm.name} -> DONE")
             s.fsm = State.DONE
         return None
 
     # Lock OR at 09:15
     if not s.or_locked and now_kst.hour == 9 and now_kst.minute >= 15:
         if not lock_or_and_filter(s):
+            logger.info(
+                f"{s.code}: gate OR_lock fail, DONE "
+                f"(or_high={s.or_high:.0f}, or_low={s.or_low:.0f}, "
+                f"or_pct={((s.or_high - s.or_low) / s.or_low * 100) if s.or_low > 0 else 0:.2f}%)"
+            )
             s.fsm = State.DONE
             return None
         s.fsm = State.WATCH_BREAK
 
     # Need OR locked and past 09:16
     if not s.or_locked:
+        if "or_not_locked" not in s._gate_logged:
+            logger.debug(f"{s.code}: blocked, OR not locked yet")
+            s._gate_logged.add("or_not_locked")
         return None
     if now_kst.hour == 9 and now_kst.minute < 16:
+        if "too_early" not in s._gate_logged:
+            logger.debug(f"{s.code}: blocked, waiting for 09:16")
+            s._gate_logged.add("too_early")
         return None
 
     # Time decay checks
     m = minutes_since_0916(now_kst)
     surge_thresh = min_surge_threshold(m)
     if s.surge < surge_thresh:
+        if "surge_decay" not in s._gate_logged:
+            logger.debug(
+                f"{s.code}: blocked by surge_decay "
+                f"(surge={s.surge:.2f} < thresh={surge_thresh:.2f}, min_at_scan={s.value15:.2f})"
+            )
+            s._gate_logged.add("surge_decay")
         return None
 
     # Log would-block: passed permissive threshold but would fail strict
@@ -156,6 +177,9 @@ async def alpha_step(
 
     # Spread gate
     if s.bid > 0 and s.ask > 0 and not spread_ok(s):
+        if "spread" not in s._gate_logged:
+            logger.debug(f"{s.code}: blocked by spread gate (spread_pct={s.spread_pct:.4f})")
+            s._gate_logged.add("spread")
         return None
 
     tick = tick_size(price)

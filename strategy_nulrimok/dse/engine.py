@@ -40,7 +40,7 @@ class DailySelectionEngine:
                 flow_reversal_flag=self._check_flow_reversal(p["ticker"]),
                 exit_at_open=self._check_flow_reversal(p["ticker"]),
             ) for p in held_positions]
-            return WatchlistArtifact(date=today.isoformat(), regime_tier=regime.tier, regime_score=regime.score, positions=positions)
+            return WatchlistArtifact(date=today.isoformat(), regime_tier=regime.tier, regime_score=regime.score, risk_mult=regime.risk_mult, positions=positions)
 
         sector_weights = self._compute_sector_weights()
 
@@ -65,6 +65,7 @@ class DailySelectionEngine:
 
         artifact = WatchlistArtifact(
             date=today.isoformat(), regime_tier=regime.tier, regime_score=regime.score,
+            risk_mult=regime.risk_mult,
             candidates=candidates, tradable=[c.ticker for c in tradable],
             active_set=active_set, overflow=overflow, positions=positions,
         )

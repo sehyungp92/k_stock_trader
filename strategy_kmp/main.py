@@ -399,6 +399,8 @@ async def run_kmp():
     last_heartbeat_ts = 0.0
     heartbeat_interval = 30.0  # seconds
     ws_slots_released = False  # Track if non-position WS slots released after entry cutoff
+    last_regime_log_ts = 0.0
+    prev_regime_ok = True  # Track regime flips for _gate_logged clearing
 
     while market_open():
         now = get_kst_now()
@@ -450,6 +452,31 @@ async def run_kmp():
         regime_ok, breadth = compute_regime_ok(states, candidates, last_prices, chop_detector)
         is_chop = chop_detector.is_chop()
 
+        # Periodic regime gate diagnostic log (every 60s)
+        if _time.time() - last_regime_log_ts > 60.0:
+            details = []
+            for t in candidates:
+                cs = states.get(t)
+                if cs is None or cs.fsm == State.DONE:
+                    continue
+                cp = last_prices.get(t, 0.0)
+                vwap_rel = ">=" if (cs.vwap > 0 and cp >= cs.vwap) else "<"
+                details.append(f"{t}(surge={cs.surge:.1f},rvol={cs.rvol_1m:.1f},price{vwap_rel}vwap)")
+            logger.info(
+                f"regime gate: regime_ok={regime_ok} breadth={breadth} "
+                f"is_chop={is_chop} risk_off={risk_off} | candidates=[{', '.join(details)}]"
+            )
+            last_regime_log_ts = _time.time()
+
+        # Clear _gate_logged on regime recovery so re-blocking is logged again
+        if regime_ok and not prev_regime_ok:
+            for t in candidates:
+                gs = states.get(t)
+                if gs is not None:
+                    gs._gate_logged.discard("regime")
+                    gs._gate_logged.discard("risk_off")
+        prev_regime_ok = regime_ok
+
         # Get account state
         acct = await oms.get_account_state()
         equity = acct.equity or 100_000_000
@@ -489,6 +516,9 @@ async def run_kmp():
                     if price > 0:
                         last_prices[ticker] = price
             if price <= 0:
+                if "no_price" not in s._gate_logged:
+                    logger.warning(f"{ticker}: no price available (WS and REST both failed), skipping")
+                    s._gate_logged.add("no_price")
                 continue
 
             # Derive ATR and 5m value from bar aggregators (fallback to estimate)
@@ -496,6 +526,10 @@ async def run_kmp():
             last_5m_value = s.last_5m_value if s.last_5m_value > 0 else s.value15 / 3
 
             # FSM step for non-position states (blocked by risk_off)
+            if s.fsm != State.IN_POSITION and risk_off:
+                if "risk_off" not in s._gate_logged:
+                    logger.debug(f"{ticker}: blocked by risk_off (fsm={s.fsm.name})")
+                    s._gate_logged.add("risk_off")
             if s.fsm != State.IN_POSITION and not risk_off:
                 await alpha_step(
                     s=s,

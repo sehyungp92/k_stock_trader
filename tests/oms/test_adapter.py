@@ -642,3 +642,99 @@ class TestKISExecutionAdapterGetAccountInfoBuyableNone:
         assert info["buyable_cash"] == 0
         assert info["equity"] == 100_000_000
         assert info["positions_count"] == 1
+
+
+class TestKISExecutionAdapterGetBalanceSnapshot:
+    """Tests for KISExecutionAdapter.get_balance_snapshot method."""
+
+    @pytest.fixture
+    def mock_api(self):
+        """Create mock KIS API."""
+        import pandas as pd
+
+        api = MagicMock()
+        df = pd.DataFrame({
+            "종목코드": ["005930", "000660"],
+            "보유수량": [100, 50],
+            "매입단가": [70000, 125000],
+            "현재가": [72000, 130000],
+            "수익률": [2.86, 4.0],
+        })
+        api.get_acct_balance.return_value = (100_000_000, df)
+        return api
+
+    @pytest.fixture
+    def adapter(self, mock_api):
+        """Create adapter with mock API."""
+        return KISExecutionAdapter(mock_api)
+
+    @pytest.mark.asyncio
+    async def test_returns_positions_and_equity(self, adapter):
+        """Test get_balance_snapshot returns both positions and equity."""
+        positions_result, equity = await adapter.get_balance_snapshot()
+
+        assert positions_result.ok is True
+        assert len(positions_result.data) == 2
+        assert positions_result.data[0].symbol == "005930"
+        assert positions_result.data[0].qty == 100
+        assert equity == 100_000_000
+
+    @pytest.mark.asyncio
+    async def test_empty_positions(self, adapter, mock_api):
+        """Test get_balance_snapshot with no positions."""
+        import pandas as pd
+        mock_api.get_acct_balance.return_value = (100_000_000, pd.DataFrame())
+
+        positions_result, equity = await adapter.get_balance_snapshot()
+
+        assert positions_result.ok is True
+        assert positions_result.data == []
+        assert equity == 100_000_000
+
+    @pytest.mark.asyncio
+    async def test_api_failure_returns_error(self, adapter, mock_api):
+        """Test get_balance_snapshot returns error on API failure."""
+        mock_api.get_acct_balance.side_effect = Exception("API error")
+
+        positions_result, equity = await adapter.get_balance_snapshot()
+
+        assert positions_result.ok is False
+        assert equity is None
+        assert "API error" in positions_result.error_message
+
+    @pytest.mark.asyncio
+    async def test_single_api_call(self, adapter, mock_api):
+        """Test only one get_acct_balance call is made."""
+        await adapter.get_balance_snapshot()
+
+        mock_api.get_acct_balance.assert_called_once()
+
+
+class TestKISExecutionAdapterGetBuyableCash:
+    """Tests for KISExecutionAdapter.get_buyable_cash method."""
+
+    @pytest.fixture
+    def mock_api(self):
+        """Create mock KIS API."""
+        api = MagicMock()
+        api.get_buyable_cash.return_value = 50_000_000
+        return api
+
+    @pytest.fixture
+    def adapter(self, mock_api):
+        """Create adapter with mock API."""
+        return KISExecutionAdapter(mock_api)
+
+    @pytest.mark.asyncio
+    async def test_returns_buyable_cash(self, adapter):
+        """Test get_buyable_cash returns value."""
+        result = await adapter.get_buyable_cash()
+        assert result == 50_000_000
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_failure(self, adapter, mock_api):
+        """Test get_buyable_cash returns None on API failure."""
+        mock_api.get_buyable_cash.side_effect = Exception("API error")
+
+        result = await adapter.get_buyable_cash()
+        assert result is None

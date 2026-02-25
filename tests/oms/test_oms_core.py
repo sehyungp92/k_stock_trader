@@ -795,13 +795,13 @@ class TestReconcile:
             pnl=2.86,
         )
         oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
-        oms.adapter.get_positions = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[broker_pos]))
-        oms.adapter.get_account_info = AsyncMock(return_value={
-            "equity": 100_000_000,
-            "buyable_cash": 50_000_000,
-        })
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[broker_pos]),
+            100_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=50_000_000)
 
-        await oms._reconcile()
+        await oms._reconcile(cycle_count=0)
 
         pos = oms.state.get_position("005930")
         assert pos.real_qty == 100
@@ -811,16 +811,50 @@ class TestReconcile:
     async def test_account_info_updated(self, oms):
         """Test account info is updated during reconciliation."""
         oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
-        oms.adapter.get_positions = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
-        oms.adapter.get_account_info = AsyncMock(return_value={
-            "equity": 120_000_000,
-            "buyable_cash": 60_000_000,
-        })
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[]),
+            120_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=60_000_000)
 
-        await oms._reconcile()
+        await oms._reconcile(cycle_count=0)
 
         assert oms.state.equity == 120_000_000
         assert oms.state.buyable_cash == 60_000_000
+
+    @pytest.mark.asyncio
+    async def test_buyable_cash_skipped_on_non_zero_cycle(self, oms):
+        """Test buyable_cash is NOT fetched on non-zero cycle (every 6th only)."""
+        oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[]),
+            100_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=99_000_000)
+
+        # Set initial buyable_cash
+        oms.state.buyable_cash = 50_000_000
+
+        # Cycle 1 (not multiple of 6) — should NOT call get_buyable_cash
+        await oms._reconcile(cycle_count=1)
+
+        oms.adapter.get_buyable_cash.assert_not_called()
+        assert oms.state.buyable_cash == 50_000_000  # unchanged
+
+    @pytest.mark.asyncio
+    async def test_buyable_cash_fetched_on_sixth_cycle(self, oms):
+        """Test buyable_cash IS fetched on 6th cycle."""
+        oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[]),
+            100_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=99_000_000)
+
+        await oms._reconcile(cycle_count=6)
+
+        oms.adapter.get_buyable_cash.assert_called_once()
+        assert oms.state.buyable_cash == 99_000_000
 
 
 class TestHandleModifyRisk:
