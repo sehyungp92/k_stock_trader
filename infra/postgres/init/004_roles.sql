@@ -4,10 +4,10 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'trading_writer') THEN
-        CREATE ROLE trading_writer WITH LOGIN PASSWORD 'changeme';
+        CREATE ROLE trading_writer WITH LOGIN PASSWORD 'vps-3';
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'trading_reader') THEN
-        CREATE ROLE trading_reader WITH LOGIN PASSWORD 'changeme';
+        CREATE ROLE trading_reader WITH LOGIN PASSWORD 'vps-3';
     END IF;
 END
 $$;

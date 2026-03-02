@@ -122,8 +122,8 @@ services:
 
   dashboard:
     build:
-      context: .
-      dockerfile: infra/dashboard/Dockerfile
+      context: ./infra/dashboard
+      dockerfile: Dockerfile
     container_name: dashboard
     environment:
       OMS_URL: http://oms:8000
