@@ -1,0 +1,10 @@
+# Regime classifier thresholds - tuned for KRX daily bars
+# See instrumentation/src/regime_classifier.py for usage
+ma_period: 50
+adx_period: 14
+adx_trend_threshold: 25.0
+adx_range_threshold: 20.0
+atr_period: 14
+atr_volatile_percentile: 80.0
+atr_lookback_bars: 100
+slope_lookback_bars: 5

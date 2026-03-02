@@ -28,6 +28,7 @@ from loguru import logger
 
 from .kis_decorators import rate_limit
 from .kis_responses import APIResponse
+from .tick_table import round_to_tick
 
 # Type variable for generic decorator
 F = TypeVar('F', bound=Callable[..., Any])
@@ -255,13 +256,22 @@ class KoreaInvestAPI:
         """Set hash key for order APIs."""
         url = f"{self.using_url}/uapi/hashkey"
         try:
-            res = requests.post(url, data=post_data, headers=headers, timeout=10)
+            res = requests.post(url, data=post_data, headers=headers, timeout=(3, 5))
             if res.status_code == 200:
                 headers['hashkey'] = res.json().get('HASH', '')
             else:
                 logger.error(f"Hash key error: {res.status_code}")
         except Exception as e:
             logger.error(f"Failed to get hash key: {e}")
+
+    # Timeout configuration: (connect_timeout, read_timeout)
+    # - Connect timeout (3s): detects network/DNS failures quickly
+    # - Read timeout (10s): allows KIS server processing time for heavy queries
+    _TIMEOUT_DEFAULT = (3, 10)
+    # Tighter timeout for latency-sensitive market data during trading hours
+    _TIMEOUT_QUOTE = (3, 7)
+    # Generous timeout for order operations (must not be dropped)
+    _TIMEOUT_ORDER = (5, 15)
 
     @rate_limit(min_interval=0.05)
     def _url_fetch(
@@ -299,6 +309,14 @@ class KoreaInvestAPI:
         max_attempts = 3 if retry_on_failure else 1
         base_delay = 0.5
 
+        # Select timeout profile based on request type
+        if is_post_request:
+            req_timeout = self._TIMEOUT_ORDER
+        elif '/quotations/' in api_url or '/price/' in api_url:
+            req_timeout = self._TIMEOUT_QUOTE
+        else:
+            req_timeout = self._TIMEOUT_DEFAULT
+
         # Check if this TR_ID requires real API (paper unsupported)
         needs_real_api = (
             self.is_paper_trading
@@ -306,7 +324,9 @@ class KoreaInvestAPI:
             and self.env.has_real_fallback
         )
 
-        for attempt in range(max_attempts):
+        attempt = 0
+        while attempt < max_attempts:
+            req_start = time.time()
             try:
                 if needs_real_api:
                     # Use real API for this specific endpoint
@@ -336,13 +356,20 @@ class KoreaInvestAPI:
                     json_body = json.dumps(params)
                     if use_hash:
                         self._set_order_hash_key(headers, json_body)
-                    res = requests.post(url, headers=headers, data=json_body, timeout=10)
+                    res = requests.post(url, headers=headers, data=json_body, timeout=req_timeout)
                 else:
-                    res = requests.get(url, headers=headers, params=params, timeout=10)
+                    res = requests.get(url, headers=headers, params=params, timeout=req_timeout)
 
+                elapsed = time.time() - req_start
                 if res.status_code == 200:
                     ar = APIResponse(res)
                     cb.record_success()
+                    # Log slow responses (>5s) that succeeded but are near timeout
+                    if elapsed > 5.0:
+                        logger.warning(
+                            f"KIS_SLOW_RESPONSE: {api_url} tr_id={tr_id_used} "
+                            f"elapsed={elapsed:.1f}s timeout={req_timeout}"
+                        )
                     return ar
 
                 # Handle rate limiting
@@ -359,8 +386,28 @@ class KoreaInvestAPI:
                 if res.status_code in (400, 401, 403):
                     return None
 
+            except requests.exceptions.ConnectTimeout:
+                elapsed = time.time() - req_start
+                logger.error(
+                    f"KIS_CONNECT_TIMEOUT: {api_url} tr_id={tr_id} "
+                    f"elapsed={elapsed:.1f}s (connect_limit={req_timeout[0]}s) "
+                    f"attempt={attempt + 1}/{max_attempts}"
+                )
+                cb.record_failure()
+            except requests.exceptions.ReadTimeout:
+                elapsed = time.time() - req_start
+                logger.error(
+                    f"KIS_READ_TIMEOUT: {api_url} tr_id={tr_id} "
+                    f"elapsed={elapsed:.1f}s (read_limit={req_timeout[1]}s) "
+                    f"attempt={attempt + 1}/{max_attempts}"
+                )
+                cb.record_failure()
             except requests.exceptions.Timeout:
-                logger.error(f"Timeout for {api_url}")
+                elapsed = time.time() - req_start
+                logger.error(
+                    f"KIS_TIMEOUT: {api_url} tr_id={tr_id} "
+                    f"elapsed={elapsed:.1f}s attempt={attempt + 1}/{max_attempts}"
+                )
                 cb.record_failure()
             except requests.exceptions.ConnectionError as e:
                 logger.error(f"Connection error for {api_url}: {e}")
@@ -374,6 +421,8 @@ class KoreaInvestAPI:
                 delay = min(base_delay * (2 ** attempt), 5.0)
                 jitter = random.uniform(0, delay * 0.1)
                 time.sleep(delay + jitter)
+
+            attempt += 1
 
         return None
 
@@ -511,24 +560,45 @@ class KoreaInvestAPI:
         try:
             hoga = self.get_hoga_info(ticker)
             if hoga and len(hoga) > 0:
-                # Expected match price
-                expected = hoga[0].get('antc_cnpr') or ''
-                if expected and expected != '0':
-                    return float(expected)
+                raw = hoga[0]
+                antc = raw.get('antc_cnpr') or ''
+                bid = float(raw.get('bidp1') or 0)
+                ask = float(raw.get('askp1') or 0)
+
+                # Expected match price (only populated during pre-auction)
+                if antc and antc != '0':
+                    logger.debug(
+                        f"EXPECTED_OPEN: {ticker} antc_cnpr={antc} "
+                        f"bid={bid} ask={ask} source=AUCTION"
+                    )
+                    return float(antc)
 
                 # Fallback: mid-price
-                bid = float(hoga[0].get('bidp1') or 0)
-                ask = float(hoga[0].get('askp1') or 0)
                 if bid and ask:
-                    return (bid + ask) / 2
+                    mid = (bid + ask) / 2
+                    logger.info(
+                        f"EXPECTED_OPEN: {ticker} antc_cnpr=EMPTY "
+                        f"bid={bid} ask={ask} mid={mid:.0f} source=MID_PRICE"
+                    )
+                    return mid
+
+                # Hoga returned but no useful data
+                logger.info(
+                    f"EXPECTED_OPEN: {ticker} antc_cnpr=EMPTY "
+                    f"bid={bid} ask={ask} source=FALLBACK_LAST_PRICE "
+                    f"(pre-auction data not yet available)"
+                )
 
         except Exception as e:
-            logger.debug(f"Expected open error for {ticker}: {e}")
+            logger.warning(f"EXPECTED_OPEN: {ticker} hoga error: {e}, falling back to last_price")
 
-        # Final fallback: last traded price
+        # Final fallback: last traded price (= yesterday's close before market open)
         last = self.get_last_price(ticker)
         if last:
-            logger.debug(f"Expected open for {ticker}: using last_price fallback ({last})")
+            logger.info(
+                f"EXPECTED_OPEN: {ticker} price={last} source=LAST_PRICE "
+                f"(gap will be 0% — pre-auction data unavailable)"
+            )
         return last
 
     # =========================================================================
@@ -1164,6 +1234,7 @@ class KoreaInvestAPI:
         self, stock_code: str, price: float, quantity: int, **kwargs
     ) -> Optional[str]:
         """Place a limit buy order. Returns order ID."""
+        price = round_to_tick(price)
         result = self.buy_stock(stock_code, quantity, str(int(price)), order_type="00")
         if result and result.is_ok():
             order_id = self._validate_order_id(result.get_body().output.get('ODNO', ''))
@@ -1180,6 +1251,7 @@ class KoreaInvestAPI:
         self, stock_code: str, price: float, quantity: int, **kwargs
     ) -> Optional[str]:
         """Place a limit sell order. Returns order ID."""
+        price = round_to_tick(price)
         result = self.sell_stock(stock_code, quantity, str(int(price)), order_type="00")
         if result and result.is_ok():
             order_id = self._validate_order_id(result.get_body().output.get('ODNO', ''))
@@ -1206,7 +1278,7 @@ class KoreaInvestAPI:
         Returns dict with 'order_id', 'branch', etc., or None on failure.
         """
         ot = "00" if order_type == "limit" else "01"
-        op = str(int(price)) if price else "0"
+        op = str(int(round_to_tick(price))) if price else "0"
 
         if side.lower() == "buy":
             result = self.buy_stock(stock_code, quantity, op, order_type=ot)

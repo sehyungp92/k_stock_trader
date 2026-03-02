@@ -110,7 +110,6 @@ logs/
 # =============================================
 docker-compose.override.yml
 postgres_data/
-metabase_data/
 
 # =============================================
 # Project Specific
@@ -125,3 +124,6 @@ strategy_*/logs/
 # Local config overrides
 config/local/
 *.local.yaml
+
+# Documentation (generated reports)
+docs/

@@ -134,8 +134,10 @@ def is_in_or_window(ts_kst) -> bool:
     return False
 
 
-def is_past_entry_cutoff(now_kst, cutoff=(10, 0)) -> bool:
+def is_past_entry_cutoff(now_kst, cutoff=None) -> bool:
     """Check if past entry cutoff time."""
+    if cutoff is None:
+        cutoff = kmp_switches.entry_cutoff
     return (now_kst.hour, now_kst.minute) >= cutoff
 
 

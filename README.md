@@ -18,7 +18,7 @@ VPS 1 (Account 1)                    VPS 2 (Account 2)
 |  OMS Instance 1       |--- TCP --->|  OMS Instance 2       |
 |  (PostgreSQL remote)  |   :5432    |  (PostgreSQL local)   |
 +-----------------------+            +-----------------------+
-                                     |  PostgreSQL + Metabase|
+                                     |  PostgreSQL + Dashboard|
                                      +-----------------------+
             |                                   |
             +----------------+------------------+
@@ -197,9 +197,9 @@ pytest tests/kis_core/ -v
 
 ## Monitoring
 
-### Metabase Dashboard
+### Dashboard
 
-Available on VPS 2 at port 3000 when the `dashboard` profile is active. Connects to PostgreSQL for live views of positions, risk, and strategy performance.
+Available on VPS 2 at port 3000. Lightweight Next.js dashboard (`infra/dashboard/`) that proxies OMS API calls server-side. Shows positions, risk, and strategy performance.
 
 ### Log Diagnostics
 

@@ -27,6 +27,7 @@ from .dse.artifact import WatchlistArtifact
 from .iepe.entry import TickerEntryState, EntryState, process_entry
 from .iepe.exits import PositionState, SetupType, manage_nulrimok_position, handle_flow_reversal_exits
 from .iepe.rotation import rotate_active_set
+from instrumentation.facade import InstrumentationKit
 
 VOL_HISTORY_LEN = 20
 NEAR_BAND_PCT = 0.01  # Spec §7.3: 1.0% threshold for rotation protection
@@ -189,6 +190,9 @@ async def run_nulrimok():
     oms = OMSClient(os.environ.get("OMS_URL", "http://localhost:8000"), strategy_id=STRATEGY_ID)
     await oms.wait_ready()
 
+    # Instrumentation
+    instr = InstrumentationKit.create(api, strategy_type="nulrimok")
+
     # Rate budget for REST calls (market data only - order flow goes via OMS)
     rate_budget = RateBudget()
 
@@ -287,12 +291,15 @@ async def run_nulrimok():
                 positions_count=len(position_states),
                 version="1.0.1",
             )
+            instr.periodic_tick()
             last_heartbeat_ts = now_ts
 
         # Day rollover: increment sessions_held
-        if prev_trade_date and today > prev_trade_date and position_states:
-            _increment_sessions_held(position_states)
-            logger.info(f"Day rollover: incremented sessions_held for {len(position_states)} positions")
+        if prev_trade_date and today > prev_trade_date:
+            instr.build_daily_snapshot()
+            if position_states:
+                _increment_sessions_held(position_states)
+                logger.info(f"Day rollover: incremented sessions_held for {len(position_states)} positions")
         prev_trade_date = today
 
         # DSE Phase
@@ -412,6 +419,13 @@ async def run_nulrimok():
                                 # Update sector exposure
                                 if sector_exposure:
                                     sector_exposure.on_fill(ticker, alloc_qty, cost_basis)
+                                if instr:
+                                    instr.on_entry_fill(
+                                        trade_id=f"NULRIMOK:{ticker}:{now.strftime('%Y%m%d')}",
+                                        symbol=ticker, entry_price=cost_basis, qty=alloc_qty,
+                                        signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                                        strategy_params={"avwap_ref": avwap, "atr30m": atr30m, "stop": stop},
+                                    )
                                 logger.info(f"{ticker}: Fill confirmed, qty={alloc_qty}")
                             else:
                                 entry_state.pending_fill_cycles += 1
@@ -430,6 +444,12 @@ async def run_nulrimok():
                             vol_avg, now.time() >= time(15, 5), oms)
                         # Remove position after full exit (not partial)
                         if exit_id and pos.remaining_qty <= 0:
+                            if instr:
+                                instr.on_exit_fill(
+                                    trade_id=f"NULRIMOK:{ticker}:{pos.entry_time.strftime('%Y%m%d')}",
+                                    exit_price=bar['close'],
+                                    exit_reason="managed_exit",
+                                )
                             if sector_exposure:
                                 sector_exposure.on_close(ticker, pos.qty, pos.entry_price)
                             del position_states[ticker]
@@ -437,6 +457,11 @@ async def run_nulrimok():
                         # Aggregate daily risk budget check
                         budget = DAILY_RISK_BUDGET_PCT * artifact.risk_mult
                         if compute_total_open_risk(position_states, equity) >= budget:
+                            if instr:
+                                instr.on_signal_blocked(
+                                    symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                                    blocked_by="risk_budget", block_reason="maturity=mid",
+                                )
                             logger.debug(f"{ticker}: Skipping entry — daily risk budget exhausted "
                                          f"(open_risk >= {budget:.1%})")
                             continue
@@ -445,6 +470,11 @@ async def run_nulrimok():
                         # Estimate entry size for sector check (using close price as proxy)
                         est_qty = int(equity * 0.02 / close) if close > 0 else 0  # ~2% position
                         if sector_exposure and not sector_exposure.can_enter(ticker, est_qty, close, equity):
+                            if instr:
+                                instr.on_signal_blocked(
+                                    symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                                    blocked_by="sector_cap", block_reason="maturity=mid",
+                                )
                             logger.debug(f"{ticker}: Skipping entry — sector cap reached")
                             continue
 

@@ -21,6 +21,9 @@ COPY strategy_nulrimok/ /app/strategy_nulrimok/
 # Copy backfill script
 COPY scripts/backfill_lrs.py /app/scripts/backfill_lrs.py
 
+# Copy instrumentation
+COPY instrumentation/ /app/instrumentation/
+
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "strategy_nulrimok.main"]

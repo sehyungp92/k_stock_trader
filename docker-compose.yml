@@ -69,10 +69,12 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/kmp:/app/data
+      - ./data/kmp/instrumentation:/app/instrumentation/data
     environment:
       <<: *common-env
       OMS_URL: http://oms:8000
       KMP_CONFIG: /app/config/kmp.yaml
+      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
     profiles:
       - kmp
       - all
@@ -89,10 +91,12 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/kpr:/app/data
+      - ./data/kpr/instrumentation:/app/instrumentation/data
     environment:
       <<: *common-env
       OMS_URL: http://oms:8000
       KPR_CONFIG: /app/config/kpr.yaml
+      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
     profiles:
       - kpr
       - all
@@ -110,10 +114,12 @@ services:
       - ./config:/app/config:ro
       - ./data/nulrimok:/app/data
       - ./data/nulrimok/lrs.db:/app/lrs.db
+      - ./data/nulrimok/instrumentation:/app/instrumentation/data
     environment:
       <<: *common-env
       OMS_URL: http://oms:8000
       NULRIMOK_CONFIG: /app/config/nulrimok.yaml
+      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
     profiles:
       - nulrimok
       - all
@@ -130,11 +136,13 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data/pcim:/app/data
+      - ./data/pcim/instrumentation:/app/instrumentation/data
     environment:
       <<: *common-env
       OMS_URL: http://oms:8000
       PCIM_CONFIG: /app/config/pcim.yaml
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
     profiles:
       - pcim
       - all
@@ -162,35 +170,9 @@ services:
       retries: 5
       start_period: 10s
 
-  # ===========================================
-  # Metabase Dashboard
-  # ===========================================
-  metabase:
-    <<: *common
-    image: metabase/metabase:latest
-    container_name: metabase
-    ports:
-      - "3000:3000"
-    environment:
-      MB_DB_TYPE: postgres
-      MB_DB_DBNAME: metabase
-      MB_DB_PORT: 5432
-      MB_DB_USER: postgres
-      MB_DB_PASS: ${POSTGRES_PASSWORD}
-      MB_DB_HOST: postgres
-    volumes:
-      - metabase_data:/metabase-data
-    depends_on:
-      postgres:
-        condition: service_healthy
-    profiles:
-      - dashboard
-      - all
-
 networks:
   kstock:
     driver: bridge
 
 volumes:
   postgres_data:
-  metabase_data:

@@ -83,6 +83,7 @@ async def alpha_step(
     max_per_sector: int = 1,
     regime_breadth_ok: bool = True,
     not_chop: bool = True,
+    instr=None,  # InstrumentationKit
 ) -> Optional[str]:
     """
     FSM step for a symbol.
@@ -91,24 +92,59 @@ async def alpha_step(
     """
     # Global regime gate
     if not regime_ok:
-        if "regime" not in s._gate_logged:
-            logger.debug(f"{s.code}: blocked by regime gate (fsm={s.fsm.name})")
-            s._gate_logged.add("regime")
-        if s.fsm == State.ARMED and s.entry_order_id:
-            result = await oms.submit_intent(Intent(
-                intent_type=IntentType.CANCEL_ORDERS,
-                strategy_id=STRATEGY_ID,
-                symbol=s.code,
-            ))
-            if result.status.name in ("EXECUTED",):
-                s.entry_order_id = None
-            else:
-                logger.warning(f"{s.code}: Cancel {result.status.name} - keeping order tracking")
-        return None
+        if kmp_switches.regime_blocks_progression:
+            # Conservative: block all FSM states
+            if "regime" not in s._gate_logged:
+                logger.debug(f"{s.code}: blocked by regime gate (fsm={s.fsm.name})")
+                s._gate_logged.add("regime")
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                        blocked_by="regime_gate", block_reason=f"maturity=early, fsm={s.fsm.name}",
+                        signal_strength=s.surge,
+                    )
+            if s.fsm == State.ARMED and s.entry_order_id:
+                result = await oms.submit_intent(Intent(
+                    intent_type=IntentType.CANCEL_ORDERS,
+                    strategy_id=STRATEGY_ID,
+                    symbol=s.code,
+                ))
+                if result.status.name in ("EXECUTED",):
+                    s.entry_order_id = None
+                else:
+                    logger.warning(f"{s.code}: Cancel {result.status.name} - keeping order tracking")
+            return None
+        else:
+            # Permissive: only block ARMED (cancel working order), let others progress
+            if s.fsm == State.ARMED:
+                if "regime" not in s._gate_logged:
+                    logger.debug(f"{s.code}: regime_off, blocking ARMED state")
+                    s._gate_logged.add("regime")
+                if s.entry_order_id:
+                    result = await oms.submit_intent(Intent(
+                        intent_type=IntentType.CANCEL_ORDERS,
+                        strategy_id=STRATEGY_ID,
+                        symbol=s.code,
+                    ))
+                    if result.status.name in ("EXECUTED",):
+                        s.entry_order_id = None
+                    else:
+                        logger.warning(f"{s.code}: Cancel {result.status.name} - keeping order tracking")
+                return None
+            # Fall through — WATCH_BREAK and WAIT_ACCEPTANCE proceed
+            if "regime_off_allow" not in s._gate_logged:
+                logger.info(f"{s.code}: regime_off but allowing progression (fsm={s.fsm.name})")
+                s._gate_logged.add("regime_off_allow")
 
     # Entry cutoff
     if is_past_entry_cutoff(now_kst):
         if s.fsm in (State.WATCH_BREAK, State.WAIT_ACCEPTANCE, State.ARMED):
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="entry_cutoff", block_reason=f"maturity=early, fsm={s.fsm.name}",
+                    signal_strength=s.surge,
+                )
             logger.info(f"{s.code}: gate entry_cutoff, {s.fsm.name} -> DONE")
             s.fsm = State.DONE
         return None
@@ -116,6 +152,12 @@ async def alpha_step(
     # Lock OR at 09:15
     if not s.or_locked and now_kst.hour == 9 and now_kst.minute >= 15:
         if not lock_or_and_filter(s):
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="or_lock_fail", block_reason="maturity=early",
+                    signal_strength=s.surge,
+                )
             logger.info(
                 f"{s.code}: gate OR_lock fail, DONE "
                 f"(or_high={s.or_high:.0f}, or_low={s.or_low:.0f}, "
@@ -180,6 +222,12 @@ async def alpha_step(
         if "spread" not in s._gate_logged:
             logger.debug(f"{s.code}: blocked by spread gate (spread_pct={s.spread_pct:.4f})")
             s._gate_logged.add("spread")
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="spread_gate", block_reason=f"maturity=mid, spread_pct={s.spread_pct:.4f}",
+                    signal_strength=s.surge,
+                )
         return None
 
     tick = tick_size(price)
@@ -198,6 +246,12 @@ async def alpha_step(
         s.retest_low = min(s.retest_low, price)
 
         if acceptance_timed_out(s):
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="acceptance_timeout", block_reason="maturity=mid",
+                    signal_strength=s.surge,
+                )
             s.fsm = State.DONE
             logger.info(f"{s.code}: Acceptance timeout")
             return None
@@ -205,11 +259,31 @@ async def alpha_step(
         if not is_accepted(s, price):
             return None
 
+        # Regime check before intent submission (permissive mode)
+        if not regime_ok:
+            if "regime_accepted" not in s._gate_logged:
+                logger.info(f"{s.code}: accepted but regime_ok=False, holding")
+                s._gate_logged.add("regime_accepted")
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                        blocked_by="regime_post_accept",
+                        block_reason="maturity=late, accepted_but_regime_off",
+                        signal_strength=s.surge,
+                    )
+            return None
+
         # Compute entry parameters
         entry_trigger = round_to_tick(s.or_high + tick)
 
         # VI wall check
         if vi_blocked(s, entry_trigger, tick):
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="vi_wall", block_reason="maturity=late",
+                    signal_strength=s.surge,
+                )
             s.fsm = State.DONE
             logger.info(f"{s.code}: VI blocked")
             return None
@@ -236,6 +310,13 @@ async def alpha_step(
         # Sector cap check (before order to prevent races)
         if exposure is not None:
             if not exposure.can_enter(s.code, qty, entry_trigger, equity):
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                        blocked_by="sector_cap",
+                        block_reason=f"maturity=late, sector={exposure.get_sector(s.code)}",
+                        signal_strength=s.surge,
+                    )
                 s.fsm = State.DONE
                 s.skip_reason = "sector_cap"
                 logger.info(f"{s.code}: Sector cap reached for {exposure.get_sector(s.code)}")
@@ -291,6 +372,13 @@ async def alpha_step(
             # Release reservation on rejection
             if exposure is not None:
                 exposure.unreserve(s.code, qty, entry_trigger)
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="entry_rejected",
+                    block_reason=f"maturity=late, msg={result.message}",
+                    signal_strength=s.surge,
+                )
             logger.warning(f"{s.code}: Entry rejected - {result.message}")
             s.fsm = State.DONE
 

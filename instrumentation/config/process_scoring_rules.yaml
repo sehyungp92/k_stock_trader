@@ -1,0 +1,47 @@
+# Process Scoring Rules
+# Used by ProcessScorer to evaluate trade execution quality.
+# Scores are deterministic: same trade_dict + rules = same score.
+
+global:
+  max_entry_latency_ms: 5000
+  max_slippage_multiplier: 2.0
+  min_signal_strength: 0.3
+  strong_signal_threshold: 0.7
+
+strategies:
+  kmp:
+    # Momentum breakout - needs trending markets
+    preferred_regimes:
+      - trending_up
+    adverse_regimes:
+      - ranging
+    expected_slippage_bps: 10
+    min_signal_strength: 0.4
+
+  kpr:
+    # Mean-reversion - thrives in ranging/volatile, suffers in trends
+    preferred_regimes:
+      - ranging
+      - volatile
+    adverse_regimes:
+      - trending_up
+      - trending_down
+    expected_slippage_bps: 5
+
+  pcim:
+    # Event-driven influencer signal
+    preferred_regimes:
+      - trending_up
+      - ranging
+    adverse_regimes:
+      - volatile
+    expected_slippage_bps: 15
+
+  nulrimok:
+    # Swing dip-buying
+    preferred_regimes:
+      - trending_up
+      - ranging
+    adverse_regimes:
+      - volatile
+    expected_slippage_bps: 8

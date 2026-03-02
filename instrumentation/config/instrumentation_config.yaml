@@ -1,0 +1,31 @@
+# instrumentation/config/instrumentation_config.yaml
+#
+# Central configuration for the K Stock Trader instrumentation layer.
+# All instrumentation components read from this file.
+
+bot_id: "k_stock_trader"
+bot_name: "K Stock Trader (Multi-Strategy)"
+strategy_type: "multi_strategy"    # KMP, KPR, PCIM, NULRIMOK
+
+data_dir: "instrumentation/data"
+rotation:
+  max_file_age_days: 30            # delete local files older than this
+  max_disk_mb: 500                 # max disk usage for instrumentation data
+
+market_snapshots:
+  interval_seconds: 300            # 5 minutes — KIS rate limits are tight (5 req/s paper)
+  symbols: []                      # auto-populated from bot's active symbols at startup
+
+sidecar:
+  relay_url: ""  # Set at deployment time (e.g. "https://relay.yourvps.com/events")
+  hmac_secret_env: "INSTRUMENTATION_HMAC_SECRET"  # read from env var
+  batch_size: 50
+  retry_max: 5
+  retry_backoff_base_seconds: 10
+  buffer_dir: "instrumentation/data/.sidecar_buffer"
+
+logging:
+  level: "INFO"
+  file: "instrumentation/data/instrumentation.log"
+  max_size_mb: 50
+  backup_count: 3

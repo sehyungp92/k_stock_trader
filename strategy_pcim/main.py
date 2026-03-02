@@ -9,7 +9,7 @@ from loguru import logger
 import yaml
 
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, RateBudget, build_kis_config_from_env
-from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, RiskPayload
+from oms_client import OMSClient, Intent, IntentType, IntentStatus, Urgency, TimeHorizon, RiskPayload
 
 from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION
 from .config.switches import pcim_switches
@@ -36,6 +36,7 @@ from .positions.profit_taking import check_take_profit
 from .positions.trailing import update_trailing_stop_eod
 from .positions.time_exit import check_time_exit
 from .analytics.hit_tracker import BucketAHitTracker
+from instrumentation.facade import InstrumentationKit
 
 
 def load_config() -> dict:
@@ -191,6 +192,9 @@ async def run_pcim():
     oms = OMSClient(os.environ.get("OMS_URL", "http://localhost:8000"), strategy_id=STRATEGY_ID)
     await oms.wait_ready()
 
+    # Instrumentation
+    instr = InstrumentationKit.create(api, strategy_type="pcim")
+
     # Rate budget for REST calls (market data only - order flow goes via OMS)
     rate_budget = RateBudget()
 
@@ -218,6 +222,7 @@ async def run_pcim():
     kospi_closes = []
     intraday_halted = False
     entry_submitted: Dict[str, int] = {}  # symbol -> intended_qty
+    entry_reject_count: Dict[str, int] = {}  # symbol -> consecutive OMS rejection count
     cancel_done_today = False
     # Phase-completion flags to prevent repeated computation
     stats_done_today = False
@@ -248,6 +253,7 @@ async def run_pcim():
                 positions_count=len(open_positions),
                 version="1.3.1",
             )
+            instr.periodic_tick()
             last_heartbeat_ts = now_ts
 
         # =================================================================
@@ -321,6 +327,12 @@ async def run_pcim():
                 bars = api.get_daily_ohlcv(c.symbol, days=120)
                 if not bars or len(bars) < 20:
                     c.reject_reason = "INSUFFICIENT_DATA"
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="insufficient_data", block_reason="maturity=early",
+                            signal_strength=getattr(c, 'conviction_score', 0.0),
+                        )
                     logger.info(f"STATS_REJECT: {c.symbol} INSUFFICIENT_DATA (bars={len(bars) if bars else 0})")
                     continue
 
@@ -333,6 +345,12 @@ async def run_pcim():
 
                 if not check_trend_gate(closes):
                     c.reject_reason = "TREND_GATE_FAIL"
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="trend_gate", block_reason="maturity=early",
+                            signal_strength=getattr(c, 'conviction_score', 0.0),
+                        )
                     logger.info(f"STATS_REJECT: {c.symbol} TREND_GATE_FAIL (close={closes[-1]:.0f} sma20={c.sma20:.0f})")
                     continue
                 c.pass_trend_gate = True
@@ -341,6 +359,12 @@ async def run_pcim():
                 reject = apply_hard_filters(c, has_earnings)
                 if reject:
                     c.reject_reason = reject
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="hard_filter", block_reason=f"maturity=mid, filter={reject}",
+                            signal_strength=getattr(c, 'conviction_score', 0.0),
+                        )
                     logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
 
@@ -352,6 +376,12 @@ async def run_pcim():
                 reject = apply_gap_reversal_filter(c)
                 if reject:
                     c.reject_reason = reject
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="gap_reversal", block_reason=f"maturity=mid, rate={c.gap_rev_rate:.2f}",
+                            signal_strength=c.conviction_score,
+                        )
                     logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
 
@@ -437,6 +467,12 @@ async def run_pcim():
             selected = []
             for c in eligible:
                 if len(selected) >= max_slots:
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal=f"influencer_{c.bucket}", signal_id=f"pcim_{c.bucket.lower()}",
+                            blocked_by="max_positions", block_reason="maturity=late",
+                            signal_strength=c.conviction_score,
+                        )
                     logger.info(
                         f"PREMARKET_SELECT: {c.symbol} REJECTED max_positions "
                         f"(slots={len(selected)}/{max_slots})"
@@ -444,6 +480,12 @@ async def run_pcim():
                     c.reject_reason = "MAX_POSITIONS"
                     continue
                 if current_exposure + c.final_notional > max_exposure:
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal=f"influencer_{c.bucket}", signal_id=f"pcim_{c.bucket.lower()}",
+                            blocked_by="exposure_cap", block_reason="maturity=late",
+                            signal_strength=c.conviction_score,
+                        )
                     logger.info(
                         f"PREMARKET_SELECT: {c.symbol} REJECTED exposure_cap "
                         f"(cumulative={current_exposure:.0f}+{c.final_notional:.0f}={current_exposure+c.final_notional:.0f} > {max_exposure:.0f})"
@@ -505,6 +547,18 @@ async def run_pcim():
                             qty=alloc_qty,
                             atr_at_entry=pending['atr'],
                         ))
+                        cand = next((c for c in approved_watchlist if c.symbol == symbol), None)
+                        if instr and cand:
+                            instr.on_entry_fill(
+                                trade_id=f"PCIM:{symbol}:{today.strftime('%Y%m%d')}",
+                                symbol=symbol, entry_price=avg_price, qty=alloc_qty,
+                                signal=f"influencer_{cand.bucket}", signal_id=f"pcim_{cand.bucket.lower()}",
+                                signal_strength=getattr(cand, 'conviction_score', 0.0),
+                                strategy_params={
+                                    "bucket": cand.bucket, "tier": getattr(cand, 'tier', ''),
+                                    "influencer_id": getattr(cand, 'influencer_id', ''),
+                                },
+                            )
                         logger.info(f"{symbol}: Fill confirmed, position created @ {avg_price:.0f} qty={alloc_qty}")
                         # Track Bucket A hit (filled)
                         if symbol in bucket_a_pending:
@@ -533,6 +587,12 @@ async def run_pcim():
                     last = quote.get('last', 0)
                     spread_pct = (ask - bid) / last if last > 0 else 0
                     upper_dist = (upper_limit - last) / tick_size if tick_size > 0 and upper_limit > 0 else 999
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal=f"influencer_{c.bucket}", signal_id=f"pcim_{c.bucket.lower()}",
+                            blocked_by="execution_veto", block_reason=f"maturity=late, veto={veto}",
+                            signal_strength=c.conviction_score,
+                        )
                     logger.info(
                         f"EXECUTION_VETO: {c.symbol} veto={veto} last={last:.0f} "
                         f"spread={spread_pct:.4f} upper_dist_ticks={upper_dist:.1f} vi={is_vi}"
@@ -558,6 +618,25 @@ async def run_pcim():
                                 entry_submitted[c.symbol] = c.final_qty
                                 bucket_a_pending[c.symbol] = c.final_qty  # Track for hit-rate
                                 c.reject_reason = "PENDING"
+                            else:
+                                # Transient: DEFERRED (equity not loaded) or OMS connectivity failure
+                                is_transient = (
+                                    result.status == IntentStatus.DEFERRED
+                                    or "unreachable" in (result.message or "").lower()
+                                )
+                                if is_transient:
+                                    logger.info(
+                                        f"OMS_TRANSIENT: {c.symbol} status={result.status.name} "
+                                        f"msg={result.message} bucket={c.bucket} — will retry"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"OMS_ENTRY_REJECTED: {c.symbol} status={result.status.name} "
+                                        f"msg={result.message} bucket={c.bucket}"
+                                    )
+                                    entry_reject_count[c.symbol] = entry_reject_count.get(c.symbol, 0) + 1
+                                    if entry_reject_count[c.symbol] >= 3:
+                                        c.reject_reason = f"OMS_REJECTED_{result.status.name}"
 
                 # Bucket B trigger (after 09:10)
                 if c.bucket == "B" and now.time() >= time(9, 10) and rate_budget.try_consume("CHART"):
@@ -573,6 +652,25 @@ async def run_pcim():
                                 position_manager.track_pending(c.symbol, intent.intent_id, c.final_qty, c.atr_20d)
                                 entry_submitted[c.symbol] = c.final_qty
                                 c.reject_reason = "PENDING"
+                            else:
+                                # Transient: DEFERRED (equity not loaded) or OMS connectivity failure
+                                is_transient = (
+                                    result.status == IntentStatus.DEFERRED
+                                    or "unreachable" in (result.message or "").lower()
+                                )
+                                if is_transient:
+                                    logger.info(
+                                        f"OMS_TRANSIENT: {c.symbol} status={result.status.name} "
+                                        f"msg={result.message} bucket={c.bucket} — will retry"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"OMS_ENTRY_REJECTED: {c.symbol} status={result.status.name} "
+                                        f"msg={result.message} bucket={c.bucket}"
+                                    )
+                                    entry_reject_count[c.symbol] = entry_reject_count.get(c.symbol, 0) + 1
+                                    if entry_reject_count[c.symbol] >= 3:
+                                        c.reject_reason = f"OMS_REJECTED_{result.status.name}"
 
         # =================================================================
         # 10:00 CANCEL + PARTIAL FILL HANDLING
@@ -597,6 +695,11 @@ async def run_pcim():
                     intent = create_exit_intent(pos.symbol, pos.remaining_qty, "STOP", Urgency.HIGH)
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_exit_fill(
+                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                exit_price=current_price, exit_reason="stop",
+                            )
                         position_manager.close_position(pos.symbol, "STOP")
                     else:
                         logger.warning(f"{pos.symbol}: Stop exit {result.status.name} - {result.message}")
@@ -607,6 +710,11 @@ async def run_pcim():
                     intent = create_partial_exit_intent(pos.symbol, qty, "TAKE_PROFIT")
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_exit_fill(
+                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                exit_price=current_price, exit_reason="take_profit",
+                            )
                         pos.tp_done = True
                         position_manager.reduce_position(pos.symbol, qty)
                     else:
@@ -618,6 +726,11 @@ async def run_pcim():
                     intent = create_exit_intent(pos.symbol, pos.remaining_qty, "DAY15_EXIT")
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_exit_fill(
+                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                exit_price=current_price, exit_reason="time_exit",
+                            )
                         position_manager.close_position(pos.symbol, "DAY15_EXIT")
                     else:
                         logger.warning(f"{pos.symbol}: Time exit {result.status.name} - {result.message}")
@@ -635,11 +748,13 @@ async def run_pcim():
 
         # Reset for next day (once, at 18:00 KST)
         if now.time() >= time(18, 0) and not day_reset_done:
+            instr.build_daily_snapshot()
             day_reset_done = True
             candidates = []
             approved_watchlist = []
             intraday_halted = False
             entry_submitted.clear()
+            entry_reject_count.clear()
             bucket_a_pending.clear()
             cancel_done_today = False
             stats_done_today = False

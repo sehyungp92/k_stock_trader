@@ -1,0 +1,78 @@
+# instrumentation/config/simulation_policies.yaml
+# Per-strategy simulation policies for missed opportunity backfill.
+#
+# Korean equity market notes:
+#   - Side is always LONG (no retail short selling on KRX)
+#   - Fees: KRX commission ~0.015% + securities tax ~0.18% on sell = ~0.20% round trip
+#     -> fee_bps ~20 (conservative)
+#   - Slippage: KRX tick sizes vary by price band (see kis_core/tick_table.py),
+#     typical slippage 1-3 ticks -> 5bps default is reasonable
+#   - Data provider: KIS API get_minute_bars(symbol, minutes=N)
+#     returns DataFrame[timestamp, open, high, low, close, volume]
+#   - max_hold_bars is in 1-minute bars (KRX session = 09:00-15:30 = 390 bars)
+
+simulation_policies:
+
+  # KMP - Intraday momentum breakout
+  # Aggressive entries on breakout, tight stops, moderate hold
+  kmp:
+    entry_fill_model: next_trade      # breakout entries fill at market
+    slippage_model: fixed_bps
+    slippage_bps: 5
+    fees_included: true
+    fee_bps: 20                       # ~0.20% round trip on KRX
+    tp_sl_logic: atr_based
+    tp_value: 2.0                     # 2x ATR take profit
+    sl_value: 1.2                     # 1.2x ATR stop loss
+    max_hold_bars: 60                 # ~1 hour max hold
+
+  # KPR - Intraday mean-reversion
+  # Fills closer to mid, tighter TP, quick exits
+  kpr:
+    entry_fill_model: mid             # mean-reversion often uses limit orders
+    slippage_model: fixed_bps
+    slippage_bps: 5
+    fees_included: true
+    fee_bps: 20
+    tp_sl_logic: atr_based
+    tp_value: 2.0                     # 2x ATR take profit
+    sl_value: 1.0                     # 1x ATR stop loss
+    max_hold_bars: 50                 # ~50 minutes max hold
+
+  # PCIM - Event-driven influencer signal
+  # Longer hold, wider stops for event-driven moves
+  pcim:
+    entry_fill_model: next_trade      # event-driven rushes to fill at market
+    slippage_model: fixed_bps
+    slippage_bps: 5
+    fees_included: true
+    fee_bps: 20
+    tp_sl_logic: atr_based
+    tp_value: 2.5                     # 2.5x ATR take profit (wider for events)
+    sl_value: 1.5                     # 1.5x ATR stop loss
+    max_hold_bars: 200                # ~3.3 hours for event plays
+
+  # NULRIMOK - Swing dip-buying
+  # Patient limit entries, moderate targets
+  nulrimok:
+    entry_fill_model: mid             # dip-buy with limit orders
+    slippage_model: fixed_bps
+    slippage_bps: 5
+    fees_included: true
+    fee_bps: 20
+    tp_sl_logic: atr_based
+    tp_value: 1.5                     # 1.5x ATR take profit
+    sl_value: 1.2                     # 1.2x ATR stop loss
+    max_hold_bars: 150                # ~2.5 hours (may span sessions)
+
+  # Fallback policy for unknown strategy types
+  default:
+    entry_fill_model: mid
+    slippage_model: fixed_bps
+    slippage_bps: 5
+    fees_included: true
+    fee_bps: 20                       # KRX standard round-trip
+    tp_sl_logic: atr_based
+    tp_value: 2.0
+    sl_value: 1.0
+    max_hold_bars: 100

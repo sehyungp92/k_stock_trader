@@ -17,6 +17,9 @@ COPY oms/intent.py /app/oms/intent.py
 # Copy strategy code
 COPY strategy_kpr/ /app/strategy_kpr/
 
+# Copy instrumentation
+COPY instrumentation/ /app/instrumentation/
+
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "strategy_kpr.main"]

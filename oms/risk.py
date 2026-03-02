@@ -123,6 +123,13 @@ class RiskGateway:
 
         Returns RiskResult with decision and any modifications.
         """
+        # Block entries if equity not yet loaded
+        if intent.intent_type == IntentType.ENTER and self.state.equity <= 0:
+            return RiskResult(
+                RiskDecision.DEFER,
+                "Equity not yet loaded — reconciliation pending"
+            )
+
         # 1. Global hard blocks
         result = self._check_global_blocks(intent)
         if result.decision != RiskDecision.APPROVE:

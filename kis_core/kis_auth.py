@@ -213,16 +213,16 @@ class KoreaInvestEnv:
             "Content-Type": "application/json",
             "Accept": "text/plain",
         }
-        
+
         last_error: Optional[Exception] = None
-        
+
         for attempt in range(1, max_retries + 1):
             try:
                 res = requests.post(
                     url,
                     data=json.dumps(payload),
                     headers=headers,
-                    timeout=10,
+                    timeout=(5, 10),
                 )
                 
                 # Handle rate limiting
@@ -282,7 +282,7 @@ class KoreaInvestEnv:
                 url,
                 headers=headers,
                 data=json.dumps(payload),
-                timeout=10,
+                timeout=(5, 10),
             )
             res.raise_for_status()
             return res.json()["approval_key"]

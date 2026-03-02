@@ -150,6 +150,9 @@ POSTGRES_READER_PASSWORD=secure_reader_password_here
 
 # PCIM
 GEMINI_API_KEY=your_gemini_api_key
+
+# Instrumentation (optional — used by sidecar relay for HMAC signing)
+INSTRUMENTATION_HMAC_SECRET=
 ```
 
 ### 2.3 Start VPS 2 Services
@@ -229,6 +232,9 @@ KIS_PAPER_ACCOUNT_NO=your_paper_account_1
 
 # Database — connect to VPS 2's Postgres for shared logging
 DATABASE_URL=postgresql://trading_writer:writer_password@VPS2_IP:5432/trading
+
+# Instrumentation (optional — used by sidecar relay for HMAC signing)
+INSTRUMENTATION_HMAC_SECRET=
 ```
 
 > **Important:** Replace `VPS2_IP` with VPS 2's actual IP address, and `writer_password` with the `POSTGRES_WRITER_PASSWORD` value from VPS 2's `.env`. This allows VPS 1's OMS to log intents and trades to the same database used by VPS 2, making all 4 strategies visible in the dashboard on VPS 2.
@@ -462,7 +468,7 @@ Add:
 
 ### 5.3 Monitoring Dashboard (VPS 2)
 
-**Status: DONE** — Replaced Metabase with a lightweight Next.js dashboard (`infra/dashboard/`).
+**Status: DONE** — Using a lightweight Next.js dashboard (`infra/dashboard/`).
 
 The dashboard is built into the VPS 2 compose stack and starts automatically with the other services. It proxies OMS API calls server-side (no CORS issues, no internal URL exposed to browser) and auto-refreshes every 10 seconds.
 
@@ -485,36 +491,7 @@ git pull
 sudo docker compose -f docker-compose.vps2.yml up -d --build dashboard
 ```
 
-**Resource footprint:** ~100–250 MB RAM, ~130 MB image (vs Metabase's ~1.5 GB RAM, ~1.6 GB image).
-
----
-
-### 5.4 Removing Metabase to Free Disk Space (VPS 2)
-
-If Metabase was previously running, remove it to reclaim ~1.6 GB of disk and ~1.5 GB of RAM:
-
-```bash
-# Stop and remove the container (if still running)
-docker stop metabase 2>/dev/null; docker rm metabase 2>/dev/null
-
-# Remove the image (~1.6 GB)
-docker rmi metabase/metabase:latest
-
-# Remove any dangling layers left behind
-docker image prune -f
-
-# Verify space recovered
-df -h /
-docker system df
-```
-
-If Metabase had already written data to the `metabase` schema in Postgres and you want to clean that up too:
-
-```bash
-sudo docker exec -it trading_db psql -U postgres -d trading -c "DROP SCHEMA IF EXISTS metabase CASCADE;"
-```
-
-> This is safe — the `trading` schema (where intents/trades live) is unaffected. The `metabase` schema only held Metabase's own configuration.
+**Resource footprint:** ~100–250 MB RAM, ~130 MB image.
 
 ---
 
@@ -622,30 +599,62 @@ docker logs strategy_kpr 2>&1 | grep "Starting KPR\|WebSocket\|universe"
 docker logs strategy_kpr 2>&1 | grep "Universe filter"
 # Expected: "58 passed, 0 rejected"
 
-# Step 3: Are symbols entering VWAP band?
-docker logs strategy_kpr 2>&1 | grep -i "setup detected\|accepting\|entry\|order\|exit"
+# Step 3: Is OMS equity loaded? (blocks ALL entries if equity=0)
+docker logs strategy_kpr 2>&1 | grep -i "equity"
+# "KPR: OMS equity=0 — entries will be DEFERRED" = OMS hasn't reconciled yet
+# "KPR: OMS equity loaded: 100,000,000" = equity recovered, entries unblocked
+# Also check OMS side:
+docker logs oms_vps2 2>&1 | grep "EQUITY_ZERO"
+# "EQUITY_ZERO: First reconciliation completed but equity=0" = critical OMS issue
+
+# Step 4: Are entries globally blocked?
+docker logs strategy_kpr 2>&1 | grep -i "halt_new_entries\|drift.*block"
+# "halt_new_entries active — all entries blocked" = OMS daily loss breaker tripped
+# "Drift check failed ... — blocking new entries" = OMS unreachable, drift monitor active
+# "Entry blocked — drift monitor active" = drift detected, entries suppressed
+
+# Step 5: Are symbols entering VWAP band and progressing through FSM?
+docker logs strategy_kpr 2>&1 | grep "SETUP_DETECTED\|ACCEPTING"
+# "SETUP_DETECTED → ACCEPTING reclaim=48500 required_closes=3" = pullback detected
 # If nothing, no stocks pulled back 2-5% below VWAP (market trending up or flat)
 
-# Step 4: Did any reach ACCEPTING state?
-docker logs strategy_kpr 2>&1 | grep "ACCEPTING"
-# If nothing, setups detected but confirmation bars didn't follow through
+# Step 6: Did entries get submitted and what was the result?
+docker logs strategy_kpr 2>&1 | grep "Entry ACCEPTED\|Entry DEFERRED\|Entry REJECTED"
+# "Entry ACCEPTED qty=50 intent_id=..." = intent submitted and OMS approved
+# "Entry DEFERRED msg=Equity not yet loaded" = transient, will retry next bar
+# "Entry REJECTED status=REJECTED msg=..." = permanent rejection with reason
 
-# Step 5: Were intents submitted?
-docker logs strategy_kpr 2>&1 | grep "submit_intent\|Intent"
+# Step 7: Did OMS reject or defer? (server-side view)
+docker logs oms_vps2 2>&1 | grep -i "KPR.*REJECTED\|KPR.*DEFERRED\|KPR.*EXECUTED"
+# OMS now logs ALL intent outcomes (EXECUTED=info, REJECTED/DEFERRED=warning)
 
-# Step 6: Did OMS reject?
-docker logs oms_vps2 2>&1 | grep -i "KPR.*reject\|KPR.*modify"
+# Step 8: Did KIS broker reject the underlying order?
+docker logs oms_vps2 2>&1 | grep -i "KIS order rejected\|Limit BUY failed\|Market BUY failed"
+# "KIS order rejected: SYMBOL BUY x100 type=LIMIT" = adapter-level rejection
+# "Limit BUY failed: SYMBOL x100 @ 50000 — ERROR_MSG" = KIS API error with reason
 
-# Step 7: Check investor flow availability (key signal for KPR)
+# Step 9: Check investor flow availability (key signal for KPR)
 docker logs strategy_kpr 2>&1 | grep -i "investor\|flow\|stale"
+
+# Step 10: KIS API timeout issues?
+docker logs strategy_kpr 2>&1 | grep "KIS_TIMEOUT\|KIS_CONNECT_TIMEOUT\|KIS_READ_TIMEOUT\|KIS_SLOW"
+# KIS_CONNECT_TIMEOUT = can't reach KIS server (network issue)
+# KIS_READ_TIMEOUT = KIS server too slow to respond
+# KIS_SLOW_RESPONSE = succeeded but took >5s (near timeout)
 ```
 
 **Common KPR blockers:**
 | Symptom | Cause |
 |---------|-------|
+| "OMS equity=0" all session | OMS reconciliation failing — check OMS logs for `EQUITY_ZERO` |
+| "halt_new_entries active" | OMS daily loss breaker tripped |
+| "drift monitor active" | OMS unreachable or allocation drift detected |
 | No SETUP_DETECTED | Market didn't pull back to VWAP band (trending day) |
-| SETUP_DETECTED but no ACCEPTING | Investor flow signal was stale/conflicting |
-| halt_new_entries | OMS daily loss breaker tripped |
+| SETUP_DETECTED but no Entry ACCEPTED | Confirmation bars didn't follow through, or investor flow stale |
+| "Entry DEFERRED" repeatedly | Equity=0 or risk gateway blocking — check OMS logs |
+| "Entry REJECTED" | OMS rejected — check message for reason (exposure, position limit, etc.) |
+| "KIS order rejected" / "Limit BUY failed" | KIS API rejected — shows specific error from broker |
+| KIS_CONNECT_TIMEOUT / KIS_READ_TIMEOUT | Network or KIS server issues — retries automatically |
 
 ---
 
@@ -766,12 +775,33 @@ docker logs strategy_pcim 2>&1 | grep "ENTRY_DECISION\|EXECUTION_VETO\|bucket"
 # Step 7: Were orders filled?
 docker logs strategy_pcim 2>&1 | grep "Fill confirmed\|position created\|Partial fill"
 
-# Step 8: Did OMS reject?
-docker logs oms_vps2 2>&1 | grep -i "PCIM.*reject"
+# Step 8: Did OMS reject or defer? (strategy-side — distinguishes transient vs permanent)
+docker logs strategy_pcim 2>&1 | grep "OMS_TRANSIENT\|OMS_ENTRY_REJECTED"
+# "OMS_TRANSIENT: 005930 status=DEFERRED msg=Equity not yet loaded bucket=A — will retry"
+#   = transient issue (equity=0 or OMS unreachable), PCIM retries automatically
+# "OMS_ENTRY_REJECTED: 005930 status=REJECTED msg=Max positions reached bucket=A"
+#   = permanent rejection. After 3 consecutive rejections, candidate is marked rejected.
 
-# Step 9: Check regime (affects exposure cap)
+# Step 9: Did OMS reject? (server-side view — all intent outcomes now logged)
+docker logs oms_vps2 2>&1 | grep -i "PCIM.*REJECTED\|PCIM.*DEFERRED\|PCIM.*EXECUTED"
+# OMS now logs ALL intent outcomes (EXECUTED=info, REJECTED/DEFERRED=warning)
+
+# Step 10: Did KIS broker reject the underlying order?
+docker logs oms_vps2 2>&1 | grep -i "KIS order rejected\|Limit BUY failed\|Market BUY failed"
+
+# Step 11: Check regime (affects exposure cap)
 docker logs strategy_pcim 2>&1 | grep -i "regime"
 # CRISIS/WEAK = severely limited exposure
+
+# Step 12: Is OMS equity loaded? (blocks ALL entries if equity=0)
+docker logs oms_vps2 2>&1 | grep "EQUITY_ZERO"
+# "EQUITY_ZERO: First reconciliation completed but equity=0" = critical OMS issue
+
+# Step 13: KIS API timeout issues?
+docker logs strategy_pcim 2>&1 | grep "KIS_TIMEOUT\|KIS_CONNECT_TIMEOUT\|KIS_READ_TIMEOUT\|KIS_SLOW"
+# KIS_CONNECT_TIMEOUT = can't reach KIS server
+# KIS_READ_TIMEOUT = KIS server too slow
+# KIS_SLOW_RESPONSE = succeeded but >5s (near timeout)
 ```
 
 **Common PCIM blockers:**
@@ -782,6 +812,10 @@ docker logs strategy_pcim 2>&1 | grep -i "regime"
 | PREMARKET_SELECT: all REJECTED | CRISIS/WEAK regime capped exposure, or max positions reached |
 | EXECUTION_VETO | Spread too wide, VI active, or price at upper limit |
 | No Fill confirmed | Orders submitted but didn't fill (paper trading limitation or thin liquidity) |
+| "OMS_TRANSIENT" repeatedly | Equity=0 or OMS unreachable — check OMS logs for `EQUITY_ZERO` |
+| "OMS_ENTRY_REJECTED" 3x → candidate dropped | Permanent OMS rejection (exposure cap, position limit, etc.) |
+| "KIS order rejected" / "Limit BUY failed" | KIS API rejected — shows specific broker error |
+| KIS_CONNECT_TIMEOUT / KIS_READ_TIMEOUT | Network or KIS server issues — retries automatically |
 
 ---
 
@@ -851,12 +885,19 @@ tail -f data/kmp/logs/kmp_$(date -u +%Y-%m-%d).log
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| **Verify KPR drift fix** | High | On VPS-3, run `docker logs strategy_kpr 2>&1 \| grep -i "orphan\|trade_block"` — should return nothing. The old `ORDER_ORPHAN_LOCAL` spam that blocked all trades should be gone. |
-| **Run LRS backfill on VPS-1** | High | Run `docker exec strategy_nulrimok python /app/scripts/backfill_lrs.py` to add 600 days of KOSPI/KOSDAQ history. Logs already show regime tier=A, but backfill provides more robust regime calculations. |
-| **Config audit fixes** | Medium | Pending plan in `.claude/plans/`: (1) Fix `t3_bucket_a_allowed` default mismatch in PCIM switches (`False` should be `True`), (2) Wire `conservative.yaml` loading — currently dead code (no `main.py` ever calls `load_from_yaml()`), (3) Add config validation so bad YAML fails at startup, not mid-trading. |
-| **Remove Metabase from VPS 2** | Medium | Run `docker stop metabase; docker rm metabase; docker rmi metabase/metabase:latest; docker image prune -f` to reclaim ~1.6 GB disk. See §5.4. |
-| **Cron health checks** | Medium | Scripts exist but cron jobs need to be installed on both VPSes |
-| **Alert webhooks** | Low | Health check script supports Slack/Discord webhooks, needs URL configured |
+| **Verify KPR drift fix** | High | On VPS 2, run `docker logs strategy_kpr 2>&1 \| grep -i "orphan\|trade_block"` — should return nothing. The old `ORDER_ORPHAN_LOCAL` spam that blocked all trades should be gone. |
+| **Run LRS backfill on VPS 1** | High | Run `docker exec strategy_nulrimok python /app/scripts/backfill_lrs.py` to add 600 days of KOSPI/KOSDAQ history. Logs already show regime tier=A, but backfill provides more robust regime calculations. |
+| **Config audit fixes** | Medium | (1) Fix `t3_bucket_a_allowed` default mismatch in PCIM switches (`False` should be `True`), (2) Wire `conservative.yaml` loading — currently dead code (no `main.py` ever calls `load_from_yaml()`), (3) Add config validation so bad YAML fails at startup, not mid-trading. |
+| **Activate instrumentation hooks** | Medium | `instrumentation/` is deployed into all strategy containers and `InstrumentationKit` is imported in all `main.py`, but no strategy currently calls the hook methods (`on_entry_fill`, `on_exit_fill`, etc.) during live trading. Wire up the hooks at FSM entry/exit points. |
+| **Cron health checks** | Medium | Scripts exist (`scripts/health_check.sh`) but cron jobs need to be installed on both VPSes (see §5.2). |
+| **Alert webhooks** | Low | Health check script supports Slack/Discord webhooks, needs URL configured. |
+
+### Known Bugs Fixed
+
+| Bug | Date | Impact |
+|-----|------|--------|
+| **`_url_fetch` range() retry bug** | 2026-03-02 | `for attempt in range(max_attempts)` pre-evaluates the range. When rate-limit handler bumped `max_attempts` from 1→5, the range was frozen at 1 iteration. Changed to `while` loop. This caused ALL paper trading orders to fail with "no response" — orders hit the 5 req/sec paper limit, retry logic was dead code. |
+| **Paper trading rate limit** | 2026-03-02 | Paper API allows 5 req/sec (vs 20 live). The `@rate_limit(min_interval=0.05)` decorator is calibrated for live (20/sec). Order submissions on paper would frequently hit the limit, now handled by the `_url_fetch` while-loop retry with exponential backoff. |
 
 ### Verify VPS 1 → VPS 2 Postgres Connection
 
@@ -872,7 +913,7 @@ sudo docker compose -f docker-compose.vps1.yml logs oms 2>&1 | grep -i postgres
 # 3. VPS 2's Postgres container is running and healthy
 ```
 
-If the connection fails, OMS falls back to in-memory state gracefully — trading still works, but intent/trade history won't appear in Metabase for VPS 1 strategies.
+If the connection fails, OMS falls back to in-memory state gracefully — trading still works, but intent/trade history won't be persisted for VPS 1 strategies.
 
 ---
 
@@ -964,6 +1005,43 @@ OMS retries automatically and falls back to in-memory state if the connection ca
 
 On startup, each strategy runs `filter_universe()` which makes ~2 API calls per ticker (price check + ADTV check). For large universes this causes a burst of rate-limited retries. The filter completes within 2-5 minutes and the strategy enters its normal loop.
 
+### Paper Trading Rate Limits (5 req/sec vs 20 req/sec)
+
+The KIS paper trading server enforces a stricter rate limit (5 requests/second) compared to the live server (20 requests/second). The `@rate_limit(min_interval=0.05)` decorator in `kis_core` is calibrated for the live rate. When running in paper mode, order submissions may hit the limit more frequently.
+
+The `_url_fetch()` method in `kis_client.py` handles this via a `while` loop retry with exponential backoff: on rate-limit detection (status 500 + `EGW00201`), it bumps `max_attempts` to 5 and retries with increasing delays. This is transparent to strategies.
+
+### KRX Tick Size Validation
+
+`kis_core/tick_table.py` provides `tick_size()` and `round_to_tick()` for ensuring order prices conform to KRX price bands:
+
+| Price Range | Tick Size |
+|------------|-----------|
+| < 2,000 KRW | 1 |
+| 2,000 – 4,999 | 5 |
+| 5,000 – 19,999 | 10 |
+| 20,000 – 49,999 | 50 |
+| 50,000 – 199,999 | 100 |
+| 200,000 – 499,999 | 500 |
+| ≥ 500,000 | 1,000 |
+
+`round_to_tick(price)` rounds down to the nearest valid tick. Used by `kis_client.py` for limit order price submission.
+
+### Instrumentation System (Deployed but Inactive)
+
+The `instrumentation/` directory contains a comprehensive event logging system:
+- **Trade logger**: Structured entry/exit events with market snapshots
+- **Process scorer**: Trade quality scoring independent of P&L
+- **Regime classifier**: Rule-based market regime tagging
+- **Market snapshot**: KRX equity state capture
+- **Daily snapshot**: End-of-day aggregation
+- **Missed opportunity logger**: Hypothetical backfill for blocked signals
+- **Sidecar forwarder**: Event relay with HMAC signing and deduplication
+
+All strategy Dockerfiles copy `instrumentation/` into the container. Docker Compose mounts `data/<strategy>/instrumentation/` for persistent event storage. `InstrumentationKit` is imported in all `main.py` files.
+
+**Current status:** Deployed and available but not actively wired into trading hooks. See TODO for activation plan.
+
 ---
 
 ## Appendix A: File Reference
@@ -971,16 +1049,33 @@ On startup, each strategy runs `filter_universe()` which makes ~2 API calls per 
 | File | VPS | Purpose |
 |------|-----|---------|
 | `.env` | Both | Environment variables (different per VPS) |
+| `.env.example` | N/A | Template for `.env` with all required variables |
+| `.dockerignore` | Both | Excludes data/, logs/, .env from Docker build context |
+| `docker-compose.yml` | Local | Local development (all services + Postgres) |
 | `docker-compose.vps1.yml` | VPS 1 | KMP + Nulrimok orchestration |
-| `docker-compose.vps2.yml` | VPS 2 | KPR + PCIM + DB orchestration |
-| `config/nulrimok.yaml` | VPS 1 | Nulrimok universe + sector_map (413 tickers, 18 sectors) |
+| `docker-compose.vps2.yml` | VPS 2 | KPR + PCIM + DB + Dashboard orchestration |
 | `config/kmp.yaml` | VPS 1 | KMP universe + parameters |
 | `config/kpr.yaml` | VPS 2 | KPR universe + parameters |
+| `config/nulrimok.yaml` | VPS 1 | Nulrimok universe + sector_map (413 tickers, 18 sectors) |
 | `config/pcim.yaml` | VPS 2 | PCIM parameters |
+| `config/oms_config.yaml` | Both | OMS risk limits, exposure caps, reconciliation intervals |
+| `config/conservative.yaml` | Both | Tighter thresholds for `CONSERVATIVE_MODE=true` |
+| `kis_core/__init__.py` | Both | Package exports (v2.1.0) |
+| `kis_core/kis_auth.py` | Both | Auth + dual-token management (paper + real API fallback) |
+| `kis_core/kis_client.py` | Both | REST client with `_url_fetch` while-loop retry, circuit breaker |
+| `kis_core/tick_table.py` | Both | KRX tick size table + `round_to_tick` for order price validation |
 | `kis_core/universe_filter.py` | Both | Shared universe pre-filter (KOSPI/KOSDAQ/KSQ market check) |
+| `oms/oms_core.py` | Both | OMS orchestrator (intent → risk → arbitration → plan → execute) |
+| `oms/risk.py` | Both | Pre-trade risk gateway (exposure, sector, regime, daily loss) |
+| `oms/persistence.py` | Both | asyncpg Postgres persistence (graceful degradation) |
+| `oms_client/client.py` | Both | Async HTTP client for strategies to connect to OMS |
+| `strategy_kmp/config/switches.py` | VPS 1 | KMP permissive/strict switches + would-block tracking |
 | `strategy_nulrimok/lrs/loader.py` | VPS 1 | LRS auto-population from KIS API |
 | `strategy_nulrimok/lrs/db.py` | VPS 1 | LRS SQLite database (schema + read/write) |
-| `infra/postgres/init/*.sql` | VPS 2 | Database schema |
+| `instrumentation/` | Both | Event logging, process scoring, market snapshots, sidecar relay |
+| `infra/postgres/init/*.sql` | VPS 2 | Database schema (001-004: tables, views, retention, roles) |
+| `infra/dashboard/` | VPS 2 | Next.js monitoring dashboard |
+| `scripts/health_check.sh` | Both | Cron-friendly health check script |
 
 ## Appendix B: Network Diagram
 

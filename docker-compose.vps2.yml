@@ -78,9 +78,11 @@ services:
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       KPR_CONFIG: /app/config/kpr.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
+      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
     volumes:
       - ./config:/app/config:ro
       - ./data/kpr:/app/data
+      - ./data/kpr/instrumentation:/app/instrumentation/data
     depends_on:
       oms:
         condition: service_healthy
@@ -108,9 +110,11 @@ services:
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       PCIM_CONFIG: /app/config/pcim.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
+      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
     volumes:
       - ./config:/app/config:ro
       - pcim_data:/app/data
+      - ./data/pcim/instrumentation:/app/instrumentation/data
     depends_on:
       oms:
         condition: service_healthy

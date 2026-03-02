@@ -25,7 +25,13 @@
       "mcp__plugin_claude-mem_mcp-search__get_observations",
       "mcp__plugin_claude-mem_mcp-search__save_memory",
       "WebFetch(domain:hky035.github.io)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "mcp__ide__getDiagnostics",
+      "mcp__plugin_claude-mem_mcp-search__search",
+      "Bash(grep:*)",
+      "Bash(touch:*)",
+      "Bash(bash:*)",
+      "Bash(python3:*)"
     ]
   }
 }

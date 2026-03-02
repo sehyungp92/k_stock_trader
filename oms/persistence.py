@@ -21,16 +21,21 @@ class OMSPersistence:
     """Async persistence layer for OMS state."""
 
     def __init__(self, dsn: Optional[str] = None):
-        self.dsn = dsn or os.environ.get(
-            "DATABASE_URL",
-            "postgresql://trading_writer:changeme@postgres:5432/trading"
-        )
+        self.dsn = dsn or os.environ.get("DATABASE_URL")
+        if not self.dsn:
+            logger.critical(
+                "DATABASE_URL not set and no dsn provided — "
+                "Postgres persistence will be unavailable"
+            )
         self.pool: Optional[asyncpg.Pool] = None
         self.consecutive_failures: int = 0
         self.total_failures: int = 0
 
     async def connect(self) -> None:
         """Initialize connection pool."""
+        if not self.dsn:
+            logger.error("No DATABASE_URL configured — skipping Postgres connection")
+            return
         try:
             self.pool = await asyncpg.create_pool(self.dsn, min_size=2, max_size=10)
             logger.info("Postgres connection pool established")

@@ -36,14 +36,29 @@ class KMPSwitches:
     or_range_max: float = 0.07  # Conservative: 0.055
 
     # MEDIUM PRIORITY: Surge decay slope
-    # 0.03 = slower decay, easier to qualify later (more trades)
+    # 0.02 = slowest decay, easiest to qualify later (more trades)
     # 0.04 = faster decay, harder to qualify (conservative)
-    min_surge_slope: float = 0.03  # Conservative: 0.04
+    min_surge_slope: float = 0.02  # Conservative: 0.04
 
     # CRITICAL: RVOL hard gate (redundant with quality score)
     # False = no hard gate, let quality score weight RVOL (more trades)
     # True = hard gate blocks if RVOL < 2.0 (conservative, double-filters)
     enable_rvol_hard_gate: bool = False  # Conservative: True
+
+    # REGIME GATE: Minimum leader breadth count for regime_ok
+    # 1 = single leader sufficient (more trades, paper trading)
+    # 2 = require 2+ leaders (conservative)
+    regime_breadth_min: int = 1  # Conservative: 2
+
+    # ENTRY CUTOFF: (hour, minute) after which new entries are blocked
+    # (10, 30) = extended window until 10:30 (more trades)
+    # (10, 0)  = strict 10:00 cutoff (conservative)
+    entry_cutoff: tuple = (10, 30)  # Conservative: (10, 0)
+
+    # REGIME GATE SCOPE: Whether regime gate blocks FSM progression
+    # False = only block at intent submission, allow break detection (more trades)
+    # True  = block all FSM states including WATCH_BREAK (conservative)
+    regime_blocks_progression: bool = False  # Conservative: True
 
     # Tracking fields (not user-configurable)
     would_block_count: int = field(default=0, init=False, repr=False)
@@ -158,12 +173,18 @@ class KMPSwitches:
             data = yaml.safe_load(f)
 
         kmp_data = data.get("kmp", {})
+        entry_cutoff = kmp_data.get("entry_cutoff", [10, 30])
+        if isinstance(entry_cutoff, list):
+            entry_cutoff = tuple(entry_cutoff)
         return cls(
             require_held_support=kmp_data.get("require_held_support", False),
             quality_min_threshold=kmp_data.get("quality_min_threshold", 30),
             or_range_max=kmp_data.get("or_range_max", 0.07),
-            min_surge_slope=kmp_data.get("min_surge_slope", 0.03),
+            min_surge_slope=kmp_data.get("min_surge_slope", 0.02),
             enable_rvol_hard_gate=kmp_data.get("enable_rvol_hard_gate", False),
+            regime_breadth_min=kmp_data.get("regime_breadth_min", 1),
+            entry_cutoff=entry_cutoff,
+            regime_blocks_progression=kmp_data.get("regime_blocks_progression", False),
         )
 
     @classmethod
@@ -175,6 +196,9 @@ class KMPSwitches:
             or_range_max=0.055,
             min_surge_slope=0.04,
             enable_rvol_hard_gate=True,
+            regime_breadth_min=2,
+            entry_cutoff=(10, 0),
+            regime_blocks_progression=True,
         )
 
 

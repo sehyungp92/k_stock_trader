@@ -32,6 +32,7 @@ from .adapters.ws_handler import (
     KPRSubscriptionManager, KPRTickState,
     make_kpr_tick_handler, sync_hot_subscriptions,
 )
+from instrumentation.facade import InstrumentationKit
 
 
 def load_config() -> dict:
@@ -94,6 +95,9 @@ async def run_kpr():
     # Connect to OMS service
     oms = OMSClient(os.environ.get("OMS_URL", "http://localhost:8000"), strategy_id=STRATEGY_ID)
     await oms.wait_ready()
+
+    # Instrumentation
+    instr = InstrumentationKit.create(api, strategy_type="kpr")
 
     # Rate budget for REST calls (market data only - order flow goes via OMS)
     rate_budget = RateBudget()
@@ -167,12 +171,19 @@ async def run_kpr():
 
     last_heartbeat_ts = 0.0
     heartbeat_interval = 30.0  # seconds
+    equity_warned = False
 
     while market_open():
         now = get_kst_now()
         now_ts = time_module.time()
         acct = await oms.get_account_state()
         equity = acct.equity or 100_000_000
+        if acct.equity is not None and acct.equity <= 0 and not equity_warned:
+            logger.warning(f"KPR: OMS equity=0 — entries will be DEFERRED until reconciliation")
+            equity_warned = True
+        elif acct.equity and acct.equity > 0 and equity_warned:
+            logger.info(f"KPR: OMS equity loaded: {acct.equity:,.0f}")
+            equity_warned = False
         is_micro = in_micro_window(now)
 
         # --- Drift detection and reconciliation ---
@@ -218,7 +229,7 @@ async def run_kpr():
                                 logger.info(f"{sym}: Removed local phantom position")
                     drift_monitor.clear_after_reconcile()
             except Exception as e:
-                logger.warning(f"Drift check failed: {e}")
+                logger.warning(f"Drift check failed: {e} — blocking new entries")
                 drift_monitor.block_on_oms_unavailable()
 
         # --- Order timeout detection ---
@@ -252,6 +263,7 @@ async def run_kpr():
                 positions_count=len(positions),
                 version="4.3.1",
             )
+            instr.periodic_tick()
             last_heartbeat_ts = now_ts
 
         universe_mgr.rebalance(universe, states, features, positions)
@@ -368,6 +380,7 @@ async def run_kpr():
                             if reason == "partial_target":
                                 s.partial_filled = True
                                 s.trail_stop = max(s.trail_stop, s.entry_px)
+                            s._exit_reason = reason
                             s.fsm = FSMState.PENDING_EXIT
                             logger.info(f"{ticker}: Exit submitted, PENDING_EXIT")
                     continue
@@ -382,6 +395,12 @@ async def run_kpr():
                             s.fsm = FSMState.DONE
                             positions.discard(ticker)
                             sector_exposure.on_close(ticker, s.qty, close)
+                            if instr:
+                                instr.on_exit_fill(
+                                    trade_id=f"KPR:{ticker}:{(s.entry_ts or now).strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
+                                    exit_price=close,
+                                    exit_reason=getattr(s, '_exit_reason', 'unknown'),
+                                )
                             logger.info(f"{ticker}: Exit fill confirmed, DONE")
                         elif alloc_qty < s.remaining_qty:
                             # Partial fill — update remaining and stay PENDING or go back
@@ -398,6 +417,11 @@ async def run_kpr():
                 # --- Entry FSM ---
                 investor_age = investor_provider.age_sec(ticker, now_ts)
                 regime_ok = not acct.halt_new_entries
+                if not regime_ok and not getattr(alpha_step, '_halt_logged', False):
+                    logger.warning("KPR: halt_new_entries active — all entries blocked")
+                    alpha_step._halt_logged = True
+                elif regime_ok and getattr(alpha_step, '_halt_logged', False):
+                    alpha_step._halt_logged = False
                 intent_id = await alpha_step(
                     s, bar, vwap, now, investor_sig, micro_sig, program_sig,
                     program_provider.available or False,
@@ -410,6 +434,7 @@ async def run_kpr():
                     drift_monitor=drift_monitor,
                     sector_exposure=sector_exposure,
                     investor_age=investor_age,
+                    instr=instr,
                 )
 
                 if intent_id:
@@ -417,6 +442,14 @@ async def run_kpr():
 
                 if s.fsm == FSMState.IN_POSITION:
                     positions.add(ticker)
+                    if intent_id and instr:
+                        instr.on_entry_fill(
+                            trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
+                            symbol=ticker, entry_price=s.entry_px, qty=s.qty,
+                            signal=f"{s.setup_type or 'drift'}_reclaim",
+                            signal_id="kpr_mean_reversion",
+                            strategy_params={"confidence": s.confidence, "setup_type": s.setup_type},
+                        )
                 else:
                     positions.discard(ticker)
 
@@ -425,6 +458,8 @@ async def run_kpr():
 
         await asyncio.sleep(1)
 
+    instr.build_daily_snapshot()
+    instr.shutdown()
     await oms.close()
 
 

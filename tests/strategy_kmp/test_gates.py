@@ -341,12 +341,19 @@ class TestTimeChecks:
     def test_is_past_entry_cutoff_before(self):
         """Test before entry cutoff."""
         ts = datetime(2024, 1, 15, 9, 30, 0)
-        assert is_past_entry_cutoff(ts) is False
+        assert is_past_entry_cutoff(ts, cutoff=(10, 0)) is False
 
     def test_is_past_entry_cutoff_at(self):
         """Test at entry cutoff."""
         ts = datetime(2024, 1, 15, 10, 0, 0)
-        assert is_past_entry_cutoff(ts) is True
+        assert is_past_entry_cutoff(ts, cutoff=(10, 0)) is True
+
+    def test_is_past_entry_cutoff_default_switch(self):
+        """Test entry cutoff uses switch default (10, 30)."""
+        ts_before = datetime(2024, 1, 15, 10, 15, 0)
+        ts_at = datetime(2024, 1, 15, 10, 30, 0)
+        assert is_past_entry_cutoff(ts_before) is False
+        assert is_past_entry_cutoff(ts_at) is True
 
     def test_is_past_flatten_time_before(self):
         """Test before flatten time."""

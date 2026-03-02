@@ -49,6 +49,7 @@ from .ws_client import (
 )
 from .trading_calendar import KRXTradingCalendar, get_trading_calendar
 from .sector_exposure import SectorExposure, SectorExposureConfig
+from .tick_table import tick_size, round_to_tick
 from .universe_filter import UniverseFilterConfig, filter_universe
 
 __all__ = [
@@ -113,6 +114,9 @@ __all__ = [
     # Universe Filter
     'UniverseFilterConfig',
     'filter_universe',
+    # Tick Table
+    'tick_size',
+    'round_to_tick',
 ]
 
 __version__ = '2.1.0'

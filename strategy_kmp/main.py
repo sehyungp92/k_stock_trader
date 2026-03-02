@@ -30,6 +30,7 @@ from .adapters.program_regime import MarketProgramRegime, program_poll_task
 from .adapters.ws_manager import SubscriptionManager, refresh_focus_list, release_non_position_slots
 from .adapters.tick_dispatch import on_tick, on_ask_bid
 from .premarket import compute_baselines
+from instrumentation.facade import InstrumentationKit
 
 
 def load_config() -> dict:
@@ -104,7 +105,7 @@ def compute_regime_ok(
         if s.surge >= 3.0 and s.rvol_1m >= LEADER_RVOL_MIN and s.vwap > 0 and price >= s.vwap:
             breadth += 1
 
-    breadth_ok = breadth >= 2
+    breadth_ok = breadth >= kmp_switches.regime_breadth_min
 
     # Feed breadth into chop detector and check chop
     is_chop = False
@@ -177,6 +178,7 @@ async def _sync_positions(
     candidates: list[str],
     last_prices: Dict[str, float],
     exposure: SectorExposure,
+    instr: InstrumentationKit = None,
 ) -> None:
     """Sync FSM state from OMS positions each loop."""
     all_positions = await oms.get_all_positions()
@@ -212,14 +214,34 @@ async def _sync_positions(
                 # Update exposure: move from working → open
                 exposure.on_fill(ticker, alloc_qty, s.entry_px)
                 logger.info(f"{ticker}: Fill detected, IN_POSITION @ {s.entry_px:.0f} qty={s.qty}")
+                if instr:
+                    instr.on_entry_fill(
+                        trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
+                        symbol=ticker, entry_price=s.entry_px, qty=s.qty,
+                        signal="or_break_acceptance", signal_id="kmp_breakout",
+                        signal_strength=s.surge,
+                        strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
+                    )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:
                 # Position closed externally (e.g. by OMS risk)
+                if instr:
+                    instr.on_exit_fill(
+                        trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
+                        exit_price=last_prices.get(ticker, s.entry_px),
+                        exit_reason="external_close",
+                    )
                 exposure.on_close(ticker, s.qty, s.entry_px)
                 s.fsm = State.DONE
                 logger.info(f"{ticker}: Position closed externally, DONE")
             elif s.fsm == State.PENDING_EXIT:
                 # Exit fill confirmed — position fully closed
+                if instr:
+                    instr.on_exit_fill(
+                        trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
+                        exit_price=last_prices.get(ticker, s.entry_px),
+                        exit_reason="exit_confirmed",
+                    )
                 exposure.on_close(ticker, s.qty, s.entry_px)
                 s.fsm = State.DONE
                 logger.info(f"{ticker}: Exit fill confirmed, DONE")
@@ -290,6 +312,9 @@ async def run_kmp():
     # Connect to OMS service
     oms = OMSClient(os.environ.get("OMS_URL", "http://localhost:8000"), strategy_id=STRATEGY_ID)
     await oms.wait_ready()
+
+    # Instrumentation
+    instr = InstrumentationKit.create(api, strategy_type="kmp")
 
     # Initialize components
     program_regime = MarketProgramRegime()
@@ -474,6 +499,8 @@ async def run_kmp():
                 gs = states.get(t)
                 if gs is not None:
                     gs._gate_logged.discard("regime")
+                    gs._gate_logged.discard("regime_off_allow")
+                    gs._gate_logged.discard("regime_accepted")
                     gs._gate_logged.discard("risk_off")
         prev_regime_ok = regime_ok
 
@@ -492,6 +519,7 @@ async def run_kmp():
                 positions_count=positions_count,
                 version="2.3.4",
             )
+            instr.periodic_tick()
             last_heartbeat_ts = _time.time()
 
         # Periodic full reconciliation from OMS
@@ -500,7 +528,7 @@ async def run_kmp():
             last_reconcile_ts = _time.time()
 
         # Sync fills from OMS: ARMED → IN_POSITION / position closed → DONE
-        await _sync_positions(oms, states, candidates, last_prices, exposure)
+        await _sync_positions(oms, states, candidates, last_prices, exposure, instr=instr)
 
         # Process each candidate
         for ticker in candidates:
@@ -546,6 +574,7 @@ async def run_kmp():
                     max_per_sector=max_per_sector,
                     regime_breadth_ok=(breadth >= 8),
                     not_chop=(not is_chop),
+                    instr=instr,
                 )
 
             # Position management
@@ -573,6 +602,8 @@ async def run_kmp():
         await asyncio.sleep(1)
 
     logger.info("KMP strategy shutdown")
+    instr.build_daily_snapshot()
+    instr.shutdown()
     await oms.close()
 
 

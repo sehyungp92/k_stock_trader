@@ -133,11 +133,7 @@ class OMSCore:
             )
         if risk_result.decision == RiskDecision.DEFER:
             self._release_lock_if_entry(intent)
-            return IntentResult(
-                intent_id=intent.intent_id,
-                status=IntentStatus.DEFERRED,
-                message=risk_result.reason,
-            )
+            return await self._finalize(intent, IntentStatus.DEFERRED, risk_result.reason)
 
         # 3. Apply risk modifications
         final_qty = risk_result.modified_qty or intent.desired_qty or intent.target_qty
@@ -145,11 +141,7 @@ class OMSCore:
         # 4. Arbitration
         arb_result = self.arbitration.arbitrate(intent)
         if arb_result.result == ArbitrationResult.DEFER:
-            return IntentResult(
-                intent_id=intent.intent_id,
-                status=IntentStatus.DEFERRED,
-                message=arb_result.reason,
-            )
+            return await self._finalize(intent, IntentStatus.DEFERRED, arb_result.reason)
         if arb_result.result == ArbitrationResult.CANCEL:
             self._release_lock_if_entry(intent)
             return await self._finalize(intent, IntentStatus.REJECTED, arb_result.reason)
@@ -500,6 +492,12 @@ class OMSCore:
                 try:
                     await self._reconcile(cycle_count)
                     consecutive_failures = 0
+                    # Warn if equity still not loaded after first successful cycle
+                    if cycle_count == 0 and self.state.equity <= 0:
+                        logger.critical(
+                            "EQUITY_ZERO: First reconciliation completed but equity=0 "
+                            "— all ENTER intents will be deferred until equity is loaded"
+                        )
                 except Exception as e:
                     consecutive_failures += 1
                     logger.error(f"Reconciliation error ({consecutive_failures}x): {e}")
@@ -788,6 +786,14 @@ class OMSCore:
             modified_qty=modified_qty,
             cooldown_until=cooldown_until,
         )
+
+        # Log all intent outcomes for observability
+        log_fn = logger.info if status == IntentStatus.EXECUTED else logger.warning
+        log_fn(
+            f"Intent {intent.strategy_id}:{intent.symbol} "
+            f"{intent.intent_type.name} -> {status.name}: {message}"
+        )
+
         # Only cache EXECUTED results — REJECTED/DEFERRED must be retryable
         if status == IntentStatus.EXECUTED:
             self._idem.put(intent.idempotency_key, result)

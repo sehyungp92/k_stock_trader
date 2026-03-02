@@ -20,6 +20,9 @@ COPY oms/intent.py /app/oms/intent.py
 # Copy strategy code
 COPY strategy_pcim/ /app/strategy_pcim/
 
+# Copy instrumentation
+COPY instrumentation/ /app/instrumentation/
+
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "strategy_pcim.main"]

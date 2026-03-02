@@ -17,7 +17,7 @@ from ..config.constants import (
     STALE_SIZE_PENALTY, FLOW_STALE_DEFAULT,
 )
 from ..config.switches import kpr_switches
-from oms_client import Intent, IntentType, Urgency, TimeHorizon, IntentConstraints, RiskPayload
+from oms_client import Intent, IntentType, IntentStatus, Urgency, TimeHorizon, IntentConstraints, RiskPayload
 
 
 def in_lunch(now: datetime, switches=None) -> bool:
@@ -153,10 +153,21 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                      regime_ok: bool, has_tick: bool, flow_stale: bool,
                      is_late: bool, atr: float, equity: float, oms,
                      drift_monitor=None, sector_exposure=None,
-                     investor_age: float = 0.0) -> Optional[str]:
+                     investor_age: float = 0.0,
+                     instr=None) -> Optional[str]:
 
     # Drift gate: block all entries when drift detected
     if drift_monitor and drift_monitor.global_trade_block:
+        if instr and s.fsm in (FSMState.SETUP_DETECTED, FSMState.ACCEPTING):
+            if not hasattr(s, '_instr_logged'):
+                s._instr_logged = set()
+            if "drift_block" not in s._instr_logged:
+                s._instr_logged.add("drift_block")
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
+                    blocked_by="drift_block", block_reason="maturity=early",
+                )
+        logger.debug(f"{s.code}: Entry blocked — drift monitor active")
         return None
 
     high = float(bar.get('high', 0))
@@ -170,6 +181,15 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
     s.vwap = vwap
 
     if now.time() < time(ENTRY_START[0], ENTRY_START[1]) or in_lunch(now) or after_entry_end(now) or not regime_ok:
+        if instr and s.fsm in (FSMState.SETUP_DETECTED, FSMState.ACCEPTING):
+            if not hasattr(s, '_instr_logged'):
+                s._instr_logged = set()
+            if "entry_time_gate" not in s._instr_logged:
+                s._instr_logged.add("entry_time_gate")
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
+                    blocked_by="entry_time_gate", block_reason="maturity=early",
+                )
         return None
 
     # Reset INVALIDATED symbols so they can generate new setups
@@ -180,6 +200,11 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
 
     # Invalidation: stop breach
     if s.fsm in (FSMState.SETUP_DETECTED, FSMState.ACCEPTING) and s.stop_level and low <= s.stop_level:
+        if instr:
+            instr.on_signal_blocked(
+                symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
+                blocked_by="stop_breach", block_reason=f"maturity=mid, fsm={s.fsm.name}",
+            )
         s.fsm = FSMState.INVALIDATED
         return None
 
@@ -229,6 +254,10 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             )
 
         s.required_closes = BASE_ACCEPT_CLOSES + adders
+        logger.info(
+            f"{s.code}: SETUP_DETECTED → ACCEPTING "
+            f"reclaim={s.reclaim_level:.0f} required_closes={s.required_closes}"
+        )
         return None
 
     # ACCEPTING -> entry
@@ -239,11 +268,22 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
         if s.accept_closes >= s.required_closes:
             # Sector cap check before entry
             if sector_exposure and not sector_exposure.can_enter(s.code, 1, close, equity):
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
+                        blocked_by="sector_cap",
+                        block_reason=f"maturity=late, sector={sector_exposure.get_sector(s.code)}",
+                    )
                 logger.debug(f"{s.code}: Sector cap reached for {sector_exposure.get_sector(s.code)}")
                 return None
 
             confidence = compute_confidence(investor_sig, micro_sig, program_sig, prog_avail, symbol=s.code)
             if confidence == "RED":
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
+                        blocked_by="confidence_red", block_reason="maturity=late",
+                    )
                 s.fsm = FSMState.INVALIDATED
                 return None
 
@@ -279,6 +319,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             )
             result = await oms.submit_intent(intent)
             if result.status.name in ("EXECUTED", "APPROVED"):
+                logger.info(f"{s.code}: Entry ACCEPTED qty={qty} intent_id={intent.intent_id}")
                 s.fsm = FSMState.IN_POSITION
                 s.entry_px = close
                 s.entry_ts = now
@@ -295,4 +336,17 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 if sector_exposure:
                     sector_exposure.on_fill(s.code, qty, close)
                 return intent.intent_id
+            elif result.status == IntentStatus.DEFERRED:
+                logger.info(f"{s.code}: Entry DEFERRED msg={result.message} — will retry next bar")
+                # Stay in ACCEPTING so the symbol can retry on the next bar
+                return None
+            else:
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
+                        blocked_by="entry_rejected",
+                        block_reason=f"maturity=late, status={result.status.name}",
+                    )
+                logger.warning(f"{s.code}: Entry REJECTED status={result.status.name} msg={result.message}")
+                return None
     return None

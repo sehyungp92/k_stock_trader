@@ -1,0 +1,58 @@
+# Git
+.git
+.gitignore
+
+# Environment & Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.yaml
+
+# Python
+__pycache__
+*.py[cod]
+venv/
+.venv/
+.mypy_cache/
+.pytype/
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+htmlcov/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data & Logs
+data/
+logs/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+docker-compose*.yml
+postgres_data/
+
+# Not needed in containers
+.claude/
+tests/
+config/
+*.md
+
+# Note: scripts/ is NOT excluded — Nulrimok Dockerfile copies scripts/backfill_lrs.py
+# Note: infra/ is NOT excluded — dashboard build context is root
+# Note: instrumentation/ is NOT excluded — strategy Dockerfiles copy it

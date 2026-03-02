@@ -78,7 +78,8 @@ class OMSClient:
         if aiohttp is None:
             raise ImportError("aiohttp required: pip install aiohttp")
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            connector = aiohttp.TCPConnector(force_close=True)
+            self._session = aiohttp.ClientSession(connector=connector)
         return self._session
 
     async def close(self):
@@ -103,6 +104,33 @@ class OMSClient:
 
     _SUBMIT_MAX_RETRIES = 3
     _SUBMIT_BACKOFF_BASE = 0.5  # seconds; doubles each retry (0.5, 1.0, 2.0)
+    _READ_MAX_RETRIES = 2
+    _READ_BACKOFF_BASE = 0.3  # seconds; doubles each retry (0.3, 0.6)
+
+    async def _get_with_retry(self, url, params=None, timeout=10):
+        """GET request with retry on transient connection errors."""
+        last_err = None
+        for attempt in range(self._READ_MAX_RETRIES + 1):
+            try:
+                session = await self._get_session()
+                async with session.get(
+                    url, params=params,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as resp:
+                    if resp.status != 200:
+                        return None
+                    return await resp.json()
+            except Exception as e:
+                last_err = e
+                if attempt < self._READ_MAX_RETRIES:
+                    delay = self._READ_BACKOFF_BASE * (2 ** attempt)
+                    logger.debug(f"OMS read retry {attempt + 1}: {e}, retrying in {delay:.1f}s")
+                    if self._session and not self._session.closed:
+                        await self._session.close()
+                    self._session = None
+                    await asyncio.sleep(delay)
+        logger.warning(f"OMS read failed after retries: {last_err}")
+        return None
 
     async def submit_intent(self, intent: Intent) -> IntentResult:
         """Submit intent to OMS with retry on transient connection errors."""
@@ -176,55 +204,36 @@ class OMSClient:
 
     async def get_account_state(self) -> AccountState:
         """Get account state from OMS (with capital allocation applied)."""
-        session = await self._get_session()
-        try:
-            # Pass strategy_id to get allocated equity
-            url = f"{self.base_url}/api/v1/state/account"
-            params = {"strategy_id": self.strategy_id} if self.strategy_id else {}
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return AccountState()
-                data = await resp.json()
-                return AccountState(
-                    equity=data.get("equity", 0.0),
-                    buyable_cash=data.get("buyable_cash", 0.0),
-                    daily_pnl=data.get("daily_pnl", 0.0),
-                    daily_pnl_pct=data.get("daily_pnl_pct", 0.0),
-                    safe_mode=data.get("safe_mode", False),
-                    halt_new_entries=data.get("halt_new_entries", False),
-                    flatten_in_progress=data.get("flatten_in_progress", False),
-                    gross_exposure_pct=data.get("gross_exposure_pct", 0.0),
-                    regime_exposure_cap=data.get("regime_exposure_cap", 1.0),
-                )
-        except Exception as e:
-            logger.debug(f"get_account_state failed: {e}")
+        url = f"{self.base_url}/api/v1/state/account"
+        params = {"strategy_id": self.strategy_id} if self.strategy_id else {}
+        data = await self._get_with_retry(url, params=params)
+        if data is None:
             return AccountState()
+        return AccountState(
+            equity=data.get("equity", 0.0),
+            buyable_cash=data.get("buyable_cash", 0.0),
+            daily_pnl=data.get("daily_pnl", 0.0),
+            daily_pnl_pct=data.get("daily_pnl_pct", 0.0),
+            safe_mode=data.get("safe_mode", False),
+            halt_new_entries=data.get("halt_new_entries", False),
+            flatten_in_progress=data.get("flatten_in_progress", False),
+            gross_exposure_pct=data.get("gross_exposure_pct", 0.0),
+            regime_exposure_cap=data.get("regime_exposure_cap", 1.0),
+        )
 
     async def get_all_positions(self) -> Dict[str, PositionInfo]:
         """Get all positions from OMS."""
-        session = await self._get_session()
-        try:
-            async with session.get(f"{self.base_url}/api/v1/positions", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return {}
-                data = await resp.json()
-                return {symbol: self._parse_position(symbol, pos) for symbol, pos in data.items()}
-        except Exception as e:
-            logger.debug(f"get_all_positions failed: {e}")
+        data = await self._get_with_retry(f"{self.base_url}/api/v1/positions")
+        if data is None:
             return {}
+        return {symbol: self._parse_position(symbol, pos) for symbol, pos in data.items()}
 
     async def get_position(self, symbol: str) -> Optional[PositionInfo]:
         """Get single position from OMS."""
-        session = await self._get_session()
-        try:
-            async with session.get(f"{self.base_url}/api/v1/positions/{symbol}", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                return self._parse_position(symbol, data)
-        except Exception as e:
-            logger.debug(f"get_position failed: {e}")
+        data = await self._get_with_retry(f"{self.base_url}/api/v1/positions/{symbol}")
+        if data is None:
             return None
+        return self._parse_position(symbol, data)
 
     async def get_allocation(self, symbol: str, strategy_id: str) -> int:
         """Get allocation qty for strategy on symbol."""
