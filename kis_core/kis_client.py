@@ -120,8 +120,11 @@ class _CrossProcessLimiter:
         if not skip_cooldown:
             cooldown_wait = self._check_cooldown()
             if cooldown_wait > 0:
-                logger.info(f"Rate-limit cooldown: sleeping {cooldown_wait:.0f}s")
-                time.sleep(cooldown_wait)
+                # Add per-container jitter so containers don't all burst at once
+                jitter = random.uniform(0, 3.0)
+                total_wait = cooldown_wait + jitter
+                logger.info(f"Rate-limit cooldown: sleeping {total_wait:.0f}s (inc {jitter:.1f}s jitter)")
+                time.sleep(total_wait)
 
         with self._local_lock:
             with open(self._path, 'r+') as f:
@@ -167,6 +170,9 @@ class _CrossProcessLimiter:
                 self._COOLDOWN_MAX_SECONDS,
             )
             until = now + cooldown_duration
+            # Set decay reference to cooldown END so decay doesn't fire
+            # the instant cooldown expires (was causing 30→60→decay→30→60 loop)
+            self._last_rate_limit_ts = until
             logger.warning(
                 f"Rate-limit cooldown activated (level {self._cooldown_level}): "
                 f"pausing ALL API calls for {cooldown_duration:.0f}s"

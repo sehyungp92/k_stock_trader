@@ -31,7 +31,8 @@
       "Bash(grep:*)",
       "Bash(touch:*)",
       "Bash(bash:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(ssh sehyu-vps2:*)"
     ]
   }
 }
