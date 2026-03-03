@@ -72,11 +72,20 @@ class _CrossProcessLimiter:
     by reading/updating a shared file, then sleeps until its slot.
     This guarantees the combined rate across all processes stays
     within 1/min_interval requests per second.
+
+    Also tracks server-side rate-limit rejections (EGW00201) via a
+    shared cooldown file.  When consecutive rejections exceed a
+    threshold, ALL containers pause for a cooldown period, allowing
+    the server-side sliding window to drain completely.
     """
+
+    _COOLDOWN_CONSECUTIVE_THRESHOLD = 3   # consecutive EGW00201 hits
+    _COOLDOWN_SECONDS = 30.0              # pause duration
 
     def __init__(self, min_interval: float, state_file: str):
         self.min_interval = min_interval
         self._path = state_file
+        self._cooldown_path = state_file.replace('.json', '_cooldown.json')
         self._local_lock = threading.Lock()
         _dir = os.path.dirname(state_file)
         if _dir:
@@ -84,9 +93,18 @@ class _CrossProcessLimiter:
         if not os.path.exists(state_file):
             with open(state_file, 'w') as f:
                 json.dump({'t': 0.0}, f)
+        if not os.path.exists(self._cooldown_path):
+            with open(self._cooldown_path, 'w') as f:
+                json.dump({'consecutive': 0, 'cooldown_until': 0.0}, f)
 
     def wait(self) -> float:
-        """Reserve a time slot and sleep until it arrives."""
+        """Reserve a time slot and sleep until it arrives.  Also
+        respects global cooldown from server-side rate-limit rejections."""
+        # --- Check / honor global cooldown ---
+        cooldown_wait = self._check_cooldown()
+        if cooldown_wait > 0:
+            time.sleep(cooldown_wait)
+
         with self._local_lock:
             with open(self._path, 'r+') as f:
                 _lock_rate_file(f)
@@ -110,6 +128,72 @@ class _CrossProcessLimiter:
             if wait_time > 0:
                 time.sleep(wait_time)
             return wait_time
+
+    def record_rate_limit_hit(self) -> None:
+        """Record a server-side EGW00201 rejection.  If consecutive
+        hits reach the threshold, activate a global cooldown."""
+        with self._local_lock:
+            try:
+                with open(self._cooldown_path, 'r+') as f:
+                    _lock_rate_file(f)
+                    try:
+                        try:
+                            state = json.load(f)
+                        except (json.JSONDecodeError, ValueError):
+                            state = {'consecutive': 0, 'cooldown_until': 0.0}
+
+                        state['consecutive'] = state.get('consecutive', 0) + 1
+                        if state['consecutive'] >= self._COOLDOWN_CONSECUTIVE_THRESHOLD:
+                            until = time.time() + self._COOLDOWN_SECONDS
+                            state['cooldown_until'] = until
+                            state['consecutive'] = 0
+                            logger.warning(
+                                f"Rate-limit cooldown activated: pausing ALL "
+                                f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
+                            )
+
+                        f.seek(0)
+                        f.truncate()
+                        json.dump(state, f)
+                    finally:
+                        _unlock_rate_file(f)
+            except Exception:
+                pass  # best-effort; don't break the request path
+
+    def record_success(self) -> None:
+        """Reset consecutive failure counter on a successful request."""
+        with self._local_lock:
+            try:
+                with open(self._cooldown_path, 'r+') as f:
+                    _lock_rate_file(f)
+                    try:
+                        try:
+                            state = json.load(f)
+                        except (json.JSONDecodeError, ValueError):
+                            state = {}
+                        state['consecutive'] = 0
+                        f.seek(0)
+                        f.truncate()
+                        json.dump(state, f)
+                    finally:
+                        _unlock_rate_file(f)
+            except Exception:
+                pass
+
+    def _check_cooldown(self) -> float:
+        """Return seconds to wait if global cooldown is active, else 0."""
+        try:
+            with open(self._cooldown_path, 'r') as f:
+                _lock_rate_file(f)
+                try:
+                    state = json.load(f)
+                finally:
+                    _unlock_rate_file(f)
+            until = state.get('cooldown_until', 0.0)
+            remaining = until - time.time()
+            return max(0.0, remaining)
+        except Exception:
+            return 0.0
 
 
 # Initialize the global HTTP rate limiter.
@@ -465,6 +549,8 @@ class KoreaInvestAPI:
                 if res.status_code == 200:
                     ar = APIResponse(res)
                     cb.record_success()
+                    if hasattr(_http_limiter, 'record_success'):
+                        _http_limiter.record_success()
                     # Log slow responses (>5s) that succeeded but are near timeout
                     if elapsed > 5.0:
                         logger.warning(
@@ -473,10 +559,12 @@ class KoreaInvestAPI:
                         )
                     return ar
 
-                # Handle rate limiting — force a cooldown to let the
-                # server-side sliding window drain before retrying.
+                # Handle rate limiting — signal the global cooldown tracker
+                # so all containers pause when the server is rejecting.
                 if res.status_code == 500 and 'EGW00201' in res.text:
                     logger.warning(f"KIS rate-limited on {api_url}, attempt {attempt + 1}")
+                    if hasattr(_http_limiter, 'record_rate_limit_hit'):
+                        _http_limiter.record_rate_limit_hit()
                     max_attempts = max(max_attempts, 5)
                     base_delay = max(base_delay, 2.0)
                 else:
