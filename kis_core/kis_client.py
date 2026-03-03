@@ -73,10 +73,10 @@ class _CrossProcessLimiter:
     This guarantees the combined rate across all processes stays
     within 1/min_interval requests per second.
 
-    Also tracks server-side rate-limit rejections (EGW00201) via a
-    shared cooldown file.  When consecutive rejections exceed a
-    threshold, ALL containers pause for a cooldown period, allowing
-    the server-side sliding window to drain completely.
+    Consecutive rate-limit rejections are tracked IN-MEMORY (per-process)
+    so other containers' successes can't reset the counter.  When the
+    threshold is reached, a cooldown timestamp is written to a shared
+    file so ALL containers pause together.
     """
 
     _COOLDOWN_CONSECUTIVE_THRESHOLD = 3   # consecutive EGW00201 hits
@@ -87,15 +87,13 @@ class _CrossProcessLimiter:
         self._path = state_file
         self._cooldown_path = state_file.replace('.json', '_cooldown.json')
         self._local_lock = threading.Lock()
+        self._consecutive_failures = 0     # per-process counter
         _dir = os.path.dirname(state_file)
         if _dir:
             os.makedirs(_dir, exist_ok=True)
         if not os.path.exists(state_file):
             with open(state_file, 'w') as f:
                 json.dump({'t': 0.0}, f)
-        if not os.path.exists(self._cooldown_path):
-            with open(self._cooldown_path, 'w') as f:
-                json.dump({'consecutive': 0, 'cooldown_until': 0.0}, f)
 
     def wait(self) -> float:
         """Reserve a time slot and sleep until it arrives.  Also
@@ -103,6 +101,7 @@ class _CrossProcessLimiter:
         # --- Check / honor global cooldown ---
         cooldown_wait = self._check_cooldown()
         if cooldown_wait > 0:
+            logger.info(f"Rate-limit cooldown: sleeping {cooldown_wait:.0f}s")
             time.sleep(cooldown_wait)
 
         with self._local_lock:
@@ -130,70 +129,41 @@ class _CrossProcessLimiter:
             return wait_time
 
     def record_rate_limit_hit(self) -> None:
-        """Record a server-side EGW00201 rejection.  If consecutive
-        hits reach the threshold, activate a global cooldown."""
-        try:
-            # Use 'a+' to create-or-open, then seek to read
-            with open(self._cooldown_path, 'a+') as f:
-                _lock_rate_file(f)
-                try:
-                    f.seek(0)
-                    raw = f.read()
+        """Record a server-side EGW00201 rejection.  Tracked per-process
+        so other containers' successes don't reset the counter."""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._COOLDOWN_CONSECUTIVE_THRESHOLD:
+            self._consecutive_failures = 0
+            until = time.time() + self._COOLDOWN_SECONDS
+            logger.warning(
+                f"Rate-limit cooldown activated: pausing ALL "
+                f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
+            )
+            # Write cooldown to shared file so all containers see it
+            try:
+                with open(self._cooldown_path, 'w') as f:
+                    _lock_rate_file(f)
                     try:
-                        state = json.loads(raw) if raw.strip() else {}
-                    except (json.JSONDecodeError, ValueError):
-                        state = {}
-
-                    state['consecutive'] = state.get('consecutive', 0) + 1
-                    if state['consecutive'] >= self._COOLDOWN_CONSECUTIVE_THRESHOLD:
-                        until = time.time() + self._COOLDOWN_SECONDS
-                        state['cooldown_until'] = until
-                        state['consecutive'] = 0
-                        logger.warning(
-                            f"Rate-limit cooldown activated: pausing ALL "
-                            f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
-                        )
-
-                    f.seek(0)
-                    f.truncate()
-                    f.write(json.dumps(state))
-                    f.flush()
-                finally:
-                    _unlock_rate_file(f)
-        except Exception as e:
-            logger.debug(f"Cooldown record_hit failed: {e}")
+                        json.dump({'cooldown_until': until}, f)
+                        f.flush()
+                    finally:
+                        _unlock_rate_file(f)
+            except Exception as e:
+                logger.debug(f"Cooldown write failed: {e}")
 
     def record_success(self) -> None:
-        """Reset consecutive failure counter on a successful request."""
-        try:
-            with open(self._cooldown_path, 'a+') as f:
-                _lock_rate_file(f)
-                try:
-                    f.seek(0)
-                    raw = f.read()
-                    try:
-                        state = json.loads(raw) if raw.strip() else {}
-                    except (json.JSONDecodeError, ValueError):
-                        state = {}
-                    state['consecutive'] = 0
-                    f.seek(0)
-                    f.truncate()
-                    f.write(json.dumps(state))
-                    f.flush()
-                finally:
-                    _unlock_rate_file(f)
-        except Exception as e:
-            logger.debug(f"Cooldown record_success failed: {e}")
+        """Reset per-process consecutive failure counter."""
+        self._consecutive_failures = 0
 
     def _check_cooldown(self) -> float:
         """Return seconds to wait if global cooldown is active, else 0."""
         try:
-            with open(self._cooldown_path, 'a+') as f:
+            if not os.path.exists(self._cooldown_path):
+                return 0.0
+            with open(self._cooldown_path, 'r') as f:
                 _lock_rate_file(f)
                 try:
-                    f.seek(0)
-                    raw = f.read()
-                    state = json.loads(raw) if raw.strip() else {}
+                    state = json.load(f)
                 finally:
                     _unlock_rate_file(f)
             until = state.get('cooldown_until', 0.0)
