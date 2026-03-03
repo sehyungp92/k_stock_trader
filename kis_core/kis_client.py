@@ -82,7 +82,9 @@ class _CrossProcessLimiter:
 
     _COOLDOWN_FAILURE_THRESHOLD = 3   # failures within the window
     _COOLDOWN_WINDOW_SECONDS = 15.0   # sliding window size
-    _COOLDOWN_SECONDS = 30.0          # pause duration
+    _COOLDOWN_BASE_SECONDS = 30.0     # initial cooldown duration
+    _COOLDOWN_MAX_SECONDS = 120.0     # max cooldown duration
+    _COOLDOWN_DECAY_SECONDS = 60.0    # no hits for 60s → reset level
 
     def __init__(self, min_interval: float, state_file: str):
         self.min_interval = min_interval
@@ -90,6 +92,8 @@ class _CrossProcessLimiter:
         self._cooldown_path = state_file.replace('.json', '_cooldown.json')
         self._local_lock = threading.Lock()
         self._failure_timestamps: list[float] = []  # sliding window
+        self._cooldown_level = 0          # 0=30s, 1=60s, 2=120s
+        self._last_rate_limit_ts = 0.0    # for decay tracking
         _dir = os.path.dirname(state_file)
         if _dir:
             os.makedirs(_dir, exist_ok=True)
@@ -97,14 +101,27 @@ class _CrossProcessLimiter:
             with open(state_file, 'w') as f:
                 json.dump({'t': 0.0}, f)
 
-    def wait(self) -> float:
+    def wait(self, skip_cooldown: bool = False) -> float:
         """Reserve a time slot and sleep until it arrives.  Also
-        respects global cooldown from server-side rate-limit rejections."""
+        respects global cooldown from server-side rate-limit rejections.
+
+        Args:
+            skip_cooldown: If True, bypass cooldown wait (for trading endpoints)
+                           but still respect rate-slot spacing.
+        """
+        # Decay cooldown level after sustained healthy period
+        if (self._last_rate_limit_ts > 0
+                and time.time() - self._last_rate_limit_ts > self._COOLDOWN_DECAY_SECONDS):
+            if self._cooldown_level > 0:
+                logger.info(f"Rate-limit cooldown level decayed: {self._cooldown_level} → 0")
+            self._cooldown_level = 0
+
         # --- Check / honor global cooldown ---
-        cooldown_wait = self._check_cooldown()
-        if cooldown_wait > 0:
-            logger.info(f"Rate-limit cooldown: sleeping {cooldown_wait:.0f}s")
-            time.sleep(cooldown_wait)
+        if not skip_cooldown:
+            cooldown_wait = self._check_cooldown()
+            if cooldown_wait > 0:
+                logger.info(f"Rate-limit cooldown: sleeping {cooldown_wait:.0f}s")
+                time.sleep(cooldown_wait)
 
         with self._local_lock:
             with open(self._path, 'r+') as f:
@@ -132,9 +149,11 @@ class _CrossProcessLimiter:
 
     def record_rate_limit_hit(self) -> None:
         """Record a server-side EGW00201 rejection using a sliding window.
-        Successes don't interfere — old failures age out naturally."""
+        Successes don't interfere — old failures age out naturally.
+        Uses escalating cooldown: 30s → 60s → 120s (capped)."""
         now = time.time()
         self._failure_timestamps.append(now)
+        self._last_rate_limit_ts = now
         # Trim entries outside the window
         cutoff = now - self._COOLDOWN_WINDOW_SECONDS
         self._failure_timestamps = [
@@ -142,11 +161,19 @@ class _CrossProcessLimiter:
         ]
         if len(self._failure_timestamps) >= self._COOLDOWN_FAILURE_THRESHOLD:
             self._failure_timestamps.clear()
-            until = now + self._COOLDOWN_SECONDS
-            logger.warning(
-                f"Rate-limit cooldown activated: pausing ALL "
-                f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
+            # Escalate if rate-limited again within DECAY window of last cooldown
+            cooldown_duration = min(
+                self._COOLDOWN_BASE_SECONDS * (2 ** self._cooldown_level),
+                self._COOLDOWN_MAX_SECONDS,
             )
+            until = now + cooldown_duration
+            logger.warning(
+                f"Rate-limit cooldown activated (level {self._cooldown_level}): "
+                f"pausing ALL API calls for {cooldown_duration:.0f}s"
+            )
+            # Escalate for next time (cap at level that produces MAX)
+            if cooldown_duration < self._COOLDOWN_MAX_SECONDS:
+                self._cooldown_level += 1
             # Write cooldown to shared file so all containers see it
             try:
                 with open(self._cooldown_path, 'w') as f:
@@ -368,6 +395,45 @@ def _get_circuit_breaker(api_url: str, is_post_request: bool) -> CircuitBreaker:
 
 
 # =============================================================================
+# GET RESPONSE CACHE
+# =============================================================================
+# Per-process in-memory cache for GET responses.  Reduces API volume by
+# serving repeated identical requests from cache instead of hitting the
+# network.  POST requests (orders) are NEVER cached.
+
+_response_cache: Dict[tuple, Tuple[Any, float]] = {}
+_cache_lock = threading.Lock()
+
+_CACHE_TTLS = {
+    'inquire-price': 3.0,
+    'inquire-daily-itemchartprice': 60.0,
+    'inquire-time-itemchartprice': 15.0,
+    'inquire-investor': 120.0,
+    'inquire-daily-ccld': 3.0,
+    'inquire-balance': 3.0,
+    'inquire-psbl-order': 5.0,
+}
+_CACHE_TTL_DEFAULT = 5.0
+_CACHE_MAX_SIZE = 500
+
+
+def _get_cache_ttl(api_url: str) -> float:
+    for pattern, ttl in _CACHE_TTLS.items():
+        if pattern in api_url:
+            return ttl
+    return _CACHE_TTL_DEFAULT
+
+
+def _cache_cleanup() -> None:
+    """Remove expired entries when cache exceeds max size."""
+    now = time.time()
+    expired = [k for k, (_, ts) in _response_cache.items()
+               if now - ts > _CACHE_TTL_DEFAULT * 20]
+    for k in expired:
+        del _response_cache[k]
+
+
+# =============================================================================
 # TIMEZONE HELPER
 # =============================================================================
 
@@ -468,6 +534,18 @@ class KoreaInvestAPI:
             logger.warning(f"Circuit breaker OPEN - skipping request to {api_url}")
             return None
 
+        # --- Check GET response cache ---
+        cache_key = None
+        if not is_post_request:
+            cache_key = (api_url, tr_id, tuple(sorted(params.items())) if params else ())
+            with _cache_lock:
+                cached = _response_cache.get(cache_key)
+                if cached:
+                    cached_resp, cached_at = cached
+                    ttl = _get_cache_ttl(api_url)
+                    if time.time() - cached_at < ttl:
+                        return cached_resp
+
         # Default: retry GETs (idempotent), not POSTs (orders)
         if retry_on_failure is None:
             retry_on_failure = not is_post_request
@@ -494,7 +572,13 @@ class KoreaInvestAPI:
         while attempt < max_attempts:
             # Cross-process rate limiting (shared across all containers).
             # Inside the loop so retries are also coordinated.
-            _http_limiter.wait()
+            # Trading endpoints skip cooldown wait so OMS can still
+            # submit orders and query positions during market data cooldowns.
+            is_trading_url = '/trading/' in api_url
+            if hasattr(_http_limiter, 'wait'):
+                _http_limiter.wait(skip_cooldown=is_trading_url)
+            else:
+                _http_limiter.wait()
 
             req_start = time.time()
             try:
@@ -540,6 +624,12 @@ class KoreaInvestAPI:
                             f"KIS_SLOW_RESPONSE: {api_url} tr_id={tr_id_used} "
                             f"elapsed={elapsed:.1f}s timeout={req_timeout}"
                         )
+                    # Store in GET cache
+                    if cache_key is not None:
+                        with _cache_lock:
+                            _response_cache[cache_key] = (ar, time.time())
+                            if len(_response_cache) > _CACHE_MAX_SIZE:
+                                _cache_cleanup()
                     return ar
 
                 # Handle rate limiting — signal the global cooldown tracker
