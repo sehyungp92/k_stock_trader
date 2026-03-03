@@ -165,13 +165,18 @@ class SharedRateBudget:
     Each endpoint class has its own bucket.
     """
 
+    # Advisory budgets for endpoint-class prioritization.
+    # The actual HTTP rate is enforced by _CrossProcessLimiter in kis_client.
+    # These budgets prevent one endpoint class from monopolizing the shared
+    # API bandwidth.  Refill rates are deliberately generous — the HTTP
+    # limiter is the real throttle.
     DEFAULT_BUDGETS = {
-        "QUOTE": (60, 1.0),     # High frequency quotes
-        "CHART": (30, 0.5),     # Chart data
-        "FLOW": (20, 0.33),     # Order flow
-        "ORDER": (30, 0.5),     # Order submission
-        "BALANCE": (20, 0.33),  # Balance queries
-        "DEFAULT": (30, 0.5),   # Fallback
+        "QUOTE": (15, 3.0),     # High frequency quotes
+        "CHART": (15, 3.0),     # Chart data (main data source for strategies)
+        "FLOW": (10, 1.0),      # Order flow (less frequent)
+        "ORDER": (10, 2.0),     # Order submission (must not be blocked)
+        "BALANCE": (10, 1.0),   # Balance queries
+        "DEFAULT": (10, 2.0),   # Fallback
     }
 
     def __init__(

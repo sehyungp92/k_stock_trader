@@ -40,6 +40,97 @@ F = TypeVar('F', bound=Callable[..., Any])
 
 
 # =============================================================================
+# CROSS-PROCESS HTTP RATE LIMITER
+# =============================================================================
+# When multiple Docker containers share a single KIS API account, the
+# per-process @rate_limit decorator is insufficient — each container
+# independently allows 5 req/sec, causing N × 5 req/sec combined.
+# This file-based limiter coordinates across all containers via a shared
+# Docker volume so the TOTAL rate stays within the API limit.
+
+import sys as _sys
+
+if _sys.platform == 'win32':
+    import msvcrt as _msvcrt
+    def _lock_rate_file(f):
+        _msvcrt.locking(f.fileno(), _msvcrt.LK_LOCK, 1)
+    def _unlock_rate_file(f):
+        _msvcrt.locking(f.fileno(), _msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl as _fcntl
+    def _lock_rate_file(f):
+        _fcntl.flock(f.fileno(), _fcntl.LOCK_EX)
+    def _unlock_rate_file(f):
+        _fcntl.flock(f.fileno(), _fcntl.LOCK_UN)
+
+
+class _CrossProcessLimiter:
+    """
+    Rate limiter shared across Docker containers via file lock.
+
+    Each process atomically reserves the next available time slot
+    by reading/updating a shared file, then sleeps until its slot.
+    This guarantees the combined rate across all processes stays
+    within 1/min_interval requests per second.
+    """
+
+    def __init__(self, min_interval: float, state_file: str):
+        self.min_interval = min_interval
+        self._path = state_file
+        self._local_lock = threading.Lock()
+        _dir = os.path.dirname(state_file)
+        if _dir:
+            os.makedirs(_dir, exist_ok=True)
+        if not os.path.exists(state_file):
+            with open(state_file, 'w') as f:
+                json.dump({'t': 0.0}, f)
+
+    def wait(self) -> float:
+        """Reserve a time slot and sleep until it arrives."""
+        with self._local_lock:
+            with open(self._path, 'r+') as f:
+                _lock_rate_file(f)
+                try:
+                    try:
+                        last = json.load(f).get('t', 0.0)
+                    except (json.JSONDecodeError, ValueError):
+                        last = 0.0
+
+                    now = time.time()
+                    nxt = last + self.min_interval
+                    wait_time = max(0.0, nxt - now)
+                    reserved = max(now, nxt)
+
+                    f.seek(0)
+                    f.truncate()
+                    json.dump({'t': reserved}, f)
+                finally:
+                    _unlock_rate_file(f)
+
+            if wait_time > 0:
+                time.sleep(wait_time)
+            return wait_time
+
+
+# Initialize the global HTTP rate limiter.
+# If RATE_BUDGET_STATE_FILE is set (Docker deployment), use cross-process
+# coordination via shared volume.  Otherwise fall back to per-process.
+_rate_state_env = os.environ.get("RATE_BUDGET_STATE_FILE", "")
+if _rate_state_env:
+    _rate_state_dir = os.path.dirname(_rate_state_env)
+    _http_limiter_path = os.path.join(_rate_state_dir, "http_limiter.json")
+    _http_limiter = _CrossProcessLimiter(_MIN_INTERVAL, _http_limiter_path)
+    logger.info(
+        f"Cross-process HTTP rate limiter active: {_http_limiter_path} "
+        f"({1/_MIN_INTERVAL:.0f} req/sec shared)"
+    )
+else:
+    from .kis_decorators import RateLimiter as _RateLimiter
+    _http_limiter = _RateLimiter(min_interval=_MIN_INTERVAL, name="http_local")
+    logger.info(f"Per-process HTTP rate limiter: {1/_MIN_INTERVAL:.0f} req/sec")
+
+
+# =============================================================================
 # PAPER TRADING TR_ID MAPPING
 # =============================================================================
 
@@ -280,7 +371,6 @@ class KoreaInvestAPI:
     # Generous timeout for order operations (must not be dropped)
     _TIMEOUT_ORDER = (5, 15)
 
-    @rate_limit(min_interval=_MIN_INTERVAL)
     def _url_fetch(
         self,
         api_url: str,
@@ -308,6 +398,9 @@ class KoreaInvestAPI:
         if cb.is_open():
             logger.warning(f"Circuit breaker OPEN - skipping request to {api_url}")
             return None
+
+        # Cross-process rate limiting (shared across all containers)
+        _http_limiter.wait()
 
         # Default: retry GETs (idempotent), not POSTs (orders)
         if retry_on_failure is None:
