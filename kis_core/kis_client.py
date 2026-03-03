@@ -31,7 +31,7 @@ from .kis_decorators import rate_limit
 
 # Paper trading has a lower API rate limit (5 req/sec vs 20 live)
 _PAPER_MODE = os.environ.get("KIS_IS_PAPER", "true").lower() == "true"
-_MIN_INTERVAL = 0.25 if _PAPER_MODE else 0.05  # 4 req/sec paper (margin below 5 limit), 20 req/sec live
+_MIN_INTERVAL = 0.50 if _PAPER_MODE else 0.05  # 2 req/sec paper, 20 req/sec live
 from .kis_responses import APIResponse
 from .tick_table import round_to_tick
 
@@ -72,28 +72,12 @@ class _CrossProcessLimiter:
     by reading/updating a shared file, then sleeps until its slot.
     This guarantees the combined rate across all processes stays
     within 1/min_interval requests per second.
-
-    Rate-limit rejections (EGW00201) are tracked via a SLIDING WINDOW
-    of failure timestamps (per-process, in-memory).  If N failures
-    occur within T seconds, a shared cooldown is activated so ALL
-    containers pause together.  Successes do NOT reset the window —
-    old failures simply age out.
     """
-
-    _COOLDOWN_FAILURE_THRESHOLD = 3   # failures within the window
-    _COOLDOWN_WINDOW_SECONDS = 15.0   # sliding window size
-    _COOLDOWN_BASE_SECONDS = 30.0     # initial cooldown duration
-    _COOLDOWN_MAX_SECONDS = 120.0     # max cooldown duration
-    _COOLDOWN_DECAY_SECONDS = 60.0    # no hits for 60s → reset level
 
     def __init__(self, min_interval: float, state_file: str):
         self.min_interval = min_interval
         self._path = state_file
-        self._cooldown_path = state_file.replace('.json', '_cooldown.json')
         self._local_lock = threading.Lock()
-        self._failure_timestamps: list[float] = []  # sliding window
-        self._cooldown_level = 0          # 0=30s, 1=60s, 2=120s
-        self._last_rate_limit_ts = 0.0    # for decay tracking
         _dir = os.path.dirname(state_file)
         if _dir:
             os.makedirs(_dir, exist_ok=True)
@@ -101,31 +85,8 @@ class _CrossProcessLimiter:
             with open(state_file, 'w') as f:
                 json.dump({'t': 0.0}, f)
 
-    def wait(self, skip_cooldown: bool = False) -> float:
-        """Reserve a time slot and sleep until it arrives.  Also
-        respects global cooldown from server-side rate-limit rejections.
-
-        Args:
-            skip_cooldown: If True, bypass cooldown wait (for trading endpoints)
-                           but still respect rate-slot spacing.
-        """
-        # Decay cooldown level after sustained healthy period
-        if (self._last_rate_limit_ts > 0
-                and time.time() - self._last_rate_limit_ts > self._COOLDOWN_DECAY_SECONDS):
-            if self._cooldown_level > 0:
-                logger.info(f"Rate-limit cooldown level decayed: {self._cooldown_level} → 0")
-            self._cooldown_level = 0
-
-        # --- Check / honor global cooldown ---
-        if not skip_cooldown:
-            cooldown_wait = self._check_cooldown()
-            if cooldown_wait > 0:
-                # Add per-container jitter so containers don't all burst at once
-                jitter = random.uniform(0, 3.0)
-                total_wait = cooldown_wait + jitter
-                logger.info(f"Rate-limit cooldown: sleeping {total_wait:.0f}s (inc {jitter:.1f}s jitter)")
-                time.sleep(total_wait)
-
+    def wait(self) -> float:
+        """Reserve a time slot and sleep until it arrives."""
         with self._local_lock:
             with open(self._path, 'r+') as f:
                 _lock_rate_file(f)
@@ -134,84 +95,22 @@ class _CrossProcessLimiter:
                         last = json.load(f).get('t', 0.0)
                     except (json.JSONDecodeError, ValueError):
                         last = 0.0
-
                     now = time.time()
                     nxt = last + self.min_interval
                     wait_time = max(0.0, nxt - now)
                     reserved = max(now, nxt)
-
                     f.seek(0)
                     f.truncate()
                     json.dump({'t': reserved}, f)
                 finally:
                     _unlock_rate_file(f)
-
-            if wait_time > 0:
-                time.sleep(wait_time)
-            return wait_time
+        if wait_time > 0:
+            time.sleep(wait_time)
+        return wait_time
 
     def record_rate_limit_hit(self) -> None:
-        """Record a server-side EGW00201 rejection using a sliding window.
-        Successes don't interfere — old failures age out naturally.
-        Uses escalating cooldown: 30s → 60s → 120s (capped)."""
-        now = time.time()
-        self._failure_timestamps.append(now)
-        self._last_rate_limit_ts = now
-        # Trim entries outside the window
-        cutoff = now - self._COOLDOWN_WINDOW_SECONDS
-        self._failure_timestamps = [
-            t for t in self._failure_timestamps if t > cutoff
-        ]
-        if len(self._failure_timestamps) >= self._COOLDOWN_FAILURE_THRESHOLD:
-            self._failure_timestamps.clear()
-            # Escalate if rate-limited again within DECAY window of last cooldown
-            cooldown_duration = min(
-                self._COOLDOWN_BASE_SECONDS * (2 ** self._cooldown_level),
-                self._COOLDOWN_MAX_SECONDS,
-            )
-            until = now + cooldown_duration
-            # Set decay reference to cooldown END so decay doesn't fire
-            # the instant cooldown expires (was causing 30→60→decay→30→60 loop)
-            self._last_rate_limit_ts = until
-            logger.warning(
-                f"Rate-limit cooldown activated (level {self._cooldown_level}): "
-                f"pausing ALL API calls for {cooldown_duration:.0f}s"
-            )
-            # Escalate for next time (cap at level that produces MAX)
-            if cooldown_duration < self._COOLDOWN_MAX_SECONDS:
-                self._cooldown_level += 1
-            # Write cooldown to shared file so all containers see it
-            try:
-                with open(self._cooldown_path, 'w') as f:
-                    _lock_rate_file(f)
-                    try:
-                        json.dump({'cooldown_until': until}, f)
-                        f.flush()
-                    finally:
-                        _unlock_rate_file(f)
-            except Exception as e:
-                logger.debug(f"Cooldown write failed: {e}")
-
-    def record_success(self) -> None:
-        """No-op — successes don't interfere with the failure window."""
+        """No-op — fail-fast strategy handles rate limits at the call site."""
         pass
-
-    def _check_cooldown(self) -> float:
-        """Return seconds to wait if global cooldown is active, else 0."""
-        try:
-            if not os.path.exists(self._cooldown_path):
-                return 0.0
-            with open(self._cooldown_path, 'r') as f:
-                _lock_rate_file(f)
-                try:
-                    state = json.load(f)
-                finally:
-                    _unlock_rate_file(f)
-            until = state.get('cooldown_until', 0.0)
-            remaining = until - time.time()
-            return max(0.0, remaining)
-        except Exception:
-            return 0.0
 
 
 # Initialize the global HTTP rate limiter.
@@ -578,13 +477,7 @@ class KoreaInvestAPI:
         while attempt < max_attempts:
             # Cross-process rate limiting (shared across all containers).
             # Inside the loop so retries are also coordinated.
-            # Trading endpoints skip cooldown wait so OMS can still
-            # submit orders and query positions during market data cooldowns.
-            is_trading_url = '/trading/' in api_url
-            if hasattr(_http_limiter, 'wait'):
-                _http_limiter.wait(skip_cooldown=is_trading_url)
-            else:
-                _http_limiter.wait()
+            _http_limiter.wait()
 
             req_start = time.time()
             try:
@@ -638,14 +531,9 @@ class KoreaInvestAPI:
                                 _cache_cleanup()
                     return ar
 
-                # Handle rate limiting — signal the global cooldown tracker
-                # so all containers pause when the server is rejecting.
                 if res.status_code == 500 and 'EGW00201' in res.text:
                     logger.warning(f"KIS rate-limited on {api_url}, attempt {attempt + 1}")
-                    if hasattr(_http_limiter, 'record_rate_limit_hit'):
-                        _http_limiter.record_rate_limit_hit()
-                    max_attempts = max(max_attempts, 5)
-                    base_delay = max(base_delay, 2.0)
+                    return None  # Fail fast — strategy retries on next poll cycle
                 else:
                     logger.error(f"Error {res.status_code}: {res.text[:200]}")
 
