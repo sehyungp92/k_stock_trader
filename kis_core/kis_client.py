@@ -31,7 +31,7 @@ from .kis_decorators import rate_limit
 
 # Paper trading has a lower API rate limit (5 req/sec vs 20 live)
 _PAPER_MODE = os.environ.get("KIS_IS_PAPER", "true").lower() == "true"
-_MIN_INTERVAL = 0.2 if _PAPER_MODE else 0.05  # 5 req/sec paper, 20 req/sec live
+_MIN_INTERVAL = 0.25 if _PAPER_MODE else 0.05  # 4 req/sec paper (margin below 5 limit), 20 req/sec live
 from .kis_responses import APIResponse
 from .tick_table import round_to_tick
 
@@ -399,9 +399,6 @@ class KoreaInvestAPI:
             logger.warning(f"Circuit breaker OPEN - skipping request to {api_url}")
             return None
 
-        # Cross-process rate limiting (shared across all containers)
-        _http_limiter.wait()
-
         # Default: retry GETs (idempotent), not POSTs (orders)
         if retry_on_failure is None:
             retry_on_failure = not is_post_request
@@ -426,6 +423,10 @@ class KoreaInvestAPI:
 
         attempt = 0
         while attempt < max_attempts:
+            # Cross-process rate limiting (shared across all containers).
+            # Inside the loop so retries are also coordinated.
+            _http_limiter.wait()
+
             req_start = time.time()
             try:
                 if needs_real_api:
@@ -472,11 +473,12 @@ class KoreaInvestAPI:
                         )
                     return ar
 
-                # Handle rate limiting
+                # Handle rate limiting — force a cooldown to let the
+                # server-side sliding window drain before retrying.
                 if res.status_code == 500 and 'EGW00201' in res.text:
                     logger.warning(f"KIS rate-limited on {api_url}, attempt {attempt + 1}")
                     max_attempts = max(max_attempts, 5)
-                    base_delay = max(base_delay, 1.0)
+                    base_delay = max(base_delay, 2.0)
                 else:
                     logger.error(f"Error {res.status_code}: {res.text[:200]}")
 
