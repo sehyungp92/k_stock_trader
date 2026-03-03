@@ -8,7 +8,7 @@ from loguru import logger
 
 import yaml
 
-from kis_core import KoreaInvestEnv, KoreaInvestAPI, RateBudget, build_kis_config_from_env
+from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env, create_strategy_client
 from oms_client import OMSClient, Intent, IntentType, IntentStatus, Urgency, TimeHorizon, RiskPayload
 
 from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION
@@ -195,8 +195,11 @@ async def run_pcim():
     # Instrumentation
     instr = InstrumentationKit.create(api, strategy_type="pcim")
 
-    # Rate budget for REST calls (market data only - order flow goes via OMS)
-    rate_budget = RateBudget()
+    # Rate budget for REST calls (shared across containers via file-based coordination)
+    rate_budget = create_strategy_client(
+        STRATEGY_ID,
+        state_file=os.environ.get("RATE_BUDGET_STATE_FILE"),
+    )
 
     gemini_client = GeminiClient()
     signal_extractor = SignalExtractor(gemini_client)

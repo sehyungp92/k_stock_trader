@@ -85,7 +85,7 @@ def populate_lrs(
         api: KoreaInvestAPI instance.
         universe: List of ticker codes to fetch.
         sector_map: Dict mapping ticker -> sector name.
-        rate_budget: Optional RateBudget (unused for now; we do our own pacing).
+        rate_budget: Optional SharedRateBudgetClient (unused for now; we do our own pacing).
         ohlcv_days: Number of days of daily OHLCV to fetch per ticker.
         flow_days: Number of days of investor flow to fetch per ticker.
         index_days: Number of days of index data to fetch.

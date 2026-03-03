@@ -8,9 +8,10 @@ from loguru import logger
 
 import os
 from kis_core import (
-    KoreaInvestEnv, KoreaInvestAPI, VWAPLedger, RateBudget, KISWebSocketClient,
+    KoreaInvestEnv, KoreaInvestAPI, VWAPLedger, KISWebSocketClient,
     SectorExposure, SectorExposureConfig,
     filter_universe, build_kis_config_from_env,
+    create_strategy_client,
 )
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon
 
@@ -99,8 +100,11 @@ async def run_kpr():
     # Instrumentation
     instr = InstrumentationKit.create(api, strategy_type="kpr")
 
-    # Rate budget for REST calls (market data only - order flow goes via OMS)
-    rate_budget = RateBudget()
+    # Rate budget for REST calls (shared across containers via file-based coordination)
+    rate_budget = create_strategy_client(
+        STRATEGY_ID,
+        state_file=os.environ.get("RATE_BUDGET_STATE_FILE"),
+    )
     investor_provider = InvestorFlowProvider(api, rate_budget)
     program_provider = ProgramProvider(api, rate_budget)
     micro_provider = MicroPressureProvider()

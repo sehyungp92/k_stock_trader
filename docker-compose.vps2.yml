@@ -31,6 +31,7 @@ services:
       - .env
     volumes:
       - ./data/oms:/app/data
+      - rate_budget:/var/run/rate_budget
     environment:
       OMS_PORT: "8000"
       DATABASE_URL: postgresql://trading_writer:${POSTGRES_WRITER_PASSWORD}@postgres:5432/trading
@@ -44,6 +45,7 @@ services:
       KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
+      RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     ports:
       - "8000:8000"
     depends_on:
@@ -79,10 +81,12 @@ services:
       KPR_CONFIG: /app/config/kpr.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     volumes:
       - ./config:/app/config:ro
       - ./data/kpr:/app/data
       - ./data/kpr/instrumentation:/app/instrumentation/data
+      - rate_budget:/var/run/rate_budget
     depends_on:
       oms:
         condition: service_healthy
@@ -111,10 +115,12 @@ services:
       PCIM_CONFIG: /app/config/pcim.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     volumes:
       - ./config:/app/config:ro
       - pcim_data:/app/data
       - ./data/pcim/instrumentation:/app/instrumentation/data
+      - rate_budget:/var/run/rate_budget
     depends_on:
       oms:
         condition: service_healthy
@@ -138,3 +144,4 @@ services:
 volumes:
   postgres_data:
   pcim_data:
+  rate_budget:

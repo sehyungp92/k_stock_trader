@@ -11,9 +11,10 @@ from loguru import logger
 
 import os
 from kis_core import (
-    KoreaInvestEnv, KoreaInvestAPI, RateBudget, KISWebSocketClient, TickMessage, AskBidMessage,
+    KoreaInvestEnv, KoreaInvestAPI, KISWebSocketClient, TickMessage, AskBidMessage,
     SectorExposure, SectorExposureConfig,
     filter_universe, build_kis_config_from_env,
+    create_strategy_client,
 )
 from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, RiskPayload, IntentStatus
 
@@ -306,8 +307,11 @@ async def run_kmp():
     env = KoreaInvestEnv(build_kis_config_from_env())
     api = KoreaInvestAPI(env)
 
-    # Rate budget for REST calls
-    rate_budget = RateBudget()
+    # Rate budget for REST calls (shared across containers via file-based coordination)
+    rate_budget = create_strategy_client(
+        STRATEGY_ID,
+        state_file=os.environ.get("RATE_BUDGET_STATE_FILE"),
+    )
 
     # Connect to OMS service
     oms = OMSClient(os.environ.get("OMS_URL", "http://localhost:8000"), strategy_id=STRATEGY_ID)

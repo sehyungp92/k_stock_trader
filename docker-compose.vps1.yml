@@ -11,6 +11,7 @@ services:
       - .env
     volumes:
       - ./data/oms:/app/data
+      - rate_budget:/var/run/rate_budget
     environment:
       OMS_PORT: "8000"
       KIS_APP_KEY: ${KIS_APP_KEY}
@@ -24,6 +25,7 @@ services:
       KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
       KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
       DATABASE_URL: ${DATABASE_URL:-}  # Points to VPS 2's Postgres; if empty, falls back to in-memory
+      RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     ports:
       - "8000:8000"
     healthcheck:
@@ -56,10 +58,12 @@ services:
       KMP_CONFIG: /app/config/kmp.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     volumes:
       - ./config:/app/config:ro
       - ./data/kmp:/app/data
       - ./data/kmp/instrumentation:/app/instrumentation/data
+      - rate_budget:/var/run/rate_budget
     depends_on:
       oms:
         condition: service_healthy
@@ -88,11 +92,13 @@ services:
       NULRIMOK_CONFIG: /app/config/nulrimok.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     volumes:
       - ./config:/app/config:ro
       - ./data/nulrimok:/app/data
       - nulrimok_data:/data
       - ./data/nulrimok/instrumentation:/app/instrumentation/data
+      - rate_budget:/var/run/rate_budget
     depends_on:
       oms:
         condition: service_healthy
@@ -100,3 +106,4 @@ services:
 
 volumes:
   nulrimok_data:
+  rate_budget:

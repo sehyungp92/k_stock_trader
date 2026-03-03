@@ -7,8 +7,6 @@ import asyncio
 from typing import Dict, List, Optional, Tuple
 from loguru import logger
 
-from kis_core import RateBudget
-
 from .state import SymbolState, State
 from ..config.constants import GAP_SKIP
 
@@ -16,7 +14,7 @@ from ..config.constants import GAP_SKIP
 _RATE_LIMIT_SLEEP = 0.5
 
 
-async def _rate_limited_call(budget: Optional[RateBudget], endpoint: str, fn, *args, **kwargs):
+async def _rate_limited_call(budget: Optional[SharedRateBudgetClient], endpoint: str, fn, *args, **kwargs):
     """Execute REST call with rate limiting. Retries with backoff if limited."""
     for attempt in range(3):
         if budget is None or budget.try_consume(endpoint):
@@ -33,7 +31,7 @@ async def scan_at_0915(
     states: Dict[str, SymbolState],
     min_surge: float = 3.0,
     top_n: int = 40,
-    rate_budget: Optional[RateBudget] = None,
+    rate_budget: Optional[SharedRateBudgetClient] = None,
 ) -> List[str]:
     """
     Scan for value surge leaders at 09:15.
@@ -41,7 +39,7 @@ async def scan_at_0915(
     Also seeds Opening Range and early RVol/ATR from REST 1m bars.
 
     Args:
-        rate_budget: Shared RateBudget for cross-strategy REST coordination.
+        rate_budget: Shared rate budget for cross-strategy REST coordination.
     """
     scored: List[Tuple[str, float]] = []
 

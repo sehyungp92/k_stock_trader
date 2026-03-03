@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import random
 import threading
 import time
@@ -27,6 +28,10 @@ import requests
 from loguru import logger
 
 from .kis_decorators import rate_limit
+
+# Paper trading has a lower API rate limit (5 req/sec vs 20 live)
+_PAPER_MODE = os.environ.get("KIS_IS_PAPER", "true").lower() == "true"
+_MIN_INTERVAL = 0.2 if _PAPER_MODE else 0.05  # 5 req/sec paper, 20 req/sec live
 from .kis_responses import APIResponse
 from .tick_table import round_to_tick
 
@@ -248,6 +253,8 @@ class KoreaInvestAPI:
         self.htsid: str = cfg['htsid']
         self.using_url: str = cfg['using_url']
 
+        logger.info(f"API rate limit: {1/_MIN_INTERVAL:.0f} req/sec ({'paper' if _PAPER_MODE else 'live'})")
+
     # =========================================================================
     # CORE HTTP METHODS
     # =========================================================================
@@ -273,7 +280,7 @@ class KoreaInvestAPI:
     # Generous timeout for order operations (must not be dropped)
     _TIMEOUT_ORDER = (5, 15)
 
-    @rate_limit(min_interval=0.05)
+    @rate_limit(min_interval=_MIN_INTERVAL)
     def _url_fetch(
         self,
         api_url: str,

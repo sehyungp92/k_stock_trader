@@ -1,5 +1,7 @@
 """Nulrimok Strategy Main."""
 
+from __future__ import annotations
+
 import asyncio
 from collections import defaultdict, deque
 from datetime import datetime, date, time
@@ -9,10 +11,11 @@ from loguru import logger
 
 import os
 from kis_core import (
-    KoreaInvestEnv, KoreaInvestAPI, RateBudget, RollingSMA, aggregate_bars,
+    KoreaInvestEnv, KoreaInvestAPI, RollingSMA, aggregate_bars,
     KISWebSocketClient, BaseSubscriptionManager, TickMessage,
     SectorExposure, SectorExposureConfig,
     filter_universe, build_kis_config_from_env,
+    create_strategy_client,
 )
 from oms_client import OMSClient
 
@@ -69,7 +72,7 @@ def get_kst_now() -> datetime:
     return datetime.now(tz=ZoneInfo("Asia/Seoul"))
 
 
-async def fetch_30m_bar(api, ticker: str, rate_budget: Optional[RateBudget] = None) -> Optional[dict]:
+async def fetch_30m_bar(api, ticker: str, rate_budget: Optional[SharedRateBudgetClient] = None) -> Optional[dict]:
     if rate_budget and not rate_budget.try_consume("CHART"):
         logger.debug(f"{ticker}: 30m bar skipped — CHART rate budget exhausted")
         return None
@@ -193,8 +196,11 @@ async def run_nulrimok():
     # Instrumentation
     instr = InstrumentationKit.create(api, strategy_type="nulrimok")
 
-    # Rate budget for REST calls (market data only - order flow goes via OMS)
-    rate_budget = RateBudget()
+    # Rate budget for REST calls (shared across containers via file-based coordination)
+    rate_budget = create_strategy_client(
+        STRATEGY_ID,
+        state_file=os.environ.get("RATE_BUDGET_STATE_FILE"),
+    )
 
     lrs_path = os.environ.get("LRS_DB_PATH") or cfg.get("lrs_path", "lrs.db")
     lrs = LRSDatabase(lrs_path)
