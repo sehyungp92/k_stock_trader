@@ -73,21 +73,23 @@ class _CrossProcessLimiter:
     This guarantees the combined rate across all processes stays
     within 1/min_interval requests per second.
 
-    Consecutive rate-limit rejections are tracked IN-MEMORY (per-process)
-    so other containers' successes can't reset the counter.  When the
-    threshold is reached, a cooldown timestamp is written to a shared
-    file so ALL containers pause together.
+    Rate-limit rejections (EGW00201) are tracked via a SLIDING WINDOW
+    of failure timestamps (per-process, in-memory).  If N failures
+    occur within T seconds, a shared cooldown is activated so ALL
+    containers pause together.  Successes do NOT reset the window —
+    old failures simply age out.
     """
 
-    _COOLDOWN_CONSECUTIVE_THRESHOLD = 3   # consecutive EGW00201 hits
-    _COOLDOWN_SECONDS = 30.0              # pause duration
+    _COOLDOWN_FAILURE_THRESHOLD = 3   # failures within the window
+    _COOLDOWN_WINDOW_SECONDS = 15.0   # sliding window size
+    _COOLDOWN_SECONDS = 30.0          # pause duration
 
     def __init__(self, min_interval: float, state_file: str):
         self.min_interval = min_interval
         self._path = state_file
         self._cooldown_path = state_file.replace('.json', '_cooldown.json')
         self._local_lock = threading.Lock()
-        self._consecutive_failures = 0     # per-process counter
+        self._failure_timestamps: list[float] = []  # sliding window
         _dir = os.path.dirname(state_file)
         if _dir:
             os.makedirs(_dir, exist_ok=True)
@@ -129,12 +131,18 @@ class _CrossProcessLimiter:
             return wait_time
 
     def record_rate_limit_hit(self) -> None:
-        """Record a server-side EGW00201 rejection.  Tracked per-process
-        so other containers' successes don't reset the counter."""
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self._COOLDOWN_CONSECUTIVE_THRESHOLD:
-            self._consecutive_failures = 0
-            until = time.time() + self._COOLDOWN_SECONDS
+        """Record a server-side EGW00201 rejection using a sliding window.
+        Successes don't interfere — old failures age out naturally."""
+        now = time.time()
+        self._failure_timestamps.append(now)
+        # Trim entries outside the window
+        cutoff = now - self._COOLDOWN_WINDOW_SECONDS
+        self._failure_timestamps = [
+            t for t in self._failure_timestamps if t > cutoff
+        ]
+        if len(self._failure_timestamps) >= self._COOLDOWN_FAILURE_THRESHOLD:
+            self._failure_timestamps.clear()
+            until = now + self._COOLDOWN_SECONDS
             logger.warning(
                 f"Rate-limit cooldown activated: pausing ALL "
                 f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
@@ -152,8 +160,8 @@ class _CrossProcessLimiter:
                 logger.debug(f"Cooldown write failed: {e}")
 
     def record_success(self) -> None:
-        """Reset per-process consecutive failure counter."""
-        self._consecutive_failures = 0
+        """No-op — successes don't interfere with the failure window."""
+        pass
 
     def _check_cooldown(self) -> float:
         """Return seconds to wait if global cooldown is active, else 0."""
@@ -526,8 +534,6 @@ class KoreaInvestAPI:
                 if res.status_code == 200:
                     ar = APIResponse(res)
                     cb.record_success()
-                    if hasattr(_http_limiter, 'record_success'):
-                        _http_limiter.record_success()
                     # Log slow responses (>5s) that succeeded but are near timeout
                     if elapsed > 5.0:
                         logger.warning(
