@@ -132,61 +132,68 @@ class _CrossProcessLimiter:
     def record_rate_limit_hit(self) -> None:
         """Record a server-side EGW00201 rejection.  If consecutive
         hits reach the threshold, activate a global cooldown."""
-        with self._local_lock:
-            try:
-                with open(self._cooldown_path, 'r+') as f:
-                    _lock_rate_file(f)
+        try:
+            # Use 'a+' to create-or-open, then seek to read
+            with open(self._cooldown_path, 'a+') as f:
+                _lock_rate_file(f)
+                try:
+                    f.seek(0)
+                    raw = f.read()
                     try:
-                        try:
-                            state = json.load(f)
-                        except (json.JSONDecodeError, ValueError):
-                            state = {'consecutive': 0, 'cooldown_until': 0.0}
+                        state = json.loads(raw) if raw.strip() else {}
+                    except (json.JSONDecodeError, ValueError):
+                        state = {}
 
-                        state['consecutive'] = state.get('consecutive', 0) + 1
-                        if state['consecutive'] >= self._COOLDOWN_CONSECUTIVE_THRESHOLD:
-                            until = time.time() + self._COOLDOWN_SECONDS
-                            state['cooldown_until'] = until
-                            state['consecutive'] = 0
-                            logger.warning(
-                                f"Rate-limit cooldown activated: pausing ALL "
-                                f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
-                            )
+                    state['consecutive'] = state.get('consecutive', 0) + 1
+                    if state['consecutive'] >= self._COOLDOWN_CONSECUTIVE_THRESHOLD:
+                        until = time.time() + self._COOLDOWN_SECONDS
+                        state['cooldown_until'] = until
+                        state['consecutive'] = 0
+                        logger.warning(
+                            f"Rate-limit cooldown activated: pausing ALL "
+                            f"API calls for {self._COOLDOWN_SECONDS:.0f}s"
+                        )
 
-                        f.seek(0)
-                        f.truncate()
-                        json.dump(state, f)
-                    finally:
-                        _unlock_rate_file(f)
-            except Exception:
-                pass  # best-effort; don't break the request path
+                    f.seek(0)
+                    f.truncate()
+                    f.write(json.dumps(state))
+                    f.flush()
+                finally:
+                    _unlock_rate_file(f)
+        except Exception as e:
+            logger.debug(f"Cooldown record_hit failed: {e}")
 
     def record_success(self) -> None:
         """Reset consecutive failure counter on a successful request."""
-        with self._local_lock:
-            try:
-                with open(self._cooldown_path, 'r+') as f:
-                    _lock_rate_file(f)
+        try:
+            with open(self._cooldown_path, 'a+') as f:
+                _lock_rate_file(f)
+                try:
+                    f.seek(0)
+                    raw = f.read()
                     try:
-                        try:
-                            state = json.load(f)
-                        except (json.JSONDecodeError, ValueError):
-                            state = {}
-                        state['consecutive'] = 0
-                        f.seek(0)
-                        f.truncate()
-                        json.dump(state, f)
-                    finally:
-                        _unlock_rate_file(f)
-            except Exception:
-                pass
+                        state = json.loads(raw) if raw.strip() else {}
+                    except (json.JSONDecodeError, ValueError):
+                        state = {}
+                    state['consecutive'] = 0
+                    f.seek(0)
+                    f.truncate()
+                    f.write(json.dumps(state))
+                    f.flush()
+                finally:
+                    _unlock_rate_file(f)
+        except Exception as e:
+            logger.debug(f"Cooldown record_success failed: {e}")
 
     def _check_cooldown(self) -> float:
         """Return seconds to wait if global cooldown is active, else 0."""
         try:
-            with open(self._cooldown_path, 'r') as f:
+            with open(self._cooldown_path, 'a+') as f:
                 _lock_rate_file(f)
                 try:
-                    state = json.load(f)
+                    f.seek(0)
+                    raw = f.read()
+                    state = json.loads(raw) if raw.strip() else {}
                 finally:
                     _unlock_rate_file(f)
             until = state.get('cooldown_until', 0.0)
