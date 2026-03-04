@@ -31,6 +31,8 @@ from .src.missed_opportunity import MissedOpportunityLogger
 from .src.process_scorer import ProcessScorer
 from .src.regime_classifier import RegimeClassifier
 from .src.daily_snapshot import DailySnapshotBuilder
+from .src.exit_backfill import ExitBackfiller
+from .src.heartbeat import HeartbeatEmitter
 
 
 class InstrumentationKit:
@@ -47,6 +49,8 @@ class InstrumentationKit:
         data_provider,
         strategy_type: str,
         data_dir: str,
+        exit_backfiller: Optional[ExitBackfiller] = None,
+        heartbeat: Optional[HeartbeatEmitter] = None,
     ):
         self._trade_logger = trade_logger
         self._missed_logger = missed_logger
@@ -57,6 +61,12 @@ class InstrumentationKit:
         self._data_provider = data_provider
         self._strategy_type = strategy_type
         self._data_dir = Path(data_dir)
+        self._exit_backfiller = exit_backfiller or ExitBackfiller(data_dir=data_dir)
+        self._heartbeat = heartbeat or HeartbeatEmitter(
+            bot_id=f"k_stock_trader_{strategy_type}",
+            strategy_type=strategy_type,
+            data_dir=data_dir,
+        )
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="instr_backfill"
         )
@@ -174,6 +184,14 @@ class InstrumentationKit:
                     score_dict, self._strategy_type
                 )
                 self._write_score(score)
+                # Queue for post-exit price tracking
+                self._exit_backfiller.queue_exit(
+                    trade_id=trade_id,
+                    symbol=trade_event.pair,
+                    side=trade_event.side,
+                    exit_price=exit_price,
+                    exit_time=trade_event.exit_time or datetime.now(timezone.utc).isoformat(),
+                )
         except Exception as e:
             logger.debug(f"Instrumentation on_exit_fill error: {e}")
 
@@ -211,6 +229,9 @@ class InstrumentationKit:
             self._executor.submit(
                 self._missed_logger.run_backfill, self._data_provider
             )
+            self._executor.submit(
+                self._exit_backfiller.run_backfill, self._data_provider
+            )
         except Exception as e:
             logger.debug(f"Instrumentation periodic_tick error: {e}")
 
@@ -232,6 +253,53 @@ class InstrumentationKit:
             return self._regime_classifier.classify(symbol)
         except Exception:
             return "unknown"
+
+    def emit_heartbeat(self, active_positions: int = 0, open_orders: int = 0,
+                       uptime_s: float = 0, error_count_1h: int = 0) -> None:
+        """Emit periodic heartbeat. Call every 30s from strategy main loop."""
+        try:
+            self._heartbeat.emit(
+                active_positions=active_positions,
+                open_orders=open_orders,
+                uptime_s=uptime_s,
+                error_count_1h=error_count_1h,
+            )
+        except Exception:
+            pass
+
+    def emit_error(
+        self,
+        severity: str,
+        error_type: str,
+        message: str,
+        stack_trace: str = "",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Emit an explicit bot error event for sidecar forwarding.
+
+        Unlike instrumentation_errors (internal failures), these are
+        trading-relevant errors: OMS failures, API connectivity, data gaps.
+        """
+        try:
+            now = datetime.now(timezone.utc)
+            today = now.strftime("%Y-%m-%d")
+            record = {
+                "event_type": "bot_error",
+                "severity": severity,
+                "error_type": error_type,
+                "message": message,
+                "stack_trace": stack_trace,
+                "timestamp": now.isoformat(),
+                "strategy_type": self._strategy_type,
+                "context": context or {},
+            }
+            outdir = self._data_dir / "bot_errors"
+            outdir.mkdir(parents=True, exist_ok=True)
+            filepath = outdir / f"bot_errors_{today}.jsonl"
+            with open(filepath, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, default=str) + "\n")
+        except Exception:
+            pass
 
     def shutdown(self) -> None:
         """Clean up executor resources."""

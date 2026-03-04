@@ -41,6 +41,9 @@ _DIR_TO_EVENT_TYPE = {
     "scores": "process_quality",
     "daily": "daily_snapshot",
     "snapshots": "market_snapshot",
+    "exit_movements": "exit_movement",
+    "heartbeats": "heartbeat",
+    "bot_errors": "bot_error",
 }
 
 
