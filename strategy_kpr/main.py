@@ -452,6 +452,11 @@ async def run_kpr():
                             {"factor": "micro_pressure", "value": str(micro_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
                             {"factor": "program_flow", "value": str(program_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
                         ]
+                        from .core.fsm import _build_kpr_filter_decisions
+                        fd = _build_kpr_filter_decisions(
+                            investor_sig, micro_sig, program_sig,
+                            program_provider.available or False, s.confidence,
+                        )
                         instr.on_entry_fill(
                             trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
                             symbol=ticker, entry_price=s.entry_px, qty=s.qty,
@@ -459,6 +464,7 @@ async def run_kpr():
                             signal_id="kpr_mean_reversion",
                             strategy_params={"confidence": s.confidence, "setup_type": s.setup_type},
                             signal_factors=signal_factors,
+                            filter_decisions=fd,
                         )
                 else:
                     positions.discard(ticker)

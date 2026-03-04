@@ -226,6 +226,12 @@ async def _sync_positions(
                         spread_pct=s.spread_pct,
                         regime_breadth_ok=True, not_chop=True,
                     )
+                    from .core.gates import build_filter_decisions
+                    from .config.constants import SPREAD_MAX_PCT, RVOL_MIN
+                    fd = build_filter_decisions({
+                        "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
+                        "rvol_gate": (s.rvol_1m >= RVOL_MIN, RVOL_MIN, s.rvol_1m),
+                    })
                     instr.on_entry_fill(
                         trade_id=f"KMP:{ticker}:{now_kst.strftime('%Y%m%d')}",
                         symbol=ticker, entry_price=s.entry_px, qty=s.qty,
@@ -233,6 +239,7 @@ async def _sync_positions(
                         signal_strength=s.surge,
                         strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
                         signal_factors=signal_factors,
+                        filter_decisions=fd,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:

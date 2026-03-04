@@ -144,3 +144,25 @@ def is_past_entry_cutoff(now_kst, cutoff=None) -> bool:
 def is_past_flatten_time(now_kst, flatten=(14, 30)) -> bool:
     """Check if past flatten time."""
     return (now_kst.hour, now_kst.minute) >= flatten
+
+
+def build_filter_decisions(checks: dict) -> list:
+    """Build filter_decisions list from gate check results.
+
+    Args:
+        checks: dict mapping filter name to (passed, threshold, actual) tuples
+    """
+    decisions = []
+    for name, (passed, threshold, actual) in checks.items():
+        if passed:
+            margin = ((threshold - actual) / threshold * 100) if threshold else 0
+        else:
+            margin = ((actual - threshold) / threshold * 100) if threshold else 0
+        decisions.append({
+            "filter": name,
+            "threshold": threshold,
+            "actual": round(float(actual), 5) if isinstance(actual, float) else actual,
+            "passed": passed,
+            "margin_pct": round(margin, 1),
+        })
+    return decisions
