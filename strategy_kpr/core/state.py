@@ -58,6 +58,9 @@ class SymbolState:
     entry_order_id: Optional[str] = None
     order_submit_ts: float = 0.0  # Epoch time of order submission
 
+    # Sizing context (captured at entry for instrumentation)
+    sizing_context: Optional[dict] = None
+
     # Signals
     investor_signal: str = "NEUTRAL"
     micro_signal: str = "NEUTRAL"

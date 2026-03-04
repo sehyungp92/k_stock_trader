@@ -222,6 +222,7 @@ async def _sync_positions(
                         signal="or_break_acceptance", signal_id="kmp_breakout",
                         signal_strength=s.surge,
                         strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
+                        sizing_context=s.sizing_context,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:

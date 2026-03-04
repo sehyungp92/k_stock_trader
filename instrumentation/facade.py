@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -117,6 +117,7 @@ class InstrumentationKit:
         signal_id: str,
         signal_strength: float = 0.0,
         strategy_params: Optional[Dict[str, Any]] = None,
+        sizing_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Record a trade entry. Call after OMS fill confirmed."""
         try:
@@ -135,6 +136,7 @@ class InstrumentationKit:
                 passed_filters=[],
                 strategy_params=strategy_params or {},
                 market_regime=regime,
+                sizing_context=sizing_context,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")

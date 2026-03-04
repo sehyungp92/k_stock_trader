@@ -453,6 +453,7 @@ async def run_kpr():
                             signal=f"{s.setup_type or 'drift'}_reclaim",
                             signal_id="kpr_mean_reversion",
                             strategy_params={"confidence": s.confidence, "setup_type": s.setup_type},
+                            sizing_context=s.sizing_context,
                         )
                 else:
                     positions.discard(ticker)

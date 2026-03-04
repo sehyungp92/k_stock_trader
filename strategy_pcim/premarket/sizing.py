@@ -83,3 +83,22 @@ def compute_sizing(
     c.final_notional = notional
     logger.debug(f"{c.symbol}: raw={raw_qty}, final={c.final_qty}, notional={notional/1e6:.1f}M")
     return c
+
+
+def build_sizing_context(equity, target_risk_pct, stop_distance, atr_20d,
+                         conviction_score, soft_mult, tier_mult,
+                         raw_qty, final_qty, cap_reason=""):
+    """Return sizing decision context for instrumentation."""
+    return {
+        "sizing_model": "vol_parity_conviction",
+        "target_risk_pct": target_risk_pct,
+        "account_equity": int(equity),
+        "volatility_basis": round(float(atr_20d), 2),
+        "stop_distance": round(float(stop_distance), 2),
+        "conviction_score": round(float(conviction_score), 3),
+        "soft_mult": round(float(soft_mult), 3),
+        "tier_mult": round(float(tier_mult), 3),
+        "raw_qty": int(raw_qty),
+        "final_qty": int(final_qty),
+        "cap_reason": cap_reason,
+    }
