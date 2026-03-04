@@ -67,6 +67,8 @@ coverage.xml
 # =============================================
 .idea/
 .vscode/
+.agents/
+.claude/
 *.swp
 *.swo
 *~
