@@ -162,6 +162,26 @@ def quality_score(
     return max(0, min(100, score))
 
 
+def build_signal_factors(surge, min_surge, rvol_1m, imb, spread_pct,
+                         regime_breadth_ok, not_chop):
+    """Return top confluence factors for instrumentation."""
+    factors = [
+        {"factor": "value_surge", "value": round(float(surge), 2),
+         "threshold": round(float(min_surge), 2), "contribution": 0.20},
+        {"factor": "relative_volume", "value": round(float(rvol_1m), 2),
+         "threshold": 2.0, "contribution": 0.15},
+        {"factor": "tick_imbalance", "value": round(float(imb), 3),
+         "threshold": -0.10, "contribution": 0.15},
+        {"factor": "spread", "value": round(float(spread_pct), 4),
+         "threshold": 0.004, "contribution": 0.10},
+        {"factor": "regime_breadth", "value": 1 if regime_breadth_ok else 0,
+         "threshold": 1, "contribution": 0.15},
+        {"factor": "not_chop", "value": 1 if not_chop else 0,
+         "threshold": 1, "contribution": 0.15},
+    ]
+    return sorted(factors, key=lambda f: f["contribution"], reverse=True)[:5]
+
+
 def apply_liquidity_cap(qty: int, entry_px: float, last_5m_value: float) -> int:
     """
     Apply liquidity cap to position size.

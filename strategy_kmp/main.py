@@ -20,11 +20,12 @@ from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, Risk
 
 from .config.constants import STRATEGY_ID, FLATTEN_TIME, RVOL_MIN
 from .config.switches import kmp_switches
-from .core.gates import is_past_entry_cutoff
+from .core.gates import is_past_entry_cutoff, min_surge_threshold, minutes_since_0916
 from .config.universe_meta import load_universe_meta
 from .core.state import SymbolState, State
 from .core.scanner import scan_at_0915, apply_trend_anchor
 from .core.fsm import alpha_step
+from .core.sizing import build_signal_factors
 from .core.exits import check_exit_conditions
 from .core.reconcile import reconcile_exposure
 from .adapters.program_regime import MarketProgramRegime, program_poll_task
@@ -216,12 +217,22 @@ async def _sync_positions(
                 exposure.on_fill(ticker, alloc_qty, s.entry_px)
                 logger.info(f"{ticker}: Fill detected, IN_POSITION @ {s.entry_px:.0f} qty={s.qty}")
                 if instr:
+                    now_kst = get_kst_now()
+                    m = minutes_since_0916(now_kst)
+                    _min_surge = min_surge_threshold(m)
+                    signal_factors = build_signal_factors(
+                        surge=s.surge, min_surge=_min_surge,
+                        rvol_1m=s.rvol_1m, imb=s.imb,
+                        spread_pct=s.spread_pct,
+                        regime_breadth_ok=True, not_chop=True,
+                    )
                     instr.on_entry_fill(
-                        trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
+                        trade_id=f"KMP:{ticker}:{now_kst.strftime('%Y%m%d')}",
                         symbol=ticker, entry_price=s.entry_px, qty=s.qty,
                         signal="or_break_acceptance", signal_id="kmp_breakout",
                         signal_strength=s.surge,
                         strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
+                        signal_factors=signal_factors,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:

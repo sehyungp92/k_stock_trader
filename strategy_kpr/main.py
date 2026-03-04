@@ -447,12 +447,18 @@ async def run_kpr():
                 if s.fsm == FSMState.IN_POSITION:
                     positions.add(ticker)
                     if intent_id and instr:
+                        signal_factors = [
+                            {"factor": "investor_flow", "value": str(investor_sig), "threshold": "ACCUMULATE", "contribution": 0.40},
+                            {"factor": "micro_pressure", "value": str(micro_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
+                            {"factor": "program_flow", "value": str(program_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
+                        ]
                         instr.on_entry_fill(
                             trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
                             symbol=ticker, entry_price=s.entry_px, qty=s.qty,
                             signal=f"{s.setup_type or 'drift'}_reclaim",
                             signal_id="kpr_mean_reversion",
                             strategy_params={"confidence": s.confidence, "setup_type": s.setup_type},
+                            signal_factors=signal_factors,
                         )
                 else:
                     positions.discard(ticker)

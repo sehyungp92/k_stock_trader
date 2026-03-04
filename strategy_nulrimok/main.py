@@ -426,11 +426,22 @@ async def run_nulrimok():
                                 if sector_exposure:
                                     sector_exposure.on_fill(ticker, alloc_qty, cost_basis)
                                 if instr:
+                                    signal_factors = [
+                                        {"factor": "daily_rank", "value": round(float(ticker_artifact.daily_rank), 3),
+                                         "threshold": 0.5, "contribution": 0.30},
+                                        {"factor": "flow_score", "value": round(float(ticker_artifact.flow_score), 3),
+                                         "threshold": 0.0, "contribution": 0.25},
+                                        {"factor": "avwap_proximity", "value": round(float(ticker_artifact.avwap_proximity), 4),
+                                         "threshold": 0.01, "contribution": 0.25},
+                                        {"factor": "vol_ratio", "value": round(float(volume / vol_avg), 2) if vol_avg > 0 else 0.0,
+                                         "threshold": 1.0, "contribution": 0.20},
+                                    ]
                                     instr.on_entry_fill(
                                         trade_id=f"NULRIMOK:{ticker}:{now.strftime('%Y%m%d')}",
                                         symbol=ticker, entry_price=cost_basis, qty=alloc_qty,
                                         signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                         strategy_params={"avwap_ref": avwap, "atr30m": atr30m, "stop": stop},
+                                        signal_factors=signal_factors,
                                     )
                                 logger.info(f"{ticker}: Fill confirmed, qty={alloc_qty}")
                             else:

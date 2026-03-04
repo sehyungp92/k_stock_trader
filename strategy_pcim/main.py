@@ -552,6 +552,16 @@ async def run_pcim():
                         ))
                         cand = next((c for c in approved_watchlist if c.symbol == symbol), None)
                         if instr and cand:
+                            signal_factors = [
+                                {"factor": "conviction_score", "value": round(float(getattr(cand, 'conviction_score', 0.0)), 2),
+                                 "threshold": 0.5, "contribution": 0.35},
+                                {"factor": "influencer_count", "value": getattr(cand, 'influencer_count', 1),
+                                 "threshold": 1, "contribution": 0.25},
+                                {"factor": "gap_pct", "value": round(float(getattr(cand, 'gap_pct', 0.0)), 4),
+                                 "threshold": 0.0, "contribution": 0.20},
+                                {"factor": "soft_mult", "value": round(float(getattr(cand, 'soft_mult', 1.0)), 2),
+                                 "threshold": 1.0, "contribution": 0.20},
+                            ]
                             instr.on_entry_fill(
                                 trade_id=f"PCIM:{symbol}:{today.strftime('%Y%m%d')}",
                                 symbol=symbol, entry_price=avg_price, qty=alloc_qty,
@@ -561,6 +571,7 @@ async def run_pcim():
                                     "bucket": cand.bucket, "tier": getattr(cand, 'tier', ''),
                                     "influencer_id": getattr(cand, 'influencer_id', ''),
                                 },
+                                signal_factors=signal_factors,
                             )
                         logger.info(f"{symbol}: Fill confirmed, position created @ {avg_price:.0f} qty={alloc_qty}")
                         # Track Bucket A hit (filled)
