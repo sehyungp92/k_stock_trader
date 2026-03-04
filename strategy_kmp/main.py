@@ -26,13 +26,14 @@ from .core.state import SymbolState, State
 from .core.scanner import scan_at_0915, apply_trend_anchor
 from .core.fsm import alpha_step
 from .core.sizing import build_signal_factors
-from .core.exits import check_exit_conditions
+from .core.exits import check_exit_conditions, build_mfe_mae_context
 from .core.reconcile import reconcile_exposure
 from .adapters.program_regime import MarketProgramRegime, program_poll_task
 from .adapters.ws_manager import SubscriptionManager, refresh_focus_list, release_non_position_slots
 from .adapters.tick_dispatch import on_tick, on_ask_bid
 from .premarket import compute_baselines
 from instrumentation.facade import InstrumentationKit
+from instrumentation.src.drawdown import compute_drawdown_context
 
 
 def load_config() -> dict:
@@ -181,6 +182,8 @@ async def _sync_positions(
     last_prices: Dict[str, float],
     exposure: SectorExposure,
     instr: InstrumentationKit = None,
+    daily_pnl_pct: float = 0.0,
+    gross_exposure_pct: float | None = None,
 ) -> None:
     """Sync FSM state from OMS positions each loop."""
     all_positions = await oms.get_all_positions()
@@ -210,6 +213,7 @@ async def _sync_positions(
                 s.entry_px = getattr(alloc, 'cost_basis', 0.0) or s.entry_px
                 s.qty = alloc_qty
                 s.max_fav = max(s.max_fav, last_prices.get(ticker, s.entry_px))
+                s.min_adverse = min(s.min_adverse, last_prices.get(ticker, s.entry_px))
                 s.trail_px = max(s.trail_px, s.structure_stop)
                 s.entry_ts = _time.time()
                 s.fsm = State.IN_POSITION
@@ -232,6 +236,14 @@ async def _sync_positions(
                         "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
                         "rvol_gate": (s.rvol_1m >= RVOL_MIN, RVOL_MIN, s.rvol_1m),
                     })
+                    portfolio_state = {
+                        "total_exposure_pct": gross_exposure_pct,
+                        "num_positions": len(all_positions) if all_positions else 0,
+                        "concurrent_positions_same_strategy": sum(
+                            1 for p in (all_positions or {}).values() if p.get_allocation("KMP") > 0
+                        ),
+                    }
+                    dd_ctx = compute_drawdown_context(daily_pnl_pct)
                     instr.on_entry_fill(
                         trade_id=f"KMP:{ticker}:{now_kst.strftime('%Y%m%d')}",
                         symbol=ticker, entry_price=s.entry_px, qty=s.qty,
@@ -241,6 +253,8 @@ async def _sync_positions(
                         signal_factors=signal_factors,
                         filter_decisions=fd,
                         sizing_context=s.sizing_context,
+                        portfolio_state=portfolio_state,
+                        drawdown_context=dd_ctx,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:
@@ -250,6 +264,7 @@ async def _sync_positions(
                         trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
                         exit_price=last_prices.get(ticker, s.entry_px),
                         exit_reason="external_close",
+                        mfe_mae_context=build_mfe_mae_context(s),
                     )
                 exposure.on_close(ticker, s.qty, s.entry_px)
                 s.fsm = State.DONE
@@ -261,6 +276,7 @@ async def _sync_positions(
                         trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
                         exit_price=last_prices.get(ticker, s.entry_px),
                         exit_reason="exit_confirmed",
+                        mfe_mae_context=build_mfe_mae_context(s),
                     )
                 exposure.on_close(ticker, s.qty, s.entry_px)
                 s.fsm = State.DONE
@@ -551,7 +567,11 @@ async def run_kmp():
             last_reconcile_ts = _time.time()
 
         # Sync fills from OMS: ARMED → IN_POSITION / position closed → DONE
-        await _sync_positions(oms, states, candidates, last_prices, exposure, instr=instr)
+        await _sync_positions(
+            oms, states, candidates, last_prices, exposure, instr=instr,
+            daily_pnl_pct=acct.daily_pnl_pct if acct else 0.0,
+            gross_exposure_pct=acct.gross_exposure_pct if acct else None,
+        )
 
         # Process each candidate
         for ticker in candidates:

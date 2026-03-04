@@ -11,7 +11,7 @@ import yaml
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env, create_strategy_client
 from oms_client import OMSClient, Intent, IntentType, IntentStatus, Urgency, TimeHorizon, RiskPayload
 
-from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION, HARD_FILTERS
+from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION, HARD_FILTERS, SIZING
 from .config.switches import pcim_switches
 from .external.youtube.watcher import YouTubeWatcher
 from .external.youtube.models import ChannelConfig
@@ -25,7 +25,7 @@ from .pipeline.trend_gate import check_trend_gate
 from .premarket.regime import compute_regime
 from .premarket.bucketing import apply_bucketing
 from .premarket.tier import apply_tier
-from .premarket.sizing import compute_sizing
+from .premarket.sizing import compute_sizing, build_sizing_context
 from .execution.bucket_a import check_bucket_a_trigger
 from .execution.bucket_b import check_bucket_b_trigger
 from .execution.vetoes import check_execution_veto
@@ -37,6 +37,8 @@ from .positions.trailing import update_trailing_stop_eod
 from .positions.time_exit import check_time_exit
 from .analytics.hit_tracker import BucketAHitTracker
 from instrumentation.facade import InstrumentationKit
+from instrumentation.src.drawdown import compute_drawdown_context
+from instrumentation.src.mfe_mae import build_mfe_mae_context
 
 
 def load_config() -> dict:
@@ -251,6 +253,10 @@ async def run_pcim():
     state_dir = os.getenv("DATA_DIR", "/app/data")
     bucket_a_tracker = BucketAHitTracker.load(state_dir)
     bucket_a_pending: Dict[str, int] = {}  # symbol -> intended_qty for tracking fills
+
+    # MFE/MAE tracking dicts
+    _mfe_prices: Dict[str, float] = {}
+    _mae_prices: Dict[str, float] = {}
 
     # Runtime state
     candidates: List[Candidate] = []
@@ -567,6 +573,9 @@ async def run_pcim():
             )
 
         if time(9, 1) <= now.time() <= time(cancel_at[0], cancel_at[1]) and not intraday_halted:
+            # Refresh account state for accurate exposure tracking in fill instrumentation
+            acct = await oms.get_account_state()
+
             # Intraday halt check
             if kospi_prev_close:
                 kospi_now = api.get_index_realtime("KOSPI") or 0.0
@@ -595,6 +604,8 @@ async def run_pcim():
                             qty=alloc_qty,
                             atr_at_entry=pending['atr'],
                         ))
+                        _mfe_prices[symbol] = avg_price
+                        _mae_prices[symbol] = avg_price
                         cand = next((c for c in approved_watchlist if c.symbol == symbol), None)
                         if instr and cand:
                             signal_factors = [
@@ -607,6 +618,25 @@ async def run_pcim():
                                 {"factor": "soft_mult", "value": round(float(getattr(cand, 'soft_mult', 1.0)), 2),
                                  "threshold": 1.0, "contribution": 0.20},
                             ]
+                            stop_distance = SIZING["STOP_ATR_MULT"] * cand.atr_20d
+                            sizing_ctx = build_sizing_context(
+                                equity=equity,
+                                target_risk_pct=SIZING["TARGET_RISK_PCT"],
+                                stop_distance=stop_distance,
+                                atr_20d=cand.atr_20d,
+                                conviction_score=getattr(cand, 'conviction_score', 0.0),
+                                soft_mult=getattr(cand, 'soft_mult', 1.0),
+                                tier_mult=getattr(cand, 'tier_mult', 1.0),
+                                raw_qty=getattr(cand, 'raw_qty', 0),
+                                final_qty=alloc_qty,
+                            )
+                            open_pcim = position_manager.get_open_positions()
+                            portfolio_state = {
+                                "total_exposure_pct": acct.gross_exposure_pct if acct else None,
+                                "num_positions": len(all_positions) if all_positions else 0,
+                                "concurrent_positions_same_strategy": len(open_pcim),
+                            }
+                            dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
                             instr.on_entry_fill(
                                 trade_id=f"PCIM:{symbol}:{today.strftime('%Y%m%d')}",
                                 symbol=symbol, entry_price=avg_price, qty=alloc_qty,
@@ -617,6 +647,9 @@ async def run_pcim():
                                     "influencer_id": getattr(cand, 'influencer_id', ''),
                                 },
                                 signal_factors=signal_factors,
+                                sizing_context=sizing_ctx,
+                                portfolio_state=portfolio_state,
+                                drawdown_context=dd_ctx,
                             )
                         logger.info(f"{symbol}: Fill confirmed, position created @ {avg_price:.0f} qty={alloc_qty}")
                         # Track Bucket A hit (filled)
@@ -758,15 +791,30 @@ async def run_pcim():
                 quote = api.get_quote(pos.symbol)
                 current_price = quote['last']
 
+                # MFE/MAE update
+                if pos.symbol in _mfe_prices:
+                    _mfe_prices[pos.symbol] = max(_mfe_prices[pos.symbol], current_price)
+                    _mae_prices[pos.symbol] = min(_mae_prices[pos.symbol], current_price)
+
                 if check_stop_hit(pos, current_price):
                     intent = create_exit_intent(pos.symbol, pos.remaining_qty, "STOP", Urgency.HIGH)
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
                         if instr:
+                            mfe_mae = build_mfe_mae_context(
+                                entry_price=pos.entry_price,
+                                stop_price=pos.current_stop,
+                                max_fav_price=_mfe_prices.pop(pos.symbol, 0),
+                                min_adverse_price=_mae_prices.pop(pos.symbol, float('inf')),
+                            )
                             instr.on_exit_fill(
                                 trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
                                 exit_price=current_price, exit_reason="stop",
+                                mfe_mae_context=mfe_mae,
                             )
+                        else:
+                            _mfe_prices.pop(pos.symbol, None)
+                            _mae_prices.pop(pos.symbol, None)
                         position_manager.close_position(pos.symbol, "STOP")
                     else:
                         logger.warning(f"{pos.symbol}: Stop exit {result.status.name} - {result.message}")
@@ -778,9 +826,16 @@ async def run_pcim():
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
                         if instr:
+                            mfe_mae = build_mfe_mae_context(
+                                entry_price=pos.entry_price,
+                                stop_price=pos.current_stop,
+                                max_fav_price=_mfe_prices.get(pos.symbol, 0),
+                                min_adverse_price=_mae_prices.get(pos.symbol, float('inf')),
+                            )
                             instr.on_exit_fill(
                                 trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
                                 exit_price=current_price, exit_reason="take_profit",
+                                mfe_mae_context=mfe_mae,
                             )
                         pos.tp_done = True
                         position_manager.reduce_position(pos.symbol, qty)
@@ -794,10 +849,20 @@ async def run_pcim():
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
                         if instr:
+                            mfe_mae = build_mfe_mae_context(
+                                entry_price=pos.entry_price,
+                                stop_price=pos.current_stop,
+                                max_fav_price=_mfe_prices.pop(pos.symbol, 0),
+                                min_adverse_price=_mae_prices.pop(pos.symbol, float('inf')),
+                            )
                             instr.on_exit_fill(
                                 trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
                                 exit_price=current_price, exit_reason="time_exit",
+                                mfe_mae_context=mfe_mae,
                             )
+                        else:
+                            _mfe_prices.pop(pos.symbol, None)
+                            _mae_prices.pop(pos.symbol, None)
                         position_manager.close_position(pos.symbol, "DAY15_EXIT")
                     else:
                         logger.warning(f"{pos.symbol}: Time exit {result.status.name} - {result.message}")
@@ -829,6 +894,8 @@ async def run_pcim():
             processed_video_ids.clear()
             last_night_pipeline_ts = 0.0
             position_manager.reset_daily_state()
+            _mfe_prices.clear()
+            _mae_prices.clear()
             # Save and potentially reset Bucket A hit tracker
             bucket_a_tracker.reset_if_new_period(today)
             bucket_a_tracker.save(state_dir)

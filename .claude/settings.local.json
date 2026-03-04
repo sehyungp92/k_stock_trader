@@ -32,7 +32,8 @@
       "Bash(touch:*)",
       "Bash(bash:*)",
       "Bash(python3:*)",
-      "Bash(ssh sehyu-vps2:*)"
+      "Bash(ssh sehyu-vps2:*)",
+      "Bash(pytest:*)"
     ]
   }
 }

@@ -34,6 +34,8 @@ from .adapters.ws_handler import (
     make_kpr_tick_handler, sync_hot_subscriptions,
 )
 from instrumentation.facade import InstrumentationKit
+from instrumentation.src.drawdown import compute_drawdown_context
+from instrumentation.src.mfe_mae import build_mfe_mae_context
 
 
 def load_config() -> dict:
@@ -162,6 +164,10 @@ async def run_kpr():
             logger.info("KPR WebSocket connected for HOT tier")
         else:
             logger.warning("KPR WebSocket connect failed; HOT tier uses REST polling")
+
+    # MFE/MAE tracking dicts
+    _mfe_prices: Dict[str, float] = {}
+    _mae_prices: Dict[str, float] = {}
 
     # Track last processed bar timestamp per symbol (fixes VWAP double-counting)
     last_bar_ts: Dict[str, object] = {}
@@ -329,6 +335,11 @@ async def run_kpr():
 
                 close = float(bar.get('close', 0))
 
+                # --- MFE/MAE update for in-position symbols ---
+                if ticker in _mfe_prices:
+                    _mfe_prices[ticker] = max(_mfe_prices[ticker], close)
+                    _mae_prices[ticker] = min(_mae_prices[ticker], close)
+
                 # --- Feature update: in_vwap_band = 2-5% below VWAP ---
                 if vwap > 0:
                     depth = (vwap - close) / vwap
@@ -400,11 +411,21 @@ async def run_kpr():
                             positions.discard(ticker)
                             sector_exposure.on_close(ticker, s.qty, close)
                             if instr:
+                                mfe_mae = build_mfe_mae_context(
+                                    entry_price=s.entry_px,
+                                    stop_price=s.stop_level or s.entry_px * 0.98,
+                                    max_fav_price=_mfe_prices.pop(ticker, 0),
+                                    min_adverse_price=_mae_prices.pop(ticker, float('inf')),
+                                )
                                 instr.on_exit_fill(
                                     trade_id=f"KPR:{ticker}:{(s.entry_ts or now).strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
                                     exit_price=close,
                                     exit_reason=getattr(s, '_exit_reason', 'unknown'),
+                                    mfe_mae_context=mfe_mae,
                                 )
+                            else:
+                                _mfe_prices.pop(ticker, None)
+                                _mae_prices.pop(ticker, None)
                             logger.info(f"{ticker}: Exit fill confirmed, DONE")
                         elif alloc_qty < s.remaining_qty:
                             # Partial fill — update remaining and stay PENDING or go back
@@ -446,6 +467,8 @@ async def run_kpr():
 
                 if s.fsm == FSMState.IN_POSITION:
                     positions.add(ticker)
+                    _mfe_prices[ticker] = s.entry_px
+                    _mae_prices[ticker] = s.entry_px
                     if intent_id and instr:
                         signal_factors = [
                             {"factor": "investor_flow", "value": str(investor_sig), "threshold": "ACCUMULATE", "contribution": 0.40},
@@ -457,6 +480,14 @@ async def run_kpr():
                             investor_sig, micro_sig, program_sig,
                             program_provider.available or False, s.confidence,
                         )
+                        # Portfolio state at entry — positions set tracks KPR positions only.
+                        # acct.gross_exposure_pct is available from the outer loop.
+                        portfolio_state = {
+                            "total_exposure_pct": acct.gross_exposure_pct if acct else 0.0,
+                            "num_positions": len(positions),
+                            "concurrent_positions_same_strategy": len(positions),
+                        }
+                        dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
                         instr.on_entry_fill(
                             trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
                             symbol=ticker, entry_price=s.entry_px, qty=s.qty,
@@ -466,6 +497,8 @@ async def run_kpr():
                             signal_factors=signal_factors,
                             filter_decisions=fd,
                             sizing_context=s.sizing_context,
+                            portfolio_state=portfolio_state,
+                            drawdown_context=dd_ctx,
                         )
                 else:
                     positions.discard(ticker)

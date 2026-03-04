@@ -50,6 +50,7 @@ def update_trail(
 ) -> None:
     """Update trailing stop based on price action."""
     s.max_fav = max(s.max_fav, last_px)
+    s.min_adverse = min(s.min_adverse, last_px)
 
     gain = s.max_fav - s.entry_px
     if gain <= 0:
@@ -101,3 +102,14 @@ def check_exit_conditions(
         return True, "trailing_stop"
 
     return False, ""
+
+
+def build_mfe_mae_context(s: SymbolState) -> dict:
+    """Build MFE/MAE context from KMP SymbolState at exit."""
+    from instrumentation.src.mfe_mae import build_mfe_mae_context as _build
+    return _build(
+        entry_price=s.entry_px,
+        stop_price=s.structure_stop,
+        max_fav_price=s.max_fav,
+        min_adverse_price=s.min_adverse,
+    )

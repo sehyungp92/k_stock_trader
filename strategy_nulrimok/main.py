@@ -22,6 +22,7 @@ from oms_client import OMSClient
 from .config.constants import (
     STRATEGY_ID, DSE_START, DSE_END, IEPE_START, IEPE_END, ACTIVE_SET_K,
     SECTOR_CAP_PCT, FLOW_EXIT_CHECK_START, FLOW_EXIT_START, FLOW_EXIT_END,
+    ENTRY_VOL_DRYUP_PCT,
 )
 from .config.switches import nulrimok_switches
 from .lrs.db import LRSDatabase
@@ -31,6 +32,8 @@ from .iepe.entry import TickerEntryState, EntryState, process_entry
 from .iepe.exits import PositionState, SetupType, manage_nulrimok_position, handle_flow_reversal_exits
 from .iepe.rotation import rotate_active_set
 from instrumentation.facade import InstrumentationKit
+from instrumentation.src.drawdown import compute_drawdown_context
+from instrumentation.src.mfe_mae import build_mfe_mae_context
 
 VOL_HISTORY_LEN = 20
 NEAR_BAND_PCT = 0.01  # Spec §7.3: 1.0% threshold for rotation protection
@@ -223,6 +226,10 @@ async def run_nulrimok():
     vol_histories: Dict[str, deque] = defaultdict(lambda: deque(maxlen=VOL_HISTORY_LEN))
     near_band_recently: Dict[str, bool] = {}
     last_near_band_time: Dict[str, datetime] = {}  # Track when price last entered band
+
+    # MFE/MAE tracking dicts
+    _mfe_prices: Dict[str, float] = {}
+    _mae_prices: Dict[str, float] = {}
 
     # Advisory sector exposure tracking (pct-based for Nulrimok).
     # The OMS RiskGateway is the authoritative source for sector caps.
@@ -421,6 +428,8 @@ async def run_nulrimok():
                                 pos = PositionState(ticker, now, cost_basis, alloc_qty, stop)
                                 pos.atr30m = atr30m
                                 position_states[ticker] = pos
+                                _mfe_prices[ticker] = cost_basis
+                                _mae_prices[ticker] = cost_basis
                                 entry_state.state = EntryState.TRIGGERED
                                 # Update sector exposure
                                 if sector_exposure:
@@ -436,12 +445,34 @@ async def run_nulrimok():
                                         {"factor": "vol_ratio", "value": round(float(volume / vol_avg), 2) if vol_avg > 0 else 0.0,
                                          "threshold": 1.0, "contribution": 0.20},
                                     ]
+                                    # Filter decisions for passing entries
+                                    _budget = DAILY_RISK_BUDGET_PCT * artifact.risk_mult
+                                    _current_risk = compute_total_open_risk(position_states, equity)
+                                    _vol_ratio = volume / vol_avg if vol_avg > 0 else 1.0
+                                    fd = [
+                                        {"filter": "risk_budget", "threshold": round(_budget, 5),
+                                         "actual": round(_current_risk, 5), "passed": True,
+                                         "margin_pct": round((_budget - _current_risk) / _budget * 100, 1) if _budget else 0},
+                                        {"filter": "vol_dryup", "threshold": ENTRY_VOL_DRYUP_PCT,
+                                         "actual": round(_vol_ratio, 3), "passed": True,
+                                         "margin_pct": round((ENTRY_VOL_DRYUP_PCT - _vol_ratio) / ENTRY_VOL_DRYUP_PCT * 100, 1) if ENTRY_VOL_DRYUP_PCT else 0},
+                                    ]
+                                    portfolio_state = {
+                                        "total_exposure_pct": gross_exposure_pct if gross_exposure_pct is not None else 0.0,
+                                        "num_positions": len(position_states),
+                                        "concurrent_positions_same_strategy": len(position_states),
+                                    }
+                                    dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
                                     instr.on_entry_fill(
                                         trade_id=f"NULRIMOK:{ticker}:{now.strftime('%Y%m%d')}",
                                         symbol=ticker, entry_price=cost_basis, qty=alloc_qty,
                                         signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                         strategy_params={"avwap_ref": avwap, "atr30m": atr30m, "stop": stop},
                                         signal_factors=signal_factors,
+                                        filter_decisions=fd,
+                                        sizing_context=entry_state.sizing_context,
+                                        portfolio_state=portfolio_state,
+                                        drawdown_context=dd_ctx,
                                     )
                                 logger.info(f"{ticker}: Fill confirmed, qty={alloc_qty}")
                             else:
@@ -456,17 +487,31 @@ async def run_nulrimok():
 
                     if ticker in position_states:
                         pos = position_states[ticker]
+                        # MFE/MAE update
+                        if ticker in _mfe_prices:
+                            _mfe_prices[ticker] = max(_mfe_prices[ticker], close)
+                            _mae_prices[ticker] = min(_mae_prices[ticker], close)
                         exit_id = await manage_nulrimok_position(
                             pos, bar, avwap,
                             vol_avg, now.time() >= time(15, 5), oms)
                         # Remove position after full exit (not partial)
                         if exit_id and pos.remaining_qty <= 0:
                             if instr:
+                                mfe_mae = build_mfe_mae_context(
+                                    entry_price=pos.entry_price,
+                                    stop_price=pos.stop,
+                                    max_fav_price=_mfe_prices.pop(ticker, 0),
+                                    min_adverse_price=_mae_prices.pop(ticker, float('inf')),
+                                )
                                 instr.on_exit_fill(
                                     trade_id=f"NULRIMOK:{ticker}:{pos.entry_time.strftime('%Y%m%d')}",
                                     exit_price=bar['close'],
                                     exit_reason="managed_exit",
+                                    mfe_mae_context=mfe_mae,
                                 )
+                            else:
+                                _mfe_prices.pop(ticker, None)
+                                _mae_prices.pop(ticker, None)
                             if sector_exposure:
                                 sector_exposure.on_close(ticker, pos.qty, pos.entry_price)
                             del position_states[ticker]

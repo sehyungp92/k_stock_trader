@@ -130,6 +130,9 @@ class InstrumentationKit:
         signal_factors: Optional[list] = None,
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
         sizing_context: Optional[Dict[str, Any]] = None,
+        portfolio_state: Optional[Dict[str, Any]] = None,
+        drawdown_context: Optional[Dict[str, Any]] = None,
+        experiment_id: Optional[str] = None,
     ) -> None:
         """Record a trade entry. Call after OMS fill confirmed."""
         try:
@@ -153,6 +156,9 @@ class InstrumentationKit:
                 signal_factors=signal_factors or [],
                 filter_decisions=filter_decisions or [],
                 sizing_context=sizing_context,
+                portfolio_state=portfolio_state,
+                drawdown_context=drawdown_context,
+                experiment_id=experiment_id,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")
@@ -162,6 +168,7 @@ class InstrumentationKit:
         trade_id: str,
         exit_price: float,
         exit_reason: str,
+        mfe_mae_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Record a trade exit and compute process score."""
         try:
@@ -169,6 +176,7 @@ class InstrumentationKit:
                 trade_id=trade_id,
                 exit_price=exit_price,
                 exit_reason=exit_reason,
+                mfe_mae_context=mfe_mae_context,
             )
             if trade_event:
                 # Build scorer-compatible dict

@@ -30,6 +30,7 @@ class TickerEntryState:
     pending_fill_cycles: int = 0  # Track cycles waiting for fill
     conf_type: str = ""  # Confirmation type for signal_hash
     anchor_date: str = ""  # For signal_hash
+    sizing_context: dict | None = None  # Cached for fill confirmation instrumentation
 
     def reset(self):
         self.state = EntryState.IDLE
@@ -39,6 +40,7 @@ class TickerEntryState:
         self.pending_fill_cycles = 0
         self.conf_type = ""
         self.anchor_date = ""
+        self.sizing_context = None
 
 
 def check_entry_conditions(artifact: TickerArtifact, bar: dict, sma5: float, vol_avg: float) -> bool:
@@ -82,7 +84,7 @@ def check_confirmation(entry_state: TickerEntryState, artifact: TickerArtifact, 
 
 
 def build_sizing_context(equity, recommended_risk, risk_per_share,
-                         vol_bonus_applied, final_qty, cap_reason=""):
+                         vol_bonus_applied, final_qty, cap_reason="", raw_qty=None):
     """Return sizing decision context for instrumentation."""
     return {
         "sizing_model": "risk_based_regime_adj",
@@ -90,6 +92,7 @@ def build_sizing_context(equity, recommended_risk, risk_per_share,
         "account_equity": int(equity),
         "volatility_basis": round(float(risk_per_share), 2),
         "vol_bonus_applied": vol_bonus_applied,
+        "raw_qty": int(raw_qty) if raw_qty is not None else int(final_qty),
         "final_qty": int(final_qty),
         "cap_reason": cap_reason,
     }
@@ -170,6 +173,16 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 constraints=IntentConstraints(limit_price=artifact.avwap_ref),
                 risk_payload=RiskPayload(entry_px=close, stop_px=stop,
                                          confidence="GREEN" if artifact.acceptance_pass else "YELLOW"),
+            )
+
+            # Cache sizing context for fill confirmation instrumentation
+            raw_qty = int((equity * risk_pct) / max(close - stop, 0.01))
+            vol_bonus_applied = vol_ratio < 0.40
+            cap_reason = "exposure_headroom" if qty < raw_qty else ""
+            entry_state.sizing_context = build_sizing_context(
+                equity=equity, recommended_risk=risk_pct,
+                risk_per_share=close - stop, vol_bonus_applied=vol_bonus_applied,
+                final_qty=qty, cap_reason=cap_reason, raw_qty=raw_qty,
             )
 
             result = await oms.submit_intent(intent)

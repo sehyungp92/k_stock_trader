@@ -88,6 +88,7 @@ class SymbolState:
     structure_stop: float = 0.0
     hard_stop: float = 0.0
     max_fav: float = 0.0
+    min_adverse: float = math.inf    # MAE: lowest price since entry (LONG)
     trail_px: float = 0.0
     pgm_regime_at_entry: str = "mixed"
 

@@ -148,6 +148,28 @@ def compute_confidence(investor, micro, program, prog_avail: bool, switches=None
     return "GREEN" if positives >= 2 else "YELLOW"
 
 
+def _signal_margin(signal, margin_map: dict) -> float:
+    """Return margin value for a categorical signal using the provided mapping.
+
+    Args:
+        signal: An enum member or string signal value.
+        margin_map: Dict mapping signal name (str) to margin value (float).
+
+    Returns:
+        Margin value from the map, or 0 if the signal is not recognised.
+    """
+    name = signal.name if hasattr(signal, 'name') else str(signal)
+    return margin_map.get(name, 0)
+
+
+# Margin maps: distance from the blocking threshold.
+#   positive = safely past threshold, negative = failing, 0 = borderline.
+_INVESTOR_MARGIN = {"STRONG": 100, "NEUTRAL": -50, "UNAVAILABLE": -100}
+_MICRO_MARGIN = {"ACCUMULATE": 100, "NEUTRAL": 0, "DISTRIBUTE": -100}
+_PROGRAM_MARGIN = {"ACCUMULATE": 100, "NEUTRAL": 0, "DISTRIBUTE": -100, "UNAVAILABLE": -50}
+_CONFIDENCE_MARGIN = {"GREEN": 100, "YELLOW": 50, "RED": -100}
+
+
 def _build_kpr_filter_decisions(investor, micro, program, prog_avail: bool, confidence: str) -> list:
     """Build filter_decisions list from KPR confidence pillars."""
     decisions = [
@@ -156,14 +178,14 @@ def _build_kpr_filter_decisions(investor, micro, program, prog_avail: bool, conf
             "threshold": "STRONG",
             "actual": investor.name if hasattr(investor, 'name') else str(investor),
             "passed": investor == InvestorSignal.STRONG,
-            "margin_pct": 0,
+            "margin_pct": _signal_margin(investor, _INVESTOR_MARGIN),
         },
         {
             "filter": "micro_signal",
             "threshold": "ACCUMULATE",
             "actual": micro.name if hasattr(micro, 'name') else str(micro),
             "passed": micro == MicroSignal.ACCUMULATE,
-            "margin_pct": 0,
+            "margin_pct": _signal_margin(micro, _MICRO_MARGIN),
         },
     ]
     if prog_avail:
@@ -172,20 +194,21 @@ def _build_kpr_filter_decisions(investor, micro, program, prog_avail: bool, conf
             "threshold": "ACCUMULATE",
             "actual": program.name if hasattr(program, 'name') else str(program),
             "passed": program == ProgramSignal.ACCUMULATE,
-            "margin_pct": 0,
+            "margin_pct": _signal_margin(program, _PROGRAM_MARGIN),
         })
+    conf_margin = _CONFIDENCE_MARGIN.get(confidence, 0)
     decisions.append({
         "filter": "confidence",
         "threshold": "GREEN",
         "actual": confidence,
         "passed": confidence != "RED",
-        "margin_pct": 0,
+        "margin_pct": conf_margin,
     })
     return decisions
 
 
 def build_sizing_context(equity, base_risk_pct, risk_per_share, mult,
-                         tod, stale_mult, final_qty, confidence):
+                         tod, stale_mult, final_qty, confidence, raw_qty=None):
     """Return sizing decision context for instrumentation."""
     return {
         "sizing_model": "risk_based_confidence",
@@ -196,6 +219,7 @@ def build_sizing_context(equity, base_risk_pct, risk_per_share, mult,
         "confidence_mult": round(float(mult), 3),
         "tod_mult": round(float(tod), 3),
         "stale_mult": round(float(stale_mult), 3),
+        "raw_qty": int(raw_qty) if raw_qty is not None else int(final_qty),
         "final_qty": int(final_qty),
     }
 
@@ -351,6 +375,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             stop = s.stop_level or close * 0.98
             risk = equity * BASE_RISK_PCT
             qty = int(risk / max(close - stop, 0.01))
+            raw_qty = qty
             mult = GREEN_SIZE_MULT if confidence == "GREEN" else YELLOW_SIZE_MULT
             tod = get_tod_multiplier(now.time())
 
@@ -365,6 +390,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 risk_per_share=risk_per_share, mult=mult,
                 tod=tod, stale_mult=stale_mult,
                 final_qty=qty, confidence=confidence,
+                raw_qty=raw_qty,
             )
 
             if qty <= 0:

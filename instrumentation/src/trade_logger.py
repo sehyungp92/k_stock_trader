@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 
 from .event_metadata import create_event_metadata
 from .market_snapshot import MarketSnapshotService
+from .session import classify_session_type
 
 
 @dataclass
@@ -87,6 +88,31 @@ class TradeEvent:
     entry_latency_ms: Optional[int] = None
     exit_latency_ms: Optional[int] = None
 
+    # --- MFE/MAE (Maximum Favorable/Adverse Excursion) ---
+    mfe_price: Optional[float] = None
+    mae_price: Optional[float] = None
+    mfe_pct: Optional[float] = None
+    mae_pct: Optional[float] = None
+    mfe_r: Optional[float] = None
+    mae_r: Optional[float] = None
+
+    # --- Exit efficiency ---
+    exit_efficiency: Optional[float] = None
+
+    # --- Portfolio state at entry ---
+    portfolio_state_at_entry: Optional[Dict[str, Any]] = None
+
+    # --- Drawdown state at entry ---
+    drawdown_pct: Optional[float] = None
+    drawdown_tier: Optional[str] = None
+    drawdown_size_mult: Optional[float] = None
+
+    # --- Experiment tracking ---
+    experiment_id: Optional[str] = None
+
+    # --- Session classification ---
+    session_type: Optional[str] = None
+
     # --- Lifecycle stage ---
     stage: str = "entry"
 
@@ -136,6 +162,9 @@ class TradeLogger:
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
         sizing_context: Optional[Dict[str, Any]] = None,
         regime_context: Optional[Dict[str, Any]] = None,
+        portfolio_state: Optional[Dict[str, Any]] = None,
+        drawdown_context: Optional[Dict[str, Any]] = None,
+        experiment_id: Optional[str] = None,
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -210,6 +239,17 @@ class TradeLogger:
                 stage="entry",
             )
 
+            if portfolio_state:
+                trade.portfolio_state_at_entry = portfolio_state
+
+            if drawdown_context:
+                trade.drawdown_pct = drawdown_context.get("drawdown_pct")
+                trade.drawdown_tier = drawdown_context.get("drawdown_tier")
+                trade.drawdown_size_mult = drawdown_context.get("drawdown_size_mult")
+
+            trade.experiment_id = experiment_id
+            trade.session_type = classify_session_type(datetime.now(timezone.utc))
+
             self._open_trades[trade_id] = trade
             self._write_event(trade)
             return trade
@@ -227,6 +267,7 @@ class TradeLogger:
         exchange_timestamp: Optional[datetime] = None,
         expected_exit_price: Optional[float] = None,
         exit_latency_ms: Optional[int] = None,
+        mfe_mae_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[TradeEvent]:
         """Record a trade exit event. Returns updated TradeEvent or None on error."""
         try:
@@ -285,6 +326,18 @@ class TradeLogger:
             trade.expected_exit_price = expected_exit_price
             trade.exit_slippage_bps = exit_slippage_bps
             trade.exit_latency_ms = exit_latency_ms
+
+            if mfe_mae_context:
+                trade.mfe_price = mfe_mae_context.get("mfe_price")
+                trade.mae_price = mfe_mae_context.get("mae_price")
+                trade.mfe_pct = mfe_mae_context.get("mfe_pct")
+                trade.mae_pct = mfe_mae_context.get("mae_pct")
+                trade.mfe_r = mfe_mae_context.get("mfe_r")
+                trade.mae_r = mfe_mae_context.get("mae_r")
+                # Compute exit efficiency if MFE available
+                if trade.mfe_pct and trade.mfe_pct > 0 and trade.pnl_pct is not None:
+                    trade.exit_efficiency = round(trade.pnl_pct / trade.mfe_pct, 4)
+
             trade.stage = "exit"
 
             self._write_event(trade)
