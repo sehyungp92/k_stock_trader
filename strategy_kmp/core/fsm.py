@@ -11,12 +11,13 @@ from .state import SymbolState, State
 from .gates import (
     lock_or_and_filter, spread_ok, rvol_ok, vi_blocked,
     min_surge_threshold, min_surge_threshold_strict, size_time_multiplier,
-    minutes_since_0916, is_past_entry_cutoff,
+    minutes_since_0916, is_past_entry_cutoff, build_filter_decisions,
 )
 from .sizing import compute_qty, apply_liquidity_cap, apply_nav_cap
 from .tick_table import tick_size, round_to_tick
 from ..config.constants import (
     ACCEPT_TIMEOUT_MIN, STRATEGY_ID, HARD_STOP_ATR_MULT,
+    RVOL_MIN, SPREAD_MAX_PCT,
 )
 from ..config.switches import kmp_switches
 from oms_client import Intent, IntentType, Urgency, TimeHorizon, IntentConstraints, RiskPayload
@@ -223,10 +224,16 @@ async def alpha_step(
             logger.debug(f"{s.code}: blocked by spread gate (spread_pct={s.spread_pct:.4f})")
             s._gate_logged.add("spread")
             if instr:
+                fd = build_filter_decisions({
+                    "spread_gate": (False, SPREAD_MAX_PCT, s.spread_pct),
+                    "surge_decay": (s.surge >= surge_thresh, surge_thresh, s.surge),
+                    "rvol_gate": (rvol_ok(s), RVOL_MIN, s.rvol_1m),
+                })
                 instr.on_signal_blocked(
                     symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                     blocked_by="spread_gate", block_reason=f"maturity=mid, spread_pct={s.spread_pct:.4f}",
                     signal_strength=s.surge,
+                    filter_decisions=fd,
                 )
         return None
 
@@ -279,10 +286,16 @@ async def alpha_step(
         # VI wall check
         if vi_blocked(s, entry_trigger, tick):
             if instr:
+                fd = build_filter_decisions({
+                    "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
+                    "surge_decay": (True, surge_thresh, s.surge),
+                    "vi_wall": (False, s.vi_ref * 1.02, entry_trigger),
+                })
                 instr.on_signal_blocked(
                     symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                     blocked_by="vi_wall", block_reason="maturity=late",
                     signal_strength=s.surge,
+                    filter_decisions=fd,
                 )
             s.fsm = State.DONE
             logger.info(f"{s.code}: VI blocked")
@@ -311,11 +324,17 @@ async def alpha_step(
         if exposure is not None:
             if not exposure.can_enter(s.code, qty, entry_trigger, equity):
                 if instr:
+                    fd = build_filter_decisions({
+                        "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
+                        "surge_decay": (True, surge_thresh, s.surge),
+                        "sector_cap": (False, 1, 0),
+                    })
                     instr.on_signal_blocked(
                         symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                         blocked_by="sector_cap",
                         block_reason=f"maturity=late, sector={exposure.get_sector(s.code)}",
                         signal_strength=s.surge,
+                        filter_decisions=fd,
                     )
                 s.fsm = State.DONE
                 s.skip_reason = "sector_cap"
@@ -373,11 +392,17 @@ async def alpha_step(
             if exposure is not None:
                 exposure.unreserve(s.code, qty, entry_trigger)
             if instr:
+                fd = build_filter_decisions({
+                    "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
+                    "surge_decay": (True, surge_thresh, s.surge),
+                    "entry_rejected": (False, 0, 0),
+                })
                 instr.on_signal_blocked(
                     symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                     blocked_by="entry_rejected",
                     block_reason=f"maturity=late, msg={result.message}",
                     signal_strength=s.surge,
+                    filter_decisions=fd,
                 )
             logger.warning(f"{s.code}: Entry rejected - {result.message}")
             s.fsm = State.DONE

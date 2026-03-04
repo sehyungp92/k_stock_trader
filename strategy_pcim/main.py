@@ -11,7 +11,7 @@ import yaml
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env, create_strategy_client
 from oms_client import OMSClient, Intent, IntentType, IntentStatus, Urgency, TimeHorizon, RiskPayload
 
-from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION
+from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION, HARD_FILTERS
 from .config.switches import pcim_switches
 from .external.youtube.watcher import YouTubeWatcher
 from .external.youtube.models import ChannelConfig
@@ -71,6 +71,41 @@ def _log_entry_decision(c: Candidate, trigger_type: str, quote: dict, vol_ratio:
         f"notional={c.final_notional:.0f} quote_last={quote.get('last', 0)} "
         f"vol_ratio={vol_ratio:.2f}"
     )
+
+
+def _build_pcim_hard_filter_decisions(c: Candidate, has_earnings: bool, reject: str) -> list:
+    """Build filter_decisions list from PCIM hard filter results."""
+    decisions = [
+        {
+            "filter": "adtv_min",
+            "threshold": HARD_FILTERS["ADTV_MIN"],
+            "actual": c.adtv_20d,
+            "passed": c.adtv_20d >= HARD_FILTERS["ADTV_MIN"],
+            "margin_pct": round((c.adtv_20d - HARD_FILTERS["ADTV_MIN"]) / HARD_FILTERS["ADTV_MIN"] * 100, 1) if HARD_FILTERS["ADTV_MIN"] else 0,
+        },
+        {
+            "filter": "mcap_min",
+            "threshold": HARD_FILTERS["MCAP_MIN"],
+            "actual": c.market_cap,
+            "passed": c.market_cap >= HARD_FILTERS["MCAP_MIN"],
+            "margin_pct": round((c.market_cap - HARD_FILTERS["MCAP_MIN"]) / HARD_FILTERS["MCAP_MIN"] * 100, 1) if HARD_FILTERS["MCAP_MIN"] else 0,
+        },
+        {
+            "filter": "mcap_max",
+            "threshold": HARD_FILTERS["MCAP_MAX"],
+            "actual": c.market_cap,
+            "passed": c.market_cap <= HARD_FILTERS["MCAP_MAX"],
+            "margin_pct": round((HARD_FILTERS["MCAP_MAX"] - c.market_cap) / HARD_FILTERS["MCAP_MAX"] * 100, 1) if HARD_FILTERS["MCAP_MAX"] else 0,
+        },
+        {
+            "filter": "earnings_window",
+            "threshold": False,
+            "actual": has_earnings,
+            "passed": not has_earnings,
+            "margin_pct": 0,
+        },
+    ]
+    return decisions
 
 
 def consolidate_signals(candidates: List[Candidate]) -> List[Candidate]:
@@ -363,10 +398,12 @@ async def run_pcim():
                 if reject:
                     c.reject_reason = reject
                     if instr:
+                        fd = _build_pcim_hard_filter_decisions(c, has_earnings, reject)
                         instr.on_signal_blocked(
                             symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
                             blocked_by="hard_filter", block_reason=f"maturity=mid, filter={reject}",
                             signal_strength=getattr(c, 'conviction_score', 0.0),
+                            filter_decisions=fd,
                         )
                     logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
@@ -380,10 +417,18 @@ async def run_pcim():
                 if reject:
                     c.reject_reason = reject
                     if instr:
+                        fd = [{
+                            "filter": "gap_reversal",
+                            "threshold": pcim_switches.gap_reversal_threshold,
+                            "actual": round(c.gap_rev_rate, 5),
+                            "passed": False,
+                            "margin_pct": round((c.gap_rev_rate - pcim_switches.gap_reversal_threshold) / pcim_switches.gap_reversal_threshold * 100, 1) if pcim_switches.gap_reversal_threshold else 0,
+                        }]
                         instr.on_signal_blocked(
                             symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
                             blocked_by="gap_reversal", block_reason=f"maturity=mid, rate={c.gap_rev_rate:.2f}",
                             signal_strength=c.conviction_score,
+                            filter_decisions=fd,
                         )
                     logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
@@ -591,10 +636,18 @@ async def run_pcim():
                     spread_pct = (ask - bid) / last if last > 0 else 0
                     upper_dist = (upper_limit - last) / tick_size if tick_size > 0 and upper_limit > 0 else 999
                     if instr:
+                        fd = [{
+                            "filter": "execution_veto",
+                            "threshold": veto,
+                            "actual": {"spread_pct": round(spread_pct, 5), "upper_dist_ticks": round(upper_dist, 1), "vi": is_vi},
+                            "passed": False,
+                            "margin_pct": 0,
+                        }]
                         instr.on_signal_blocked(
                             symbol=c.symbol, signal=f"influencer_{c.bucket}", signal_id=f"pcim_{c.bucket.lower()}",
                             blocked_by="execution_veto", block_reason=f"maturity=late, veto={veto}",
                             signal_strength=c.conviction_score,
+                            filter_decisions=fd,
                         )
                     logger.info(
                         f"EXECUTION_VETO: {c.symbol} veto={veto} last={last:.0f} "

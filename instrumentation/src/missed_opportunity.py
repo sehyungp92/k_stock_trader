@@ -18,7 +18,7 @@ import time
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Any, Optional, List, Dict
 
 from loguru import logger
 
@@ -97,6 +97,7 @@ class MissedOpportunityEvent:
     # Strategy context
     strategy_params_at_signal: Optional[dict] = None
     market_regime: str = ""
+    filter_decisions: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -257,6 +258,7 @@ class MissedOpportunityLogger:
         market_regime: str = "",
         exchange_timestamp: Optional[datetime] = None,
         bar_id: Optional[str] = None,
+        filter_decisions: Optional[List[Dict[str, Any]]] = None,
     ) -> MissedOpportunityEvent:
         """
         Call this when a signal fires but is blocked by a gate, filter, or
@@ -324,6 +326,7 @@ class MissedOpportunityLogger:
                 assumption_tags=assumption_tags,
                 strategy_params_at_signal=strategy_params,
                 market_regime=market_regime,
+                filter_decisions=filter_decisions or [],
                 backfill_status="pending",
             )
 

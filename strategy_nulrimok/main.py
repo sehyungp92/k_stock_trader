@@ -462,11 +462,20 @@ async def run_nulrimok():
                     else:
                         # Aggregate daily risk budget check
                         budget = DAILY_RISK_BUDGET_PCT * artifact.risk_mult
-                        if compute_total_open_risk(position_states, equity) >= budget:
+                        current_risk = compute_total_open_risk(position_states, equity)
+                        if current_risk >= budget:
                             if instr:
+                                fd = [{
+                                    "filter": "risk_budget",
+                                    "threshold": round(budget, 5),
+                                    "actual": round(current_risk, 5),
+                                    "passed": False,
+                                    "margin_pct": round((current_risk - budget) / budget * 100, 1) if budget else 0,
+                                }]
                                 instr.on_signal_blocked(
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="risk_budget", block_reason="maturity=mid",
+                                    filter_decisions=fd,
                                 )
                             logger.debug(f"{ticker}: Skipping entry — daily risk budget exhausted "
                                          f"(open_risk >= {budget:.1%})")
@@ -477,9 +486,17 @@ async def run_nulrimok():
                         est_qty = int(equity * 0.02 / close) if close > 0 else 0  # ~2% position
                         if sector_exposure and not sector_exposure.can_enter(ticker, est_qty, close, equity):
                             if instr:
+                                fd = [{
+                                    "filter": "sector_cap",
+                                    "threshold": SECTOR_CAP_PCT,
+                                    "actual": ticker,
+                                    "passed": False,
+                                    "margin_pct": 0,
+                                }]
                                 instr.on_signal_blocked(
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="sector_cap", block_reason="maturity=mid",
+                                    filter_decisions=fd,
                                 )
                             logger.debug(f"{ticker}: Skipping entry — sector cap reached")
                             continue

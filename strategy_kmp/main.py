@@ -216,12 +216,19 @@ async def _sync_positions(
                 exposure.on_fill(ticker, alloc_qty, s.entry_px)
                 logger.info(f"{ticker}: Fill detected, IN_POSITION @ {s.entry_px:.0f} qty={s.qty}")
                 if instr:
+                    from .core.gates import build_filter_decisions
+                    from .config.constants import SPREAD_MAX_PCT, RVOL_MIN
+                    fd = build_filter_decisions({
+                        "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
+                        "rvol_gate": (s.rvol_1m >= RVOL_MIN, RVOL_MIN, s.rvol_1m),
+                    })
                     instr.on_entry_fill(
                         trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
                         symbol=ticker, entry_price=s.entry_px, qty=s.qty,
                         signal="or_break_acceptance", signal_id="kmp_breakout",
                         signal_strength=s.surge,
                         strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
+                        filter_decisions=fd,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:

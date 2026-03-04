@@ -148,6 +148,42 @@ def compute_confidence(investor, micro, program, prog_avail: bool, switches=None
     return "GREEN" if positives >= 2 else "YELLOW"
 
 
+def _build_kpr_filter_decisions(investor, micro, program, prog_avail: bool, confidence: str) -> list:
+    """Build filter_decisions list from KPR confidence pillars."""
+    decisions = [
+        {
+            "filter": "investor_signal",
+            "threshold": "STRONG",
+            "actual": investor.name if hasattr(investor, 'name') else str(investor),
+            "passed": investor == InvestorSignal.STRONG,
+            "margin_pct": 0,
+        },
+        {
+            "filter": "micro_signal",
+            "threshold": "ACCUMULATE",
+            "actual": micro.name if hasattr(micro, 'name') else str(micro),
+            "passed": micro == MicroSignal.ACCUMULATE,
+            "margin_pct": 0,
+        },
+    ]
+    if prog_avail:
+        decisions.append({
+            "filter": "program_signal",
+            "threshold": "ACCUMULATE",
+            "actual": program.name if hasattr(program, 'name') else str(program),
+            "passed": program == ProgramSignal.ACCUMULATE,
+            "margin_pct": 0,
+        })
+    decisions.append({
+        "filter": "confidence",
+        "threshold": "GREEN",
+        "actual": confidence,
+        "passed": confidence != "RED",
+        "margin_pct": 0,
+    })
+    return decisions
+
+
 async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                      investor_sig, micro_sig, program_sig, prog_avail: bool,
                      regime_ok: bool, has_tick: bool, flow_stale: bool,
@@ -280,9 +316,13 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             confidence = compute_confidence(investor_sig, micro_sig, program_sig, prog_avail, symbol=s.code)
             if confidence == "RED":
                 if instr:
+                    fd = _build_kpr_filter_decisions(
+                        investor_sig, micro_sig, program_sig, prog_avail, confidence,
+                    )
                     instr.on_signal_blocked(
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="confidence_red", block_reason="maturity=late",
+                        filter_decisions=fd,
                     )
                 s.fsm = FSMState.INVALIDATED
                 return None
@@ -342,10 +382,16 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 return None
             else:
                 if instr:
+                    fd = _build_kpr_filter_decisions(
+                        investor_sig, micro_sig, program_sig, prog_avail, confidence,
+                    )
+                    fd.append({"filter": "entry_rejected", "threshold": "EXECUTED",
+                               "actual": result.status.name, "passed": False, "margin_pct": 0})
                     instr.on_signal_blocked(
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="entry_rejected",
                         block_reason=f"maturity=late, status={result.status.name}",
+                        filter_decisions=fd,
                     )
                 logger.warning(f"{s.code}: Entry REJECTED status={result.status.name} msg={result.message}")
                 return None
