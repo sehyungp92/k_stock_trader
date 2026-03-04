@@ -13,10 +13,10 @@ from .gates import (
     min_surge_threshold, min_surge_threshold_strict, size_time_multiplier,
     minutes_since_0916, is_past_entry_cutoff, build_filter_decisions,
 )
-from .sizing import compute_qty, apply_liquidity_cap, apply_nav_cap
+from .sizing import compute_qty, apply_liquidity_cap, apply_nav_cap, build_sizing_context
 from .tick_table import tick_size, round_to_tick
 from ..config.constants import (
-    ACCEPT_TIMEOUT_MIN, STRATEGY_ID, HARD_STOP_ATR_MULT,
+    ACCEPT_TIMEOUT_MIN, STRATEGY_ID, HARD_STOP_ATR_MULT, BASE_RISK_PCT,
     RVOL_MIN, SPREAD_MAX_PCT,
 )
 from ..config.switches import kmp_switches
@@ -311,10 +311,27 @@ async def alpha_step(
 
         # Size calculation
         time_mult = size_time_multiplier(m)
-        qty = compute_qty(s, equity, entry_trigger, s.structure_stop, prog_mult, time_mult, now_kst,
-                          regime_breadth_ok=regime_breadth_ok, not_chop=not_chop)
-        qty = apply_liquidity_cap(qty, entry_trigger, last_5m_value)
-        qty = apply_nav_cap(qty, entry_trigger, equity)
+        raw_qty = compute_qty(s, equity, entry_trigger, s.structure_stop, prog_mult, time_mult, now_kst,
+                              regime_breadth_ok=regime_breadth_ok, not_chop=not_chop)
+        qty = apply_liquidity_cap(raw_qty, entry_trigger, last_5m_value)
+        cap_reason = "liquidity_5m" if qty < raw_qty else ""
+        nav_qty = apply_nav_cap(qty, entry_trigger, equity)
+        if nav_qty < qty:
+            cap_reason = "nav_cap"
+        qty = nav_qty
+
+        # Build sizing context for instrumentation
+        from .sizing import quality_multiplier
+        risk_per_share = max(entry_trigger - s.structure_stop, 0.0)
+        qmult = quality_multiplier(s, now_kst, regime_breadth_ok=regime_breadth_ok, not_chop=not_chop)
+        risk_krw = equity * BASE_RISK_PCT
+        qty_base = int(risk_krw / risk_per_share) if risk_per_share > 0 else 0
+        s.sizing_context = build_sizing_context(
+            equity=equity, base_risk_pct=BASE_RISK_PCT,
+            risk_per_share=risk_per_share, qty_base=qty_base,
+            qmult=qmult, time_mult=time_mult, program_mult=prog_mult,
+            final_qty=qty, cap_reason=cap_reason,
+        )
 
         if qty <= 0:
             s.fsm = State.DONE

@@ -73,6 +73,9 @@ class TradeEvent:
     # --- Strategy params frozen at entry ---
     strategy_params_at_entry: Optional[Dict[str, Any]] = None
 
+    # --- Position sizing decision ---
+    sizing_context: Optional[Dict[str, Any]] = None
+
     # --- Slippage ---
     expected_entry_price: Optional[float] = None
     entry_slippage_bps: Optional[float] = None
@@ -130,6 +133,7 @@ class TradeLogger:
         bar_id: Optional[str] = None,
         signal_factors: list = None,
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
+        sizing_context: Optional[Dict[str, Any]] = None,
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -195,6 +199,7 @@ class TradeLogger:
                 spread_at_entry_bps=spread_bps,
                 volume_24h_at_entry=volume_24h,
                 strategy_params_at_entry=strategy_params,
+                sizing_context=sizing_context,
                 expected_entry_price=expected_entry_price,
                 entry_slippage_bps=entry_slippage_bps,
                 entry_latency_ms=entry_latency_ms,

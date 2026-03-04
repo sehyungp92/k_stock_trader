@@ -465,6 +465,7 @@ async def run_kpr():
                             strategy_params={"confidence": s.confidence, "setup_type": s.setup_type},
                             signal_factors=signal_factors,
                             filter_decisions=fd,
+                            sizing_context=s.sizing_context,
                         )
                 else:
                     positions.discard(ticker)

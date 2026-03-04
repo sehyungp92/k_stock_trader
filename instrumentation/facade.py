@@ -119,6 +119,7 @@ class InstrumentationKit:
         strategy_params: Optional[Dict[str, Any]] = None,
         signal_factors: Optional[list] = None,
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
+        sizing_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Record a trade entry. Call after OMS fill confirmed."""
         try:
@@ -139,6 +140,7 @@ class InstrumentationKit:
                 market_regime=regime,
                 signal_factors=signal_factors or [],
                 filter_decisions=filter_decisions or [],
+                sizing_context=sizing_context,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")

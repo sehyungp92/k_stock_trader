@@ -182,6 +182,24 @@ def build_signal_factors(surge, min_surge, rvol_1m, imb, spread_pct,
     return sorted(factors, key=lambda f: f["contribution"], reverse=True)[:5]
 
 
+def build_sizing_context(equity, base_risk_pct, risk_per_share, qty_base,
+                         qmult, time_mult, program_mult, final_qty,
+                         cap_reason=""):
+    """Return sizing decision context for instrumentation."""
+    return {
+        "sizing_model": "risk_based_quality_adj",
+        "target_risk_pct": base_risk_pct,
+        "account_equity": int(equity),
+        "volatility_basis": round(float(risk_per_share), 2),
+        "quality_mult": round(float(qmult), 3),
+        "time_mult": round(float(time_mult), 3),
+        "program_mult": round(float(program_mult), 3),
+        "raw_qty": int(qty_base),
+        "final_qty": int(final_qty),
+        "cap_reason": cap_reason,
+    }
+
+
 def apply_liquidity_cap(qty: int, entry_px: float, last_5m_value: float) -> int:
     """
     Apply liquidity cap to position size.

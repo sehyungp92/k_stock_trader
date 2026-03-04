@@ -184,6 +184,22 @@ def _build_kpr_filter_decisions(investor, micro, program, prog_avail: bool, conf
     return decisions
 
 
+def build_sizing_context(equity, base_risk_pct, risk_per_share, mult,
+                         tod, stale_mult, final_qty, confidence):
+    """Return sizing decision context for instrumentation."""
+    return {
+        "sizing_model": "risk_based_confidence",
+        "target_risk_pct": base_risk_pct,
+        "account_equity": int(equity),
+        "volatility_basis": round(float(risk_per_share), 2),
+        "confidence": confidence,
+        "confidence_mult": round(float(mult), 3),
+        "tod_mult": round(float(tod), 3),
+        "stale_mult": round(float(stale_mult), 3),
+        "final_qty": int(final_qty),
+    }
+
+
 async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                      investor_sig, micro_sig, program_sig, prog_avail: bool,
                      regime_ok: bool, has_tick: bool, flow_stale: bool,
@@ -341,6 +357,15 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             # Stale investor flow size penalty
             stale_mult = STALE_SIZE_PENALTY if investor_age > FLOW_STALE_DEFAULT else 1.0
             qty = int(qty * mult * tod * stale_mult)
+
+            # Build sizing context for instrumentation
+            risk_per_share = max(close - stop, 0.01)
+            s.sizing_context = build_sizing_context(
+                equity=equity, base_risk_pct=BASE_RISK_PCT,
+                risk_per_share=risk_per_share, mult=mult,
+                tod=tod, stale_mult=stale_mult,
+                final_qty=qty, confidence=confidence,
+            )
 
             if qty <= 0:
                 return None

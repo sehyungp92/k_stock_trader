@@ -81,6 +81,20 @@ def check_confirmation(entry_state: TickerEntryState, artifact: TickerArtifact, 
     return False, ""
 
 
+def build_sizing_context(equity, recommended_risk, risk_per_share,
+                         vol_bonus_applied, final_qty, cap_reason=""):
+    """Return sizing decision context for instrumentation."""
+    return {
+        "sizing_model": "risk_based_regime_adj",
+        "target_risk_pct": recommended_risk,
+        "account_equity": int(equity),
+        "volatility_basis": round(float(risk_per_share), 2),
+        "vol_bonus_applied": vol_bonus_applied,
+        "final_qty": int(final_qty),
+        "cap_reason": cap_reason,
+    }
+
+
 async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact, bar: dict,
                         sma5: float, vol_avg: float, now: datetime, equity: float, oms,
                         gross_exposure_pct: float = 0.0, regime_exposure_cap: float = 1.0) -> Optional[str]:

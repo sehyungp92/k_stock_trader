@@ -240,6 +240,7 @@ async def _sync_positions(
                         strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
                         signal_factors=signal_factors,
                         filter_decisions=fd,
+                        sizing_context=s.sizing_context,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:
