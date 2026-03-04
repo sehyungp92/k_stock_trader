@@ -165,6 +165,37 @@ class RegimeClassifier:
         """Get the most recently computed regime (cached)."""
         return self._cache.get(symbol, "unknown")
 
+    def classify_multi_tf(self, symbol: str) -> dict:
+        """Classify regime across multiple timeframes.
+
+        Returns dict with primary (daily 50-MA), higher_tf (200-MA proxy for
+        weekly trend), and sector_regime (placeholder).
+        """
+        primary = self.classify(symbol)
+        higher_tf = "unknown"
+        try:
+            candles = self._fetch_candles(symbol, "1d")
+            if candles and len(candles) >= 200:
+                closes = [c["close"] for c in candles]
+                ma200 = sum(closes[-200:]) / 200
+                ma200_prev = sum(closes[-206:-6]) / 200
+                price = closes[-1]
+                slope_positive = ma200 > ma200_prev
+                if price > ma200 and slope_positive:
+                    higher_tf = "trending_up"
+                elif price < ma200 and not slope_positive:
+                    higher_tf = "trending_down"
+                else:
+                    higher_tf = "ranging"
+        except Exception:
+            pass
+
+        return {
+            "primary_regime": primary,
+            "higher_tf_regime": higher_tf,
+            "sector_regime": "unknown",
+        }
+
     def _fetch_candles(self, symbol: str, timeframe: str) -> list:
         """
         Fetch daily OHLCV bars from the KIS API.

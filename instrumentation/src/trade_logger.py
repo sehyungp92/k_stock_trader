@@ -56,6 +56,7 @@ class TradeEvent:
     signal_factors: List[Dict[str, Any]] = field(default_factory=list)
     exit_reason: str = ""
     market_regime: str = ""
+    regime_context: Optional[Dict[str, Any]] = None
 
     # --- Filter tracking ---
     active_filters: List[str] = field(default_factory=list)
@@ -134,6 +135,7 @@ class TradeLogger:
         signal_factors: list = None,
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
         sizing_context: Optional[Dict[str, Any]] = None,
+        regime_context: Optional[Dict[str, Any]] = None,
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -193,6 +195,7 @@ class TradeLogger:
                 entry_signal_strength=entry_signal_strength,
                 signal_factors=signal_factors or [],
                 market_regime=market_regime,
+                regime_context=regime_context,
                 active_filters=active_filters,
                 passed_filters=passed_filters,
                 atr_at_entry=atr_14,

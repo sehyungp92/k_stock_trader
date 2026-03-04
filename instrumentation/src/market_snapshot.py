@@ -43,11 +43,13 @@ class MarketSnapshot:
     snapshot_id: str              # deterministic: hash(symbol + timestamp)
     symbol: str                   # KRX stock code, e.g. "005930" (Samsung)
     timestamp: str                # KST time, ISO 8601
-    bid: float                    # 0 — not available on-demand via KIS REST
-    ask: float                    # 0 — not available on-demand via KIS REST
-    mid: float                    # same as last_trade_price when bid/ask unavailable
-    spread_bps: float             # 0 — not computable without bid/ask
-    last_trade_price: float
+    bid: Optional[float] = None   # None — not available via KIS REST (use WS for real-time)
+    ask: Optional[float] = None   # None — not available via KIS REST (use WS for real-time)
+    mid: Optional[float] = None   # same as last_trade_price when bid/ask unavailable
+    spread_bps: Optional[float] = None  # None — not computable without bid/ask
+    last_trade_price: float = 0.0
+    data_source: str = "kis_rest"       # "kis_rest" or "kis_ws" when available
+    bid_ask_available: bool = False      # explicitly marks bid/ask data availability
     volume_1m: Optional[float] = None     # last 1 minute volume (from minute bars)
     volume_5m: Optional[float] = None     # last 5 minute volume (from minute bars)
     volume_24h: Optional[float] = None    # daily volume (from daily bars)
@@ -148,12 +150,6 @@ class MarketSnapshotService:
                 except Exception as e:
                     logger.debug(f"Snapshot: get_minute_bars failed for {symbol}: {e}")
 
-            # KRX equity: bid/ask not available on-demand via REST
-            bid = 0.0
-            ask = 0.0
-            mid = last_price  # best available: last trade price
-            spread_bps = 0.0
-
             now_kst = datetime.now(KST)
             ts_str = now_kst.isoformat()
 
@@ -161,11 +157,10 @@ class MarketSnapshotService:
                 snapshot_id=self._compute_snapshot_id(symbol, ts_str),
                 symbol=symbol,
                 timestamp=ts_str,
-                bid=bid,
-                ask=ask,
-                mid=mid,
-                spread_bps=spread_bps,
+                mid=last_price,
                 last_trade_price=last_price,
+                data_source="kis_rest",
+                bid_ask_available=False,
                 volume_1m=volume_1m,
                 volume_5m=volume_5m,
                 volume_24h=volume_24h,
@@ -188,11 +183,9 @@ class MarketSnapshotService:
                 snapshot_id=self._compute_snapshot_id(symbol, ts_str),
                 symbol=symbol,
                 timestamp=ts_str,
-                bid=0.0,
-                ask=0.0,
-                mid=0.0,
-                spread_bps=0.0,
                 last_trade_price=0.0,
+                data_source="kis_rest",
+                bid_ask_available=False,
             )
             try:
                 self._write_snapshot(degraded)

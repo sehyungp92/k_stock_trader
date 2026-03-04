@@ -134,6 +134,7 @@ class InstrumentationKit:
         """Record a trade entry. Call after OMS fill confirmed."""
         try:
             regime = self._regime_classifier.current_regime(symbol)
+            regime_context = self._regime_classifier.classify_multi_tf(symbol)
             self._trade_logger.log_entry(
                 trade_id=trade_id,
                 pair=symbol,
@@ -148,6 +149,7 @@ class InstrumentationKit:
                 passed_filters=[],
                 strategy_params=strategy_params or {},
                 market_regime=regime,
+                regime_context=regime_context,
                 signal_factors=signal_factors or [],
                 filter_decisions=filter_decisions or [],
                 sizing_context=sizing_context,
