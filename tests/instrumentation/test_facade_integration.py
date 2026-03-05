@@ -37,6 +37,33 @@ def test_on_signal_blocked_accepts_filter_decisions():
     assert "filter_decisions" in params
 
 
+def test_on_entry_fill_accepts_param_set_id():
+    sig = inspect.signature(InstrumentationKit.on_entry_fill)
+    params = list(sig.parameters.keys())
+    assert "param_set_id" in params
+
+
+def test_trade_event_has_param_set_id():
+    from instrumentation.src.trade_logger import TradeEvent
+    event = TradeEvent(
+        trade_id="ps_test",
+        event_metadata={"event_id": "ps1"},
+        entry_snapshot={},
+    )
+    d = event.to_dict()
+    assert "param_set_id" in d
+    assert d["param_set_id"] is None  # backward compat default
+
+
+def test_daily_snapshot_has_new_fields():
+    from instrumentation.src.daily_snapshot import DailySnapshot
+    snap = DailySnapshot(date="2026-03-05", bot_id="test", strategy_type="kmp")
+    d = snap.to_dict()
+    assert d["max_concurrent_positions"] == 0
+    assert d["avg_exit_efficiency"] is None
+    assert d["total_risk_deployed_pct"] == 0.0
+
+
 def test_jsonl_backward_compat():
     """Old consumers that don't know about new fields should still work."""
     from instrumentation.src.trade_logger import TradeEvent
@@ -51,3 +78,4 @@ def test_jsonl_backward_compat():
     assert d["filter_decisions"] == []
     assert d["sizing_context"] is None
     assert d["regime_context"] is None
+    assert d["param_set_id"] is None

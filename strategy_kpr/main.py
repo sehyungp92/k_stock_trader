@@ -488,17 +488,22 @@ async def run_kpr():
                             "concurrent_positions_same_strategy": len(positions),
                         }
                         dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
+                        import hashlib, json as _json
+                        _sw_params = kpr_switches.to_params_dict()
+                        _strat_params = {"confidence": s.confidence, "setup_type": s.setup_type, **_sw_params}
+                        _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
                         instr.on_entry_fill(
                             trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
                             symbol=ticker, entry_price=s.entry_px, qty=s.qty,
                             signal=f"{s.setup_type or 'drift'}_reclaim",
                             signal_id="kpr_mean_reversion",
-                            strategy_params={"confidence": s.confidence, "setup_type": s.setup_type},
+                            strategy_params=_strat_params,
                             signal_factors=signal_factors,
                             filter_decisions=fd,
                             sizing_context=s.sizing_context,
                             portfolio_state=portfolio_state,
                             drawdown_context=dd_ctx,
+                            param_set_id=_param_set_id,
                         )
                 else:
                     positions.discard(ticker)

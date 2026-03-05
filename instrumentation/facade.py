@@ -133,6 +133,7 @@ class InstrumentationKit:
         portfolio_state: Optional[Dict[str, Any]] = None,
         drawdown_context: Optional[Dict[str, Any]] = None,
         experiment_id: Optional[str] = None,
+        param_set_id: Optional[str] = None,
     ) -> None:
         """Record a trade entry. Call after OMS fill confirmed."""
         try:
@@ -159,6 +160,7 @@ class InstrumentationKit:
                 portfolio_state=portfolio_state,
                 drawdown_context=drawdown_context,
                 experiment_id=experiment_id,
+                param_set_id=param_set_id,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")

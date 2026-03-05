@@ -637,19 +637,25 @@ async def run_pcim():
                                 "concurrent_positions_same_strategy": len(open_pcim),
                             }
                             dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
+                            import hashlib, json as _json
+                            _sw_params = pcim_switches.to_params_dict()
+                            _strat_params = {
+                                "bucket": cand.bucket, "tier": getattr(cand, 'tier', ''),
+                                "influencer_id": getattr(cand, 'influencer_id', ''),
+                                **_sw_params,
+                            }
+                            _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
                             instr.on_entry_fill(
                                 trade_id=f"PCIM:{symbol}:{today.strftime('%Y%m%d')}",
                                 symbol=symbol, entry_price=avg_price, qty=alloc_qty,
                                 signal=f"influencer_{cand.bucket}", signal_id=f"pcim_{cand.bucket.lower()}",
                                 signal_strength=getattr(cand, 'conviction_score', 0.0),
-                                strategy_params={
-                                    "bucket": cand.bucket, "tier": getattr(cand, 'tier', ''),
-                                    "influencer_id": getattr(cand, 'influencer_id', ''),
-                                },
+                                strategy_params=_strat_params,
                                 signal_factors=signal_factors,
                                 sizing_context=sizing_ctx,
                                 portfolio_state=portfolio_state,
                                 drawdown_context=dd_ctx,
+                                param_set_id=_param_set_id,
                             )
                         logger.info(f"{symbol}: Fill confirmed, position created @ {avg_price:.0f} qty={alloc_qty}")
                         # Track Bucket A hit (filled)

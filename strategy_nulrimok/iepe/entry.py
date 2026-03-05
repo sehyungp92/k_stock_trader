@@ -100,7 +100,8 @@ def build_sizing_context(equity, recommended_risk, risk_per_share,
 
 async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact, bar: dict,
                         sma5: float, vol_avg: float, now: datetime, equity: float, oms,
-                        gross_exposure_pct: float = 0.0, regime_exposure_cap: float = 1.0) -> Optional[str]:
+                        gross_exposure_pct: float = 0.0, regime_exposure_cap: float = 1.0,
+                        instr=None) -> Optional[str]:
     close = float(bar.get('close', 0))
 
     if entry_state.state == EntryState.IDLE:
@@ -117,6 +118,11 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
 
         # Invalidation: close below band_lower - 0.2% disarms immediately
         if conf_type == "INVALIDATED":
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                    blocked_by="band_invalidation", block_reason="close below band_lower-0.2%",
+                )
             logger.info(f"{artifact.ticker}: Entry invalidated (close below band)")
             entry_state.reset()
             return None
@@ -126,6 +132,17 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
             exposure_cap = min(regime_exposure_cap, 0.90)  # Use tighter of regime cap and static 90%
             headroom_pct = max(exposure_cap - gross_exposure_pct, 0.0)
             if headroom_pct <= 0.005:  # Less than 0.5% headroom — no room for any entry
+                if instr:
+                    instr.on_signal_blocked(
+                        symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                        blocked_by="exposure_headroom",
+                        block_reason=f"gross={gross_exposure_pct:.1%}, cap={exposure_cap:.0%}",
+                        filter_decisions=[{
+                            "filter": "exposure_headroom", "threshold": round(exposure_cap, 4),
+                            "actual": round(gross_exposure_pct, 4), "passed": False,
+                            "margin_pct": 0,
+                        }],
+                    )
                 logger.warning(f"{artifact.ticker}: Entry confirmed ({conf_type}) but exposure headroom exhausted "
                                f"(gross={gross_exposure_pct:.1%}, cap={exposure_cap:.0%})")
                 # Don't consume confirmation bar — will retry if exposure frees up
@@ -194,6 +211,12 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 return intent.intent_id
 
             # OMS rejected or unreachable — log and do NOT consume a confirmation bar
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                    blocked_by="oms_rejected",
+                    block_reason=f"{result.status.name}: {result.message}",
+                )
             logger.warning(
                 f"{artifact.ticker}: Entry confirmed ({conf_type}) but OMS returned "
                 f"{result.status.name}: {result.message} "
@@ -203,6 +226,12 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
 
         entry_state.confirm_bars_remaining -= 1
         if entry_state.confirm_bars_remaining <= 0:
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                    blocked_by="confirmation_expired",
+                    block_reason=f"confirm_bars={nulrimok_switches.confirm_bars}",
+                )
             logger.info(f"{artifact.ticker}: Confirmation window expired, resetting entry state")
             entry_state.reset()
         return None

@@ -127,5 +127,8 @@ strategy_*/logs/
 config/local/
 *.local.yaml
 
+# Reference materials
+_references/
+
 # Documentation (generated reports)
 docs/

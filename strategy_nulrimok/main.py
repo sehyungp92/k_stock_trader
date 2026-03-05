@@ -463,16 +463,21 @@ async def run_nulrimok():
                                         "concurrent_positions_same_strategy": len(position_states),
                                     }
                                     dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
+                                    import hashlib, json as _json
+                                    _sw_params = nulrimok_switches.to_params_dict()
+                                    _strat_params = {"avwap_ref": avwap, "atr30m": atr30m, "stop": stop, **_sw_params}
+                                    _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
                                     instr.on_entry_fill(
                                         trade_id=f"NULRIMOK:{ticker}:{now.strftime('%Y%m%d')}",
                                         symbol=ticker, entry_price=cost_basis, qty=alloc_qty,
                                         signal="avwap_dip_buy", signal_id="nulrimok_dip",
-                                        strategy_params={"avwap_ref": avwap, "atr30m": atr30m, "stop": stop},
+                                        strategy_params=_strat_params,
                                         signal_factors=signal_factors,
                                         filter_decisions=fd,
                                         sizing_context=entry_state.sizing_context,
                                         portfolio_state=portfolio_state,
                                         drawdown_context=dd_ctx,
+                                        param_set_id=_param_set_id,
                                     )
                                 logger.info(f"{ticker}: Fill confirmed, qty={alloc_qty}")
                             else:
@@ -562,7 +567,8 @@ async def run_nulrimok():
                             entry_state, ticker_artifact, bar, sma5 or close,
                             vol_avg, now, equity, oms,
                             gross_exposure_pct=gross_exposure_pct,
-                            regime_exposure_cap=regime_exposure_cap)
+                            regime_exposure_cap=regime_exposure_cap,
+                            instr=instr)
 
                 daily_ranks = {t: artifact.get_ticker(t).daily_rank
                                for t in artifact.active_set if artifact.get_ticker(t)}

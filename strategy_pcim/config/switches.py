@@ -132,6 +132,14 @@ class PCIMSwitches:
                 setattr(self, key, value)
         logger.info(f"Switches updated from {path}")
 
+    def to_params_dict(self) -> Dict[str, Any]:
+        from dataclasses import fields as dc_fields
+        return {
+            f.name: getattr(self, f.name)
+            for f in dc_fields(self)
+            if f.name not in ("would_block_count", "would_block_log")
+        }
+
     def log_active_config(self) -> None:
         """Log all active switch values at startup."""
         from dataclasses import fields as dc_fields

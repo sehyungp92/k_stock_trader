@@ -109,6 +109,7 @@ class TradeEvent:
 
     # --- Experiment tracking ---
     experiment_id: Optional[str] = None
+    param_set_id: Optional[str] = None
 
     # --- Session classification ---
     session_type: Optional[str] = None
@@ -165,6 +166,7 @@ class TradeLogger:
         portfolio_state: Optional[Dict[str, Any]] = None,
         drawdown_context: Optional[Dict[str, Any]] = None,
         experiment_id: Optional[str] = None,
+        param_set_id: Optional[str] = None,
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -248,6 +250,7 @@ class TradeLogger:
                 trade.drawdown_size_mult = drawdown_context.get("drawdown_size_mult")
 
             trade.experiment_id = experiment_id
+            trade.param_set_id = param_set_id
             trade.session_type = classify_session_type(datetime.now(timezone.utc))
 
             self._open_trades[trade_id] = trade

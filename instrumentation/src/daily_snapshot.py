@@ -13,7 +13,7 @@ from collections import Counter
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -39,8 +39,10 @@ class DailySnapshot:
     avg_loss: float = 0.0
 
     # Risk
-    max_drawdown_pct: float = 0.0     # intraday peak-to-trough
+    max_drawdown_pct: float = 0.0     # intraday peak-to-trough (cumulative PnL)
     max_exposure: float = 0.0         # max simultaneous position value
+    max_concurrent_positions: int = 0
+    total_risk_deployed_pct: float = 0.0
     profit_factor: float = 0.0        # gross wins / gross losses
     win_rate: float = 0.0
     exposure_pct: float = 0.0         # % of time in position
@@ -66,6 +68,9 @@ class DailySnapshot:
     # Regime breakdown
     regime_breakdown: Dict[str, dict] = field(default_factory=dict)
     # e.g. {"trending_up": {"trades": 3, "pnl": 150, "win_rate": 0.67}, ...}
+
+    # Exit efficiency
+    avg_exit_efficiency: Optional[float] = None
 
     # Execution quality
     avg_entry_slippage_bps: Optional[float] = None
@@ -162,6 +167,52 @@ class DailySnapshotBuilder:
                 data["pnl"] = round(data["pnl"], 4)
                 data["win_rate"] = round(data["wins"] / data["trades"], 4) if data["trades"] > 0 else 0
             snapshot.regime_breakdown = regime_data
+
+            # Exit efficiency average
+            exit_effs = [t.get("exit_efficiency") for t in completed if t.get("exit_efficiency") is not None]
+            snapshot.avg_exit_efficiency = round(sum(exit_effs) / len(exit_effs), 4) if exit_effs else None
+
+            # Total risk deployed (sum of target_risk_pct from entry sizing_context)
+            entries = [t for t in trades if t.get("stage") == "entry"]
+            risk_sum = 0.0
+            for t in entries:
+                sc = t.get("sizing_context")
+                if sc and sc.get("target_risk_pct") is not None:
+                    risk_sum += sc["target_risk_pct"]
+            snapshot.total_risk_deployed_pct = round(risk_sum, 6)
+
+            # Max concurrent positions — track entry/exit events by timestamp
+            events: List[tuple] = []  # (timestamp_str, delta)
+            for t in trades:
+                if t.get("stage") == "entry" and t.get("entry_time"):
+                    events.append((t["entry_time"], 1))
+                elif t.get("stage") == "exit" and t.get("exit_time"):
+                    events.append((t["exit_time"], -1))
+            events.sort(key=lambda x: x[0])
+            concurrent = 0
+            peak = 0
+            for _, delta in events:
+                concurrent += delta
+                peak = max(peak, concurrent)
+            snapshot.max_concurrent_positions = peak
+
+            # Max drawdown (peak-to-trough of cumulative PnL by exit time)
+            sorted_exits = sorted(completed, key=lambda t: t.get("exit_time", ""))
+            cum_pnl = 0.0
+            peak_pnl = 0.0
+            max_dd = 0.0
+            for t in sorted_exits:
+                cum_pnl += t["pnl"]
+                if cum_pnl > peak_pnl:
+                    peak_pnl = cum_pnl
+                dd = peak_pnl - cum_pnl
+                if dd > max_dd:
+                    max_dd = dd
+            if peak_pnl > 0:
+                snapshot.max_drawdown_pct = round(max_dd / peak_pnl * 100, 4)
+            elif max_dd > 0:
+                # All losses — drawdown is 100% from zero peak
+                snapshot.max_drawdown_pct = 100.0
 
         # --- MISSED OPPORTUNITIES ---
         snapshot.missed_count = len(missed)

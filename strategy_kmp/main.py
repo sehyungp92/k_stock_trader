@@ -244,17 +244,22 @@ async def _sync_positions(
                         ),
                     }
                     dd_ctx = compute_drawdown_context(daily_pnl_pct)
+                    import hashlib, json as _json
+                    _sw_params = kmp_switches.to_params_dict()
+                    _strat_params = {"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop, **_sw_params}
+                    _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
                     instr.on_entry_fill(
                         trade_id=f"KMP:{ticker}:{now_kst.strftime('%Y%m%d')}",
                         symbol=ticker, entry_price=s.entry_px, qty=s.qty,
                         signal="or_break_acceptance", signal_id="kmp_breakout",
                         signal_strength=s.surge,
-                        strategy_params={"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop},
+                        strategy_params=_strat_params,
                         signal_factors=signal_factors,
                         filter_decisions=fd,
                         sizing_context=s.sizing_context,
                         portfolio_state=portfolio_state,
                         drawdown_context=dd_ctx,
+                        param_set_id=_param_set_id,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:
@@ -599,6 +604,12 @@ async def run_kmp():
             # FSM step for non-position states (blocked by risk_off)
             if s.fsm != State.IN_POSITION and risk_off:
                 if "risk_off" not in s._gate_logged:
+                    if instr and s.fsm in (State.CANDIDATE, State.WATCH_BREAK, State.WAIT_ACCEPTANCE, State.ARMED):
+                        instr.on_signal_blocked(
+                            symbol=ticker, signal="or_break_acceptance", signal_id="kmp_breakout",
+                            blocked_by="risk_off", block_reason=f"fsm={s.fsm.name}",
+                            signal_strength=s.surge,
+                        )
                     logger.debug(f"{ticker}: blocked by risk_off (fsm={s.fsm.name})")
                     s._gate_logged.add("risk_off")
             if s.fsm != State.IN_POSITION and not risk_off:
