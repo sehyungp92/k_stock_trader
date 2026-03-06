@@ -151,3 +151,5 @@ class IntentResult:
     cooldown_until: Optional[float] = None
     blocking_positions: Optional[List[Dict[str, Any]]] = None
     resource_conflict_type: Optional[str] = None
+    oms_received_at: Optional[float] = None
+    order_submitted_at: Optional[float] = None

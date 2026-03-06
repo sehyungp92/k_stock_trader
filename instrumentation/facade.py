@@ -51,6 +51,7 @@ class InstrumentationKit:
         data_dir: str,
         exit_backfiller: Optional[ExitBackfiller] = None,
         heartbeat: Optional[HeartbeatEmitter] = None,
+        sidecar=None,
     ):
         self._trade_logger = trade_logger
         self._missed_logger = missed_logger
@@ -67,6 +68,7 @@ class InstrumentationKit:
             strategy_type=strategy_type,
             data_dir=data_dir,
         )
+        self._sidecar = sidecar
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="instr_backfill"
         )
@@ -133,7 +135,9 @@ class InstrumentationKit:
         portfolio_state: Optional[Dict[str, Any]] = None,
         drawdown_context: Optional[Dict[str, Any]] = None,
         experiment_id: Optional[str] = None,
+        experiment_variant: Optional[str] = None,
         param_set_id: Optional[str] = None,
+        execution_timeline: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Record a trade entry. Call after OMS fill confirmed."""
         try:
@@ -160,7 +164,9 @@ class InstrumentationKit:
                 portfolio_state=portfolio_state,
                 drawdown_context=drawdown_context,
                 experiment_id=experiment_id,
+                experiment_variant=experiment_variant,
                 param_set_id=param_set_id,
+                execution_timeline=execution_timeline,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")
@@ -219,6 +225,8 @@ class InstrumentationKit:
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
         blocking_positions: Optional[List[Dict[str, Any]]] = None,
         resource_conflict_type: str = "",
+        experiment_id: Optional[str] = None,
+        experiment_variant: Optional[str] = None,
     ) -> None:
         """Record a missed opportunity when a gate blocks a signal."""
         try:
@@ -235,6 +243,8 @@ class InstrumentationKit:
                 filter_decisions=filter_decisions or [],
                 blocking_positions=blocking_positions,
                 resource_conflict_type=resource_conflict_type,
+                experiment_id=experiment_id,
+                experiment_variant=experiment_variant,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_signal_blocked error: {e}")
@@ -274,11 +284,18 @@ class InstrumentationKit:
                        uptime_s: float = 0, error_count_1h: int = 0) -> None:
         """Emit periodic heartbeat. Call every 30s from strategy main loop."""
         try:
+            sidecar_diag = None
+            if self._sidecar:
+                try:
+                    sidecar_diag = self._sidecar.get_diagnostics()
+                except Exception:
+                    pass
             self._heartbeat.emit(
                 active_positions=active_positions,
                 open_orders=open_orders,
                 uptime_s=uptime_s,
                 error_count_1h=error_count_1h,
+                sidecar_diagnostics=sidecar_diag,
             )
         except Exception:
             pass

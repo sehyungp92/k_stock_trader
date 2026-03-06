@@ -141,6 +141,8 @@ class IntentResultModel(BaseModel):
     cooldown_until: Optional[float] = None
     blocking_positions: Optional[List[Dict[str, Any]]] = None
     resource_conflict_type: Optional[str] = None
+    oms_received_at: Optional[float] = None
+    order_submitted_at: Optional[float] = None
 
 
 class AllocationInfo(BaseModel):
@@ -346,6 +348,8 @@ async def submit_intent(req: IntentRequest):
         cooldown_until=result.cooldown_until,
         blocking_positions=result.blocking_positions,
         resource_conflict_type=result.resource_conflict_type,
+        oms_received_at=result.oms_received_at,
+        order_submitted_at=result.order_submitted_at,
     )
 
 

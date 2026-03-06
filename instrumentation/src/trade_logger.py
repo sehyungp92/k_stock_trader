@@ -88,6 +88,9 @@ class TradeEvent:
     entry_latency_ms: Optional[int] = None
     exit_latency_ms: Optional[int] = None
 
+    # --- Execution timeline ---
+    execution_timeline: Optional[Dict[str, Any]] = None
+
     # --- MFE/MAE (Maximum Favorable/Adverse Excursion) ---
     mfe_price: Optional[float] = None
     mae_price: Optional[float] = None
@@ -109,6 +112,7 @@ class TradeEvent:
 
     # --- Experiment tracking ---
     experiment_id: Optional[str] = None
+    experiment_variant: Optional[str] = None
     param_set_id: Optional[str] = None
 
     # --- Session classification ---
@@ -166,7 +170,9 @@ class TradeLogger:
         portfolio_state: Optional[Dict[str, Any]] = None,
         drawdown_context: Optional[Dict[str, Any]] = None,
         experiment_id: Optional[str] = None,
+        experiment_variant: Optional[str] = None,
         param_set_id: Optional[str] = None,
+        execution_timeline: Optional[Dict[str, Any]] = None,
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -250,7 +256,9 @@ class TradeLogger:
                 trade.drawdown_size_mult = drawdown_context.get("drawdown_size_mult")
 
             trade.experiment_id = experiment_id
+            trade.experiment_variant = experiment_variant
             trade.param_set_id = param_set_id
+            trade.execution_timeline = execution_timeline
             trade.session_type = classify_session_type(datetime.now(timezone.utc))
 
             self._open_trades[trade_id] = trade

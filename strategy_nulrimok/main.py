@@ -183,6 +183,7 @@ async def run_nulrimok():
     )
     logger.info("Starting Nulrimok Strategy")
     cfg = load_config()
+    experiment_cfg = cfg.get("experiment", {})
 
     # Load conservative switches if CONSERVATIVE_MODE=true
     if os.getenv("CONSERVATIVE_MODE", "false").lower() == "true":
@@ -478,6 +479,8 @@ async def run_nulrimok():
                                         portfolio_state=portfolio_state,
                                         drawdown_context=dd_ctx,
                                         param_set_id=_param_set_id,
+                                        experiment_id=experiment_cfg.get("experiment_id", ""),
+                                        experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                     )
                                 logger.info(f"{ticker}: Fill confirmed, qty={alloc_qty}")
                             else:
@@ -537,6 +540,8 @@ async def run_nulrimok():
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="risk_budget", block_reason="maturity=mid",
                                     filter_decisions=fd,
+                                    experiment_id=experiment_cfg.get("experiment_id", ""),
+                                    experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                 )
                             logger.debug(f"{ticker}: Skipping entry — daily risk budget exhausted "
                                          f"(open_risk >= {budget:.1%})")
@@ -558,6 +563,8 @@ async def run_nulrimok():
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="sector_cap", block_reason="maturity=mid",
                                     filter_decisions=fd,
+                                    experiment_id=experiment_cfg.get("experiment_id", ""),
+                                    experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                 )
                             logger.debug(f"{ticker}: Skipping entry — sector cap reached")
                             continue

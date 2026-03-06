@@ -214,6 +214,7 @@ async def run_pcim():
     logger.info("Starting PCIM-Alpha v1.3.1")
 
     cfg = load_config()
+    experiment_cfg = cfg.get("experiment", {})
 
     # Load conservative switches if CONSERVATIVE_MODE=true
     if os.getenv("CONSERVATIVE_MODE", "false").lower() == "true":
@@ -376,6 +377,8 @@ async def run_pcim():
                             symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
                             blocked_by="insufficient_data", block_reason="maturity=early",
                             signal_strength=getattr(c, 'conviction_score', 0.0),
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(f"STATS_REJECT: {c.symbol} INSUFFICIENT_DATA (bars={len(bars) if bars else 0})")
                     continue
@@ -394,6 +397,8 @@ async def run_pcim():
                             symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
                             blocked_by="trend_gate", block_reason="maturity=early",
                             signal_strength=getattr(c, 'conviction_score', 0.0),
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(f"STATS_REJECT: {c.symbol} TREND_GATE_FAIL (close={closes[-1]:.0f} sma20={c.sma20:.0f})")
                     continue
@@ -410,6 +415,8 @@ async def run_pcim():
                             blocked_by="hard_filter", block_reason=f"maturity=mid, filter={reject}",
                             signal_strength=getattr(c, 'conviction_score', 0.0),
                             filter_decisions=fd,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
@@ -435,6 +442,8 @@ async def run_pcim():
                             blocked_by="gap_reversal", block_reason=f"maturity=mid, rate={c.gap_rev_rate:.2f}",
                             signal_strength=c.conviction_score,
                             filter_decisions=fd,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(f"STATS_REJECT: {c.symbol} {reject}")
                     continue
@@ -526,6 +535,8 @@ async def run_pcim():
                             symbol=c.symbol, signal=f"influencer_{c.bucket}", signal_id=f"pcim_{c.bucket.lower()}",
                             blocked_by="max_positions", block_reason="maturity=late",
                             signal_strength=c.conviction_score,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(
                         f"PREMARKET_SELECT: {c.symbol} REJECTED max_positions "
@@ -539,6 +550,8 @@ async def run_pcim():
                             symbol=c.symbol, signal=f"influencer_{c.bucket}", signal_id=f"pcim_{c.bucket.lower()}",
                             blocked_by="exposure_cap", block_reason="maturity=late",
                             signal_strength=c.conviction_score,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(
                         f"PREMARKET_SELECT: {c.symbol} REJECTED exposure_cap "
@@ -656,6 +669,8 @@ async def run_pcim():
                                 portfolio_state=portfolio_state,
                                 drawdown_context=dd_ctx,
                                 param_set_id=_param_set_id,
+                                experiment_id=experiment_cfg.get("experiment_id", ""),
+                                experiment_variant=experiment_cfg.get("experiment_variant", ""),
                             )
                         logger.info(f"{symbol}: Fill confirmed, position created @ {avg_price:.0f} qty={alloc_qty}")
                         # Track Bucket A hit (filled)
@@ -698,6 +713,8 @@ async def run_pcim():
                             blocked_by="execution_veto", block_reason=f"maturity=late, veto={veto}",
                             signal_strength=c.conviction_score,
                             filter_decisions=fd,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.info(
                         f"EXECUTION_VETO: {c.symbol} veto={veto} last={last:.0f} "
@@ -747,6 +764,8 @@ async def run_pcim():
                                             block_reason=f"{result.status.name}: {result.message}",
                                             blocking_positions=result.blocking_positions,
                                             resource_conflict_type=result.resource_conflict_type or "",
+                                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                         )
                                     entry_reject_count[c.symbol] = entry_reject_count.get(c.symbol, 0) + 1
                                     if entry_reject_count[c.symbol] >= 3:
@@ -789,6 +808,8 @@ async def run_pcim():
                                             block_reason=f"{result.status.name}: {result.message}",
                                             blocking_positions=result.blocking_positions,
                                             resource_conflict_type=result.resource_conflict_type or "",
+                                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                         )
                                     entry_reject_count[c.symbol] = entry_reject_count.get(c.symbol, 0) + 1
                                     if entry_reject_count[c.symbol] >= 3:

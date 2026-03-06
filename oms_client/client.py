@@ -185,6 +185,8 @@ class OMSClient:
                         cooldown_until=data.get("cooldown_until"),
                         blocking_positions=data.get("blocking_positions"),
                         resource_conflict_type=data.get("resource_conflict_type"),
+                        oms_received_at=data.get("oms_received_at"),
+                        order_submitted_at=data.get("order_submitted_at"),
                     )
             except Exception as e:
                 last_err = e

@@ -22,6 +22,8 @@ This evaluation assesses whether the three trading bot repositories (`k_stock_tr
 
 3. **Sidecar + relay pipeline** is production-grade: watermark-based exactly-once delivery, HMAC-SHA256 signing, exponential backoff retry, deterministic event_id deduplication.
 
+   **Relay integration status:** Sidecar `relay_url` is currently empty — event forwarding is disabled. The sidecar code is ready (watermarks, HMAC, retry, file buffering). Bootstrap: (1) set `relay_url` to swing_trader relay address, (2) add HMAC secret to relay `secrets.json`, (3) verify events in relay SQLite. Events generated before relay_url is configured are buffered in local JSONL and will forward on restart. Historical events predating sidecar activation need separate ingestion via relay `POST /events`.
+
 4. **Per-strategy config in YAML** — all indicator periods, TP/SL levels, filters, time windows are parametric. Simulation policies defined for missed opportunity backfill.
 
 5. **Drawdown tier system** with automatic position sizing reduction (normal/caution/stress/critical).
@@ -88,6 +90,8 @@ Experiment ID fields exist in config but no automated significance testing or ou
 4. **Experiment tracking built in** — `experiment_id` and `experiment_variant` in config, attached to events.
 
 5. **Drawdown state tracking is granular** — `drawdown_pct`, `drawdown_tier` (full/half/quarter/halt), `drawdown_size_mult` all captured per trade.
+
+   **Relay integration status:** Sidecar `relay_url` is a placeholder (`https://RELAY_PLACEHOLDER/events`) — forwarding attempts fail and buffer locally. Bootstrap: same as k_stock_trader. Additional consideration: IBKR NQ futures trade nearly 24h (CME Globex), so the sidecar generates events across all sessions including overnight. Verify relay can handle event volume during high-activity periods (RTH open, FOMC). The `InstrumentationManager.start()` in `bootstrap.py` already calls `sidecar.start()`, so relay activation only requires config.
 
 ### Critical Gaps
 
@@ -206,6 +210,18 @@ For multi-day swing holds, the gap between previous close and next open is a sig
 - **AKC_HELIX has 34% win rate** and lowest priority. The assistant should be evaluating: "Is Helix contributing positive expected value to the portfolio, or is it a drag? Does it provide diversification benefit (decorrelated returns) that justifies its negative Sharpe?"
 - **StrategyCoordinator creates dependencies** between strategies — tightening Helix stop when ATRSS enters means Helix P&L is partially a function of ATRSS activity. This interaction effect is completely invisible to the assistant without Gap S4 being fixed.
 - **Overlay engine is a portfolio-level structural feature** — it's a meta-strategy that gates individual strategies. This is exactly the kind of structural component the assistant should be able to evaluate and optimize, but can't without Gap S5.
+
+### Relay Hub Operational Notes
+
+swing_trader VPS is the relay hub for the entire ecosystem (`http://127.0.0.1:8001/events`). Operational considerations:
+
+1. **Resource contention:** Relay process shares CPU/memory/disk I/O with swing_trader bot. During high activity (multiple positions across 10+ instruments with StrategyCoordinator adjustments), relay ingestion from other bots competes for resources. SQLite WAL mode helps but disk I/O is shared.
+
+2. **Single point of failure:** If swing_trader VPS goes down, all event pipelines are disrupted. k_stock_trader and momentum_trader buffer locally (sidecar handles this), but orchestrator has zero visibility into any bot until VPS returns. No failover path.
+
+3. **Disk budget:** Relay stores events from all 3 bots until acked. A week of unacked events (~100-300 events/day × 3 bots × 2-5KB each) is ~5-10MB — negligible, but acked events are never purged so database grows monotonically.
+
+4. **Health endpoint exists but is minimal:** `GET /health` returns `{"status": "ok", "pending_events": <count>}`. Missing: uptime, DB size on disk, unacked count per bot, last event timestamp per bot. The orchestrator does not consume this endpoint — relay failure is still detected only via poll timeout (30s + backoff).
 
 ---
 
@@ -446,3 +462,14 @@ Bot-side prerequisites:
 | 18 | swing_trader | Overnight gap tracking (S6) | Gap risk quantification |
 | 19 | trading_assistant | Historical allocation tracking (A8) | Allocation change evaluation |
 | 20 | All bots | Experiment A/B tracking (K7) | Automated significance testing |
+| 21 | swing_trader (`relay/`) | Enrich `GET /health` with: uptime, DB size on disk, unacked count per bot, last event timestamp per bot | Existing `/health` only returns pending count; not enough for proactive monitoring |
+| 22 | trading_assistant | Track end-to-end delivery latency (`orchestrator_received - exchange_timestamp`), expose p50/p95/max in `/metrics` | Timestamps exist on every event but delta never computed; silent multi-hour delays invisible |
+| 23 | swing_trader (`relay/`) | Scheduled purge of acked events >7d + `VACUUM` | Acked events accumulate forever; relay SQLite grows monotonically on disk-limited VPS |
+| 24 | k_stock_trader, momentum_trader, swing_trader (each bot's `sidecar.py`) | Enrich heartbeat with `sidecar_buffer_depth`, `relay_reachable`, `last_successful_forward_at` | Cannot distinguish "bot stopped" vs "sidecar buffering" vs "relay down"; enables tri-state diagnostic |
+| 25 | swing_trader (`relay/`) + k_stock_trader, momentum_trader, swing_trader (each bot's `sidecar.py`) | Priority column in relay events table; critical/error events returned before routine trades | CRITICAL errors wait behind routine events in FIFO; could delay error detection by 5-10 min |
+| 26 | swing_trader (`relay/`) + k_stock_trader, momentum_trader, swing_trader (each bot's `sidecar.py`) | gzip compression on `POST /events` and `GET /events` | 50-event JSON batches are 100-250KB; gzip → 15-30KB; saves bandwidth on metered VPSes |
+| 27 | trading_assistant | Wire relay health into MonitoringCheck; alert on: unreachable, disk threshold, per-bot silence >6h, latency p95 >30min | Orchestrator only detects relay failure reactively; enables proactive "relay degraded" alerts |
+
+**Relay pipeline sequencing:** Items 21+27 form a pair (21 enriches the swing_trader relay health endpoint, 27 wires it into trading_assistant's MonitoringCheck). Item 22 feeds into 27 (latency thresholds). Items 23-26 are independent. Items 24, 25, 26 all touch the sidecar in each bot repo (k_stock_trader, momentum_trader, swing_trader) and should be batched into a single sidecar change per bot to minimize deployment cycles. Items 25 and 26 also require relay-side changes in swing_trader.
+
+**Note on trading_assistant `relay/`:** This repo contains a parallel relay implementation (`relay/`) that is async (aiosqlite) but less mature than swing_trader's production relay (no `/health`, no `bot_id` filter). The production relay is in the swing_trader repo and runs on the swing_trader VPS. All relay-side changes in this roadmap target swing_trader's relay. The trading_assistant `relay/` module should be deleted — swing_trader owns the relay server, and this repo only needs the client (`orchestrator/adapters/vps_receiver.py`). Relay integration tests should mock the HTTP contract rather than importing relay server internals.

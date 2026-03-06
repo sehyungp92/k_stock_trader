@@ -85,6 +85,8 @@ async def alpha_step(
     regime_breadth_ok: bool = True,
     not_chop: bool = True,
     instr=None,  # InstrumentationKit
+    experiment_id: str = "",
+    experiment_variant: str = "",
 ) -> Optional[str]:
     """
     FSM step for a symbol.
@@ -103,6 +105,7 @@ async def alpha_step(
                         symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                         blocked_by="regime_gate", block_reason=f"maturity=early, fsm={s.fsm.name}",
                         signal_strength=s.surge,
+                        experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
             if s.fsm == State.ARMED and s.entry_order_id:
                 result = await oms.submit_intent(Intent(
@@ -145,6 +148,7 @@ async def alpha_step(
                     symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                     blocked_by="entry_cutoff", block_reason=f"maturity=early, fsm={s.fsm.name}",
                     signal_strength=s.surge,
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
             logger.info(f"{s.code}: gate entry_cutoff, {s.fsm.name} -> DONE")
             s.fsm = State.DONE
@@ -158,6 +162,7 @@ async def alpha_step(
                     symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                     blocked_by="or_lock_fail", block_reason="maturity=early",
                     signal_strength=s.surge,
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
             logger.info(
                 f"{s.code}: gate OR_lock fail, DONE "
@@ -234,6 +239,7 @@ async def alpha_step(
                     blocked_by="spread_gate", block_reason=f"maturity=mid, spread_pct={s.spread_pct:.4f}",
                     signal_strength=s.surge,
                     filter_decisions=fd,
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
         return None
 
@@ -258,6 +264,7 @@ async def alpha_step(
                     symbol=s.code, signal="or_break", signal_id="kmp_breakout",
                     blocked_by="acceptance_timeout", block_reason="maturity=mid",
                     signal_strength=s.surge,
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
             s.fsm = State.DONE
             logger.info(f"{s.code}: Acceptance timeout")
@@ -277,6 +284,7 @@ async def alpha_step(
                         blocked_by="regime_post_accept",
                         block_reason="maturity=late, accepted_but_regime_off",
                         signal_strength=s.surge,
+                        experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
             return None
 
@@ -296,6 +304,7 @@ async def alpha_step(
                     blocked_by="vi_wall", block_reason="maturity=late",
                     signal_strength=s.surge,
                     filter_decisions=fd,
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
             s.fsm = State.DONE
             logger.info(f"{s.code}: VI blocked")
@@ -352,6 +361,7 @@ async def alpha_step(
                         block_reason=f"maturity=late, sector={exposure.get_sector(s.code)}",
                         signal_strength=s.surge,
                         filter_decisions=fd,
+                        experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
                 s.fsm = State.DONE
                 s.skip_reason = "sector_cap"
@@ -401,6 +411,9 @@ async def alpha_step(
         if result.status.name in ("EXECUTED", "APPROVED"):
             s.entry_order_id = result.order_id
             s.entry_armed_ts = time.time()
+            s.signal_generated_at = s.break_ts
+            s.oms_received_at = result.oms_received_at
+            s.order_submitted_at = result.order_submitted_at
             s.fsm = State.ARMED
             logger.info(f"{s.code}: Armed entry at {entry_trigger:.0f}, qty={qty}")
             return intent.intent_id
@@ -422,6 +435,7 @@ async def alpha_step(
                     filter_decisions=fd,
                     blocking_positions=result.blocking_positions,
                     resource_conflict_type=result.resource_conflict_type or "",
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
             logger.warning(f"{s.code}: Entry rejected - {result.message}")
             s.fsm = State.DONE

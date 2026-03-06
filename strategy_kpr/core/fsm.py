@@ -230,7 +230,9 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                      is_late: bool, atr: float, equity: float, oms,
                      drift_monitor=None, sector_exposure=None,
                      investor_age: float = 0.0,
-                     instr=None) -> Optional[str]:
+                     instr=None,
+                     experiment_id: str = "",
+                     experiment_variant: str = "") -> Optional[str]:
 
     # Drift gate: block all entries when drift detected
     if drift_monitor and drift_monitor.global_trade_block:
@@ -242,6 +244,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 instr.on_signal_blocked(
                     symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                     blocked_by="drift_block", block_reason="maturity=early",
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
         logger.debug(f"{s.code}: Entry blocked — drift monitor active")
         return None
@@ -265,6 +268,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 instr.on_signal_blocked(
                     symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                     blocked_by="entry_time_gate", block_reason="maturity=early",
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
         return None
 
@@ -280,6 +284,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             instr.on_signal_blocked(
                 symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                 blocked_by="stop_breach", block_reason=f"maturity=mid, fsm={s.fsm.name}",
+                experiment_id=experiment_id, experiment_variant=experiment_variant,
             )
         s.fsm = FSMState.INVALIDATED
         return None
@@ -349,6 +354,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="sector_cap",
                         block_reason=f"maturity=late, sector={sector_exposure.get_sector(s.code)}",
+                        experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
                 logger.debug(f"{s.code}: Sector cap reached for {sector_exposure.get_sector(s.code)}")
                 return None
@@ -363,6 +369,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="confidence_red", block_reason="maturity=late",
                         filter_decisions=fd,
+                        experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
                 s.fsm = FSMState.INVALIDATED
                 return None
@@ -415,6 +422,9 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 s.entry_px = close
                 s.entry_ts = now
                 s.qty = qty
+                s.signal_generated_at = s.setup_time.timestamp() if s.setup_time else time_module.time()
+                s.oms_received_at = result.oms_received_at
+                s.order_submitted_at = result.order_submitted_at
                 s.remaining_qty = qty
                 s.confidence = confidence
                 s.max_price = close
@@ -445,6 +455,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         filter_decisions=fd,
                         blocking_positions=result.blocking_positions,
                         resource_conflict_type=result.resource_conflict_type or "",
+                        experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
                 logger.warning(f"{s.code}: Entry REJECTED status={result.status.name} msg={result.message}")
                 return None

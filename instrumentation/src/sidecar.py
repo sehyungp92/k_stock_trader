@@ -14,6 +14,7 @@ Principles:
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import hmac
 import json
@@ -44,6 +45,25 @@ _DIR_TO_EVENT_TYPE = {
     "exit_movements": "exit_movement",
     "heartbeats": "heartbeat",
     "bot_errors": "bot_error",
+}
+
+# Priority mapping for relay event triage
+_EVENT_TYPE_PRIORITY = {
+    "bot_error": "high",
+    "trade": "normal",
+    "missed_opportunity": "normal",
+    "process_quality": "normal",
+    "error": "normal",
+    "daily_snapshot": "low",
+    "market_snapshot": "low",
+    "exit_movement": "normal",
+    "heartbeat": "low",
+}
+_BOT_ERROR_SEVERITY_PRIORITY = {
+    "critical": "critical",
+    "error": "critical",
+    "warning": "high",
+    "info": "normal",
 }
 
 
@@ -88,6 +108,10 @@ class Sidecar:
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self.poll_interval = sidecar_config.get("poll_interval_seconds", 60)
+
+        # Diagnostics for heartbeat enrichment
+        self._last_successful_forward_at: Optional[str] = None
+        self._relay_reachable: bool = False
 
     # --- Watermark management ---
 
@@ -193,10 +217,16 @@ class Sidecar:
             raw_str = f"{self.bot_id}|{exchange_ts}|{event_type}|{key}"
             event_id = hashlib.sha256(raw_str.encode()).hexdigest()[:16]
 
+        priority = _EVENT_TYPE_PRIORITY.get(event_type, "normal")
+        if event_type == "bot_error":
+            severity = raw_event.get("severity", "").lower()
+            priority = _BOT_ERROR_SEVERITY_PRIORITY.get(severity, priority)
+
         return {
             "event_id": event_id,
             "bot_id": self.bot_id,
             "event_type": event_type,
+            "priority": priority,
             "payload": json.dumps(raw_event, default=str),
             "exchange_timestamp": exchange_ts,
         }
@@ -244,8 +274,13 @@ class Sidecar:
         canonical = json.dumps(envelope, sort_keys=True)
         signature = self._sign_payload(canonical)
 
+        # Gzip compress the body (HMAC computed on uncompressed canonical)
+        body_bytes = canonical.encode()
+        compressed_body = gzip.compress(body_bytes)
+
         headers = {
             "Content-Type": "application/json",
+            "Content-Encoding": "gzip",
             "X-Bot-ID": self.bot_id,
             "X-Signature": signature,
         }
@@ -254,11 +289,13 @@ class Sidecar:
             try:
                 response = requests.post(
                     self.relay_url,
-                    data=canonical.encode(),
+                    data=compressed_body,
                     headers=headers,
                     timeout=30,
                 )
                 if response.status_code == 200:
+                    self._last_successful_forward_at = datetime.now(timezone.utc).isoformat()
+                    self._relay_reachable = True
                     return True
                 elif response.status_code == 409:
                     # Duplicate — already received, treat as success
@@ -280,7 +317,35 @@ class Sidecar:
             backoff = self.retry_backoff_base * (2 ** attempt)
             time.sleep(min(backoff, 300))  # cap at 5 minutes
 
+        self._relay_reachable = False
         return False
+
+    # --- Diagnostics ---
+
+    def get_diagnostics(self) -> dict:
+        """Return sidecar health diagnostics for heartbeat enrichment."""
+        buffer_depth = 0
+        try:
+            for filepath, event_type in self._get_event_files():
+                key = str(filepath)
+                last_sent = self.watermarks.get(key, 0)
+                if filepath.suffix == ".jsonl":
+                    try:
+                        lines = filepath.read_text().strip().split("\n")
+                        line_count = sum(1 for l in lines if l.strip())
+                        buffer_depth += max(0, line_count - last_sent)
+                    except OSError:
+                        pass
+                elif filepath.suffix == ".json":
+                    if last_sent == 0:
+                        buffer_depth += 1
+        except Exception:
+            pass
+        return {
+            "sidecar_buffer_depth": buffer_depth,
+            "relay_reachable": self._relay_reachable,
+            "last_successful_forward_at": self._last_successful_forward_at,
+        }
 
     # --- Main loop ---
 

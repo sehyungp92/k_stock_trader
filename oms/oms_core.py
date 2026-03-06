@@ -96,6 +96,7 @@ class OMSCore:
 
     async def submit_intent(self, intent: Intent) -> IntentResult:
         """Submit intent for processing. Main entry point for strategies."""
+        oms_received_at = time.time()
 
         # 1. Idempotency check (outside lock — read-only)
         cached = self._idem.get(intent.idempotency_key)
@@ -110,9 +111,9 @@ class OMSCore:
 
         # Per-symbol mutex: prevents concurrent submits for same symbol
         async with self._symbol_locks[intent.symbol]:
-            return await self._process_intent(intent)
+            return await self._process_intent(intent, oms_received_at=oms_received_at)
 
-    async def _process_intent(self, intent: Intent) -> IntentResult:
+    async def _process_intent(self, intent: Intent, oms_received_at: float = 0.0) -> IntentResult:
         """Process intent under per-symbol lock."""
 
         # 1. Dispatch operational intents
@@ -132,10 +133,11 @@ class OMSCore:
                 cooldown_until=time.time() + (risk_result.cooldown_sec or 0),
                 blocking_positions=risk_result.blocking_positions,
                 resource_conflict_type=risk_result.resource_conflict_type,
+                oms_received_at=oms_received_at,
             )
         if risk_result.decision == RiskDecision.DEFER:
             self._release_lock_if_entry(intent)
-            return await self._finalize(intent, IntentStatus.DEFERRED, risk_result.reason)
+            return await self._finalize(intent, IntentStatus.DEFERRED, risk_result.reason, oms_received_at=oms_received_at)
 
         # 3. Apply risk modifications
         final_qty = risk_result.modified_qty or intent.desired_qty or intent.target_qty
@@ -143,13 +145,13 @@ class OMSCore:
         # 4. Arbitration
         arb_result = self.arbitration.arbitrate(intent)
         if arb_result.result == ArbitrationResult.DEFER:
-            return await self._finalize(intent, IntentStatus.DEFERRED, arb_result.reason)
+            return await self._finalize(intent, IntentStatus.DEFERRED, arb_result.reason, oms_received_at=oms_received_at)
         if arb_result.result == ArbitrationResult.CANCEL:
             self._release_lock_if_entry(intent)
-            return await self._finalize(intent, IntentStatus.REJECTED, arb_result.reason)
+            return await self._finalize(intent, IntentStatus.REJECTED, arb_result.reason, oms_received_at=oms_received_at)
 
         # 5. Plan + Execute
-        result = await self._plan_and_execute(intent, final_qty, risk_result.modified_qty)
+        result = await self._plan_and_execute(intent, final_qty, risk_result.modified_qty, oms_received_at=oms_received_at)
 
         # Release entry lock on rejection (execution failure)
         if result.status == IntentStatus.REJECTED:
@@ -224,7 +226,8 @@ class OMSCore:
     # ------------------------------------------------------------------
 
     async def _plan_and_execute(
-        self, intent: Intent, final_qty: int, was_modified: Optional[int]
+        self, intent: Intent, final_qty: int, was_modified: Optional[int],
+        oms_received_at: float = 0.0,
     ) -> IntentResult:
         """Create order plan and execute via adapter."""
         current_price = await self._get_current_price(intent.symbol)
@@ -243,7 +246,7 @@ class OMSCore:
                 )
                 if pending > 0:
                     return await self._handle_cancel_orders(intent)
-                return await self._finalize(intent, IntentStatus.REJECTED, "No allocation to exit")
+                return await self._finalize(intent, IntentStatus.REJECTED, "No allocation to exit", oms_received_at=oms_received_at)
             # Respect desired_qty for partial exits, capped at allocation
             exit_qty = min(intent.desired_qty, alloc_qty) if intent.desired_qty else alloc_qty
             plan = self.planner.create_exit_plan(
@@ -263,7 +266,7 @@ class OMSCore:
             target_qty = intent.target_qty or 0
             delta = target_qty - current_alloc
             if delta == 0:
-                return await self._finalize(intent, IntentStatus.EXECUTED, "Already at target")
+                return await self._finalize(intent, IntentStatus.EXECUTED, "Already at target", oms_received_at=oms_received_at)
             side = "BUY" if delta > 0 else "SELL"
             plan = self.planner.create_plan(
                 symbol=intent.symbol, side=side, qty=abs(delta),
@@ -274,7 +277,7 @@ class OMSCore:
                 intent_id=intent.intent_id, urgency=intent.urgency,
             )
         else:
-            return await self._finalize(intent, IntentStatus.REJECTED, f"Unsupported intent type: {intent.intent_type}")
+            return await self._finalize(intent, IntentStatus.REJECTED, f"Unsupported intent type: {intent.intent_type}", oms_received_at=oms_received_at)
 
         # Execute
         exec_result = await self.adapter.submit_order(
@@ -282,9 +285,10 @@ class OMSCore:
             order_type=plan.order_type.name,
             limit_price=plan.limit_price, stop_price=plan.stop_price,
         )
+        order_submitted_at = time.time()
 
         if not exec_result.success:
-            return await self._finalize(intent, IntentStatus.REJECTED, exec_result.message)
+            return await self._finalize(intent, IntentStatus.REJECTED, exec_result.message, oms_received_at=oms_received_at)
 
         # Track as WorkingOrder — allocation is updated on FILL, not here
         wo = WorkingOrder(
@@ -313,6 +317,7 @@ class OMSCore:
             intent, IntentStatus.EXECUTED,
             order_id=exec_result.order_id,
             modified_qty=final_qty if was_modified else None,
+            oms_received_at=oms_received_at, order_submitted_at=order_submitted_at,
         )
 
     # ------------------------------------------------------------------
@@ -780,6 +785,8 @@ class OMSCore:
         cooldown_until: Optional[float] = None,
         blocking_positions: Optional[List] = None,
         resource_conflict_type: Optional[str] = None,
+        oms_received_at: Optional[float] = None,
+        order_submitted_at: Optional[float] = None,
     ) -> IntentResult:
         """Create result, store in idempotency cache, and persist."""
         result = IntentResult(
@@ -791,6 +798,8 @@ class OMSCore:
             cooldown_until=cooldown_until,
             blocking_positions=blocking_positions,
             resource_conflict_type=resource_conflict_type,
+            oms_received_at=oms_received_at,
+            order_submitted_at=order_submitted_at,
         )
 
         # Log all intent outcomes for observability

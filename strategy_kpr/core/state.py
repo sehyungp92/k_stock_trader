@@ -61,6 +61,11 @@ class SymbolState:
     # Sizing context (captured at entry for instrumentation)
     sizing_context: Optional[dict] = None
 
+    # Execution timeline (for latency decomposition)
+    signal_generated_at: float = 0.0
+    oms_received_at: Optional[float] = None
+    order_submitted_at: Optional[float] = None
+
     # Signals
     investor_signal: str = "NEUTRAL"
     micro_signal: str = "NEUTRAL"

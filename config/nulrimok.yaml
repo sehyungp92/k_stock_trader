@@ -5,6 +5,10 @@
 # LRS database path (overridden by LRS_DB_PATH env var in vps1 compose)
 lrs_path: "/app/lrs.db"
 
+experiment:
+  experiment_id: ""
+  experiment_variant: ""
+
 universe:
   # --- Semiconductors ---
   - "005930"   # Samsung Electronics

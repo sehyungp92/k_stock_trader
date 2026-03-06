@@ -184,6 +184,7 @@ async def _sync_positions(
     instr: InstrumentationKit = None,
     daily_pnl_pct: float = 0.0,
     gross_exposure_pct: float | None = None,
+    experiment_cfg: dict | None = None,
 ) -> None:
     """Sync FSM state from OMS positions each loop."""
     all_positions = await oms.get_all_positions()
@@ -248,6 +249,21 @@ async def _sync_positions(
                     _sw_params = kmp_switches.to_params_dict()
                     _strat_params = {"pgm_regime": s.pgm_regime_at_entry, "structure_stop": s.structure_stop, **_sw_params}
                     _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
+                    _exp_cfg = experiment_cfg or {}
+                    import time as _time
+                    _fill_confirmed_at = _time.time()
+                    _exec_timeline = None
+                    if s.signal_generated_at and s.oms_received_at and s.order_submitted_at:
+                        _exec_timeline = {
+                            "signal_generated_at": s.signal_generated_at,
+                            "oms_received_at": s.oms_received_at,
+                            "order_submitted_at": s.order_submitted_at,
+                            "fill_confirmed_at": _fill_confirmed_at,
+                            "signal_to_oms_ms": int((s.oms_received_at - s.signal_generated_at) * 1000),
+                            "oms_processing_ms": int((s.order_submitted_at - s.oms_received_at) * 1000),
+                            "broker_to_fill_ms": int((_fill_confirmed_at - s.order_submitted_at) * 1000),
+                            "total_latency_ms": int((_fill_confirmed_at - s.signal_generated_at) * 1000),
+                        }
                     instr.on_entry_fill(
                         trade_id=f"KMP:{ticker}:{now_kst.strftime('%Y%m%d')}",
                         symbol=ticker, entry_price=s.entry_px, qty=s.qty,
@@ -260,6 +276,9 @@ async def _sync_positions(
                         portfolio_state=portfolio_state,
                         drawdown_context=dd_ctx,
                         param_set_id=_param_set_id,
+                        experiment_id=_exp_cfg.get("experiment_id", ""),
+                        experiment_variant=_exp_cfg.get("experiment_variant", ""),
+                        execution_timeline=_exec_timeline,
                     )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:
@@ -337,6 +356,7 @@ async def run_kmp():
     logger.info("Starting KMP v2.3.4")
 
     cfg = load_config()
+    experiment_cfg = cfg.get("experiment", {})
 
     # Load conservative switches if CONSERVATIVE_MODE=true
     if os.getenv("CONSERVATIVE_MODE", "false").lower() == "true":
@@ -576,6 +596,7 @@ async def run_kmp():
             oms, states, candidates, last_prices, exposure, instr=instr,
             daily_pnl_pct=acct.daily_pnl_pct if acct else 0.0,
             gross_exposure_pct=acct.gross_exposure_pct if acct else None,
+            experiment_cfg=experiment_cfg,
         )
 
         # Process each candidate
@@ -609,6 +630,8 @@ async def run_kmp():
                             symbol=ticker, signal="or_break_acceptance", signal_id="kmp_breakout",
                             blocked_by="risk_off", block_reason=f"fsm={s.fsm.name}",
                             signal_strength=s.surge,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
                         )
                     logger.debug(f"{ticker}: blocked by risk_off (fsm={s.fsm.name})")
                     s._gate_logged.add("risk_off")
@@ -629,6 +652,8 @@ async def run_kmp():
                     regime_breadth_ok=(breadth >= 8),
                     not_chop=(not is_chop),
                     instr=instr,
+                    experiment_id=experiment_cfg.get("experiment_id", ""),
+                    experiment_variant=experiment_cfg.get("experiment_variant", ""),
                 )
 
             # Position management

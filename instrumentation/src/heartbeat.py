@@ -19,7 +19,8 @@ class HeartbeatEmitter:
 
     def emit(self, active_positions: int = 0, open_orders: int = 0,
              uptime_s: float = 0, error_count_1h: int = 0,
-             extra: Optional[dict] = None) -> None:
+             extra: Optional[dict] = None,
+             sidecar_diagnostics: Optional[dict] = None) -> None:
         """Write a single heartbeat record."""
         now = datetime.now(timezone.utc)
         record = {
@@ -32,6 +33,10 @@ class HeartbeatEmitter:
             "uptime_s": round(uptime_s, 1),
             "error_count_1h": error_count_1h,
         }
+        if sidecar_diagnostics:
+            record["sidecar_buffer_depth"] = sidecar_diagnostics.get("sidecar_buffer_depth", 0)
+            record["relay_reachable"] = sidecar_diagnostics.get("relay_reachable", False)
+            record["last_successful_forward_at"] = sidecar_diagnostics.get("last_successful_forward_at")
         if extra:
             record["extra"] = extra
 

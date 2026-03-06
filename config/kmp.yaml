@@ -3,6 +3,10 @@
 
 max_per_sector: 2
 
+experiment:
+  experiment_id: ""
+  experiment_variant: ""
+
 # Baselines are computed dynamically at startup from daily OHLCV data
 # by strategy_kmp/premarket.py (no config values needed).
 

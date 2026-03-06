@@ -227,7 +227,9 @@ class TestSidecar:
             self.sidecar._send_batch(events)
 
             call_args = mock_requests.post.call_args
-            sent_data = json.loads(call_args.kwargs.get("data", call_args[1].get("data", b"")).decode())
+            raw_body = call_args.kwargs.get("data", call_args[1].get("data", b""))
+            import gzip
+            sent_data = json.loads(gzip.decompress(raw_body).decode())
             for evt in sent_data["events"]:
                 assert "_source_file" not in evt
                 assert "_line_number" not in evt

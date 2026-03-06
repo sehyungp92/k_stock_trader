@@ -2,6 +2,10 @@
 # KIS credentials are loaded from environment variables.
 # VWAP pullback strategy - needs liquid names for reliable VWAP.
 
+experiment:
+  experiment_id: ""
+  experiment_variant: ""
+
 universe:
   # --- Semiconductors ---
   - "005930"   # Samsung Electronics

@@ -86,6 +86,7 @@ async def run_kpr():
     )
     logger.info("Starting KPR v4.3")
     cfg = load_config()
+    experiment_cfg = cfg.get("experiment", {})
 
     # Load conservative switches if CONSERVATIVE_MODE=true
     if os.getenv("CONSERVATIVE_MODE", "false").lower() == "true":
@@ -460,6 +461,8 @@ async def run_kpr():
                     sector_exposure=sector_exposure,
                     investor_age=investor_age,
                     instr=instr,
+                    experiment_id=experiment_cfg.get("experiment_id", ""),
+                    experiment_variant=experiment_cfg.get("experiment_variant", ""),
                 )
 
                 if intent_id:
@@ -492,6 +495,20 @@ async def run_kpr():
                         _sw_params = kpr_switches.to_params_dict()
                         _strat_params = {"confidence": s.confidence, "setup_type": s.setup_type, **_sw_params}
                         _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
+                        import time as _time
+                        _fill_confirmed_at = _time.time()
+                        _exec_timeline = None
+                        if s.signal_generated_at and s.oms_received_at and s.order_submitted_at:
+                            _exec_timeline = {
+                                "signal_generated_at": s.signal_generated_at,
+                                "oms_received_at": s.oms_received_at,
+                                "order_submitted_at": s.order_submitted_at,
+                                "fill_confirmed_at": _fill_confirmed_at,
+                                "signal_to_oms_ms": int((s.oms_received_at - s.signal_generated_at) * 1000),
+                                "oms_processing_ms": int((s.order_submitted_at - s.oms_received_at) * 1000),
+                                "broker_to_fill_ms": int((_fill_confirmed_at - s.order_submitted_at) * 1000),
+                                "total_latency_ms": int((_fill_confirmed_at - s.signal_generated_at) * 1000),
+                            }
                         instr.on_entry_fill(
                             trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
                             symbol=ticker, entry_price=s.entry_px, qty=s.qty,
@@ -504,6 +521,9 @@ async def run_kpr():
                             portfolio_state=portfolio_state,
                             drawdown_context=dd_ctx,
                             param_set_id=_param_set_id,
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                            execution_timeline=_exec_timeline,
                         )
                 else:
                     positions.discard(ticker)

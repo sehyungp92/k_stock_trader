@@ -101,6 +101,10 @@ class MissedOpportunityEvent:
     market_regime: str = ""
     filter_decisions: List[Dict[str, Any]] = field(default_factory=list)
 
+    # --- Experiment tracking ---
+    experiment_id: Optional[str] = None
+    experiment_variant: Optional[str] = None
+
     def to_dict(self) -> dict:
         return asdict(self)
 
@@ -263,6 +267,8 @@ class MissedOpportunityLogger:
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
         blocking_positions: Optional[List[Dict[str, Any]]] = None,
         resource_conflict_type: str = "",
+        experiment_id: Optional[str] = None,
+        experiment_variant: Optional[str] = None,
     ) -> MissedOpportunityEvent:
         """
         Call this when a signal fires but is blocked by a gate, filter, or
@@ -333,6 +339,8 @@ class MissedOpportunityLogger:
                 strategy_params_at_signal=strategy_params,
                 market_regime=market_regime,
                 filter_decisions=filter_decisions or [],
+                experiment_id=experiment_id,
+                experiment_variant=experiment_variant,
                 backfill_status="pending",
             )
 
