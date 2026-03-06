@@ -195,6 +195,14 @@ async def alpha_step(
                 f"(surge={s.surge:.2f} < thresh={surge_thresh:.2f}, min_at_scan={s.value15:.2f})"
             )
             s._gate_logged.add("surge_decay")
+        if instr:
+            instr.on_signal_blocked(
+                symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                blocked_by="surge_decay",
+                block_reason=f"surge={s.surge:.2f} < thresh={surge_thresh:.2f}",
+                signal_strength=s.surge,
+                experiment_id=experiment_id, experiment_variant=experiment_variant,
+            )
         return None
 
     # Log would-block: passed permissive threshold but would fail strict
@@ -211,6 +219,14 @@ async def alpha_step(
     # RVol gate (optional - redundant with quality score)
     if kmp_switches.enable_rvol_hard_gate:
         if not rvol_ok(s):
+            if instr:
+                instr.on_signal_blocked(
+                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                    blocked_by="rvol_hard_gate",
+                    block_reason=f"rvol_1m={s.rvol_1m:.2f}",
+                    signal_strength=s.surge,
+                    experiment_id=experiment_id, experiment_variant=experiment_variant,
+                )
             return None
     else:
         # Log would-block if permissive but would fail strict RVOL gate

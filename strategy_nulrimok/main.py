@@ -577,6 +577,20 @@ async def run_nulrimok():
                             regime_exposure_cap=regime_exposure_cap,
                             instr=instr)
 
+                # Instrument overflow tickers that could have traded but are rotated out
+                if artifact and instr:
+                    for ticker in artifact.overflow:
+                        ticker_artifact = artifact.get_ticker(ticker)
+                        if ticker_artifact and ticker_artifact.tradable:
+                            instr.on_signal_blocked(
+                                symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
+                                blocked_by="rotation_overflow",
+                                block_reason=f"ticker_in_overflow_queue, active_set_size={len(artifact.active_set)}",
+                                signal_strength=0.0,
+                                experiment_id=experiment_cfg.get("experiment_id", ""),
+                                experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                            )
+
                 daily_ranks = {t: artifact.get_ticker(t).daily_rank
                                for t in artifact.active_set if artifact.get_ticker(t)}
                 old_active = set(artifact.active_set)

@@ -52,7 +52,3 @@ postgres_data/
 tests/
 config/
 *.md
-
-# Note: scripts/ is NOT excluded — Nulrimok Dockerfile copies scripts/backfill_lrs.py
-# Note: infra/ is NOT excluded — dashboard build context is root
-# Note: instrumentation/ is NOT excluded — strategy Dockerfiles copy it

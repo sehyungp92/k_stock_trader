@@ -104,7 +104,7 @@ class MarketSnapshotService:
 
         Adapted for KIS API:
         - Price from get_last_price(symbol)
-        - bid/ask/spread set to 0 (not available on-demand)
+        - bid/ask/spread left as None (not available on-demand via REST)
         - funding_rate, open_interest, mark_price always None (equity market)
         - ATR computed from daily bars if available
         - volume_24h from daily bars if available

@@ -17,11 +17,14 @@ and never crash the strategy.
 from __future__ import annotations
 
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import yaml
 
 from loguru import logger
 
@@ -33,6 +36,7 @@ from .src.regime_classifier import RegimeClassifier
 from .src.daily_snapshot import DailySnapshotBuilder
 from .src.exit_backfill import ExitBackfiller
 from .src.heartbeat import HeartbeatEmitter
+from .src.sidecar import Sidecar
 
 
 class InstrumentationKit:
@@ -95,12 +99,38 @@ class InstrumentationKit:
             "market_snapshots": {"interval_seconds": 300},
         }
 
+        # Load sidecar config from YAML, allow env var override for relay_url
+        config_path = Path(__file__).parent / "config" / "instrumentation_config.yaml"
+        try:
+            with open(config_path) as f:
+                yaml_config = yaml.safe_load(f) or {}
+            config["sidecar"] = yaml_config.get("sidecar", {})
+        except (OSError, yaml.YAMLError) as e:
+            logger.warning("Failed to load instrumentation config: %s", e)
+            config["sidecar"] = {}
+
+        relay_url = os.environ.get("SIDECAR_RELAY_URL", "") or config["sidecar"].get("relay_url", "")
+        config["sidecar"]["relay_url"] = relay_url
+
         snapshot_service = MarketSnapshotService(config, data_provider=data_provider)
         trade_logger = TradeLogger(config, snapshot_service)
         missed_logger = MissedOpportunityLogger(config, snapshot_service)
         process_scorer = ProcessScorer()
         regime_classifier = RegimeClassifier(data_provider=data_provider)
         daily_builder = DailySnapshotBuilder(config)
+
+        # Initialize sidecar when relay_url is configured
+        sidecar = None
+        if relay_url:
+            try:
+                sidecar = Sidecar(config)
+                sidecar.start()
+                logger.info("Sidecar started — forwarding to %s", relay_url)
+            except Exception as e:
+                logger.warning("Failed to start sidecar: %s", e)
+                sidecar = None
+        else:
+            logger.debug("Sidecar disabled — no SIDECAR_RELAY_URL or relay_url configured")
 
         logger.info(
             f"InstrumentationKit created for {strategy_type} "
@@ -117,6 +147,7 @@ class InstrumentationKit:
             data_provider=data_provider,
             strategy_type=strategy_type,
             data_dir=data_dir,
+            sidecar=sidecar,
         )
 
     def on_entry_fill(
@@ -335,7 +366,12 @@ class InstrumentationKit:
             pass
 
     def shutdown(self) -> None:
-        """Clean up executor resources."""
+        """Clean up executor and sidecar resources."""
+        try:
+            if self._sidecar:
+                self._sidecar.stop()
+        except Exception:
+            pass
         try:
             self._executor.shutdown(wait=False)
         except Exception:

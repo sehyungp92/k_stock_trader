@@ -505,12 +505,39 @@ async def run_pcim():
 
                 c = apply_bucketing(c, expected_open, regime)
                 if c.is_rejected():
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="gap_bucketing",
+                            block_reason=f"bucket_rejected, gap_pct={getattr(c, 'gap_pct', 0):.2%}",
+                            signal_strength=getattr(c, 'conviction_score', 0.0),
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                        )
                     continue
                 c = apply_tier(c)
                 if c.is_rejected():
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="tier_assignment",
+                            block_reason=f"tier_rejected",
+                            signal_strength=getattr(c, 'conviction_score', 0.0),
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                        )
                     continue
                 c = compute_sizing(c, equity)
                 if c.is_rejected():
+                    if instr:
+                        instr.on_signal_blocked(
+                            symbol=c.symbol, signal="influencer_signal", signal_id="pcim_premarket",
+                            blocked_by="sizing_rejected",
+                            block_reason=f"sizing_rejected",
+                            signal_strength=getattr(c, 'conviction_score', 0.0),
+                            experiment_id=experiment_cfg.get("experiment_id", ""),
+                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                        )
                     continue
                 c.priority_key = c.compute_priority_key()
 

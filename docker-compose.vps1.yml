@@ -58,6 +58,7 @@ services:
       KMP_CONFIG: /app/config/kmp.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
       RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     volumes:
       - ./config:/app/config:ro
@@ -92,6 +93,7 @@ services:
       NULRIMOK_CONFIG: /app/config/nulrimok.yaml
       CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
       RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
     volumes:
       - ./config:/app/config:ro

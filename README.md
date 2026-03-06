@@ -216,5 +216,3 @@ docker logs strategy_nulrimok 2>&1 | grep "DSE:\|Entry conditions not met\|Armed
 # Risk events
 docker logs oms_vps1 2>&1 | grep -i "reject\|halt\|breach"
 ```
-
-See `implementation.md` for detailed per-strategy debug pipelines.

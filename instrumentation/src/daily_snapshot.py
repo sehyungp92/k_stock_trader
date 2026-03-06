@@ -77,6 +77,9 @@ class DailySnapshot:
     avg_exit_slippage_bps: Optional[float] = None
     avg_entry_latency_ms: Optional[float] = None
 
+    # Per-strategy breakdown (single-key dict for mono-strategy processes)
+    per_strategy_summary: dict = field(default_factory=dict)
+
     # Health
     error_count: int = 0
     uptime_pct: float = 100.0
@@ -249,6 +252,27 @@ class DailySnapshotBuilder:
 
         # --- ERRORS ---
         snapshot.error_count = len(errors)
+
+        # --- PER-STRATEGY SUMMARY ---
+        # Mono-strategy: one key matching strategy_type
+        snapshot.per_strategy_summary = {
+            self.strategy_type: {
+                "trades": snapshot.total_trades,
+                "win_count": snapshot.win_count,
+                "loss_count": snapshot.loss_count,
+                "gross_pnl": snapshot.gross_pnl,
+                "net_pnl": snapshot.net_pnl,
+                "win_rate": (
+                    snapshot.win_count / snapshot.total_trades * 100
+                    if snapshot.total_trades > 0 else 0
+                ),
+                "avg_win": snapshot.avg_win,
+                "avg_loss": snapshot.avg_loss,
+                "best_trade_pnl": snapshot.best_trade_pnl,
+                "worst_trade_pnl": snapshot.worst_trade_pnl,
+                "avg_entry_slippage_bps": snapshot.avg_entry_slippage_bps,
+            }
+        }
 
         return snapshot
 

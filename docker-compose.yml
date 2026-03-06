@@ -75,6 +75,7 @@ services:
       OMS_URL: http://oms:8000
       KMP_CONFIG: /app/config/kmp.yaml
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
     profiles:
       - kmp
       - all
@@ -97,6 +98,7 @@ services:
       OMS_URL: http://oms:8000
       KPR_CONFIG: /app/config/kpr.yaml
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
     profiles:
       - kpr
       - all
@@ -120,6 +122,7 @@ services:
       OMS_URL: http://oms:8000
       NULRIMOK_CONFIG: /app/config/nulrimok.yaml
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
     profiles:
       - nulrimok
       - all
@@ -143,6 +146,7 @@ services:
       PCIM_CONFIG: /app/config/pcim.yaml
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
+      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
     profiles:
       - pcim
       - all

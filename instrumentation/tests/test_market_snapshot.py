@@ -70,12 +70,13 @@ class TestMarketSnapshot:
         assert snap.last_trade_price == 50000.0
         assert snap.mid == 50000.0
 
-    def test_bid_ask_zero_for_krx(self):
+    def test_bid_ask_none_for_krx(self):
         """KRX equity: bid/ask not available on-demand via REST."""
         snap = self.service.capture_now("005930")
-        assert snap.bid == 0.0
-        assert snap.ask == 0.0
-        assert snap.spread_bps == 0.0
+        assert snap.bid is None
+        assert snap.ask is None
+        assert snap.spread_bps is None
+        assert snap.bid_ask_available is False
 
     def test_equity_fields_none(self):
         """Equity market: funding rate, open interest, mark price always None."""
