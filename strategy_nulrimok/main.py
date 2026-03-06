@@ -124,7 +124,7 @@ def _increment_sessions_held(position_states: Dict[str, PositionState]) -> None:
         pos.sessions_held += 1
 
 
-async def _recover_positions(oms, position_states: Dict[str, PositionState]) -> None:
+async def _recover_positions(oms, position_states: Dict[str, PositionState], instr=None) -> None:
     """Recover position state from OMS allocations on startup/DSE."""
     try:
         allocations = await oms.get_strategy_allocations(STRATEGY_ID)
@@ -153,10 +153,17 @@ async def _recover_positions(oms, position_states: Dict[str, PositionState]) -> 
                 position_states[ticker] = pos
                 logger.info(f"Recovered position: {ticker} qty={alloc.qty} from OMS")
     except Exception as e:
+        if instr:
+            instr.emit_error(
+                severity="warning",
+                error_type="position_recovery_failed",
+                message=str(e),
+                context={"action": "position_recovery"},
+            )
         logger.warning(f"Position recovery failed: {e}")
 
 
-async def _reconcile_positions(oms, position_states: Dict[str, PositionState]) -> None:
+async def _reconcile_positions(oms, position_states: Dict[str, PositionState], instr=None) -> None:
     """Reconcile local position state against OMS allocations."""
     try:
         allocations = await oms.get_strategy_allocations(STRATEGY_ID)
@@ -172,6 +179,13 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState]) -
                 position_states[ticker].remaining_qty = oms_tickers[ticker].qty
                 logger.info(f"{ticker}: Updated remaining_qty to {oms_tickers[ticker].qty} from OMS")
     except Exception as e:
+        if instr:
+            instr.emit_error(
+                severity="warning",
+                error_type="reconciliation_failed",
+                message=str(e),
+                context={"action": "reconciliation"},
+            )
         logger.debug(f"Reconciliation check failed: {e}")
 
 
@@ -199,6 +213,8 @@ async def run_nulrimok():
 
     # Instrumentation
     instr = InstrumentationKit.create(api, strategy_type="nulrimok")
+    import atexit
+    atexit.register(instr.shutdown)
 
     # Rate budget for REST calls (shared across containers via file-based coordination)
     rate_budget = create_strategy_client(
@@ -231,6 +247,9 @@ async def run_nulrimok():
     # MFE/MAE tracking dicts
     _mfe_prices: Dict[str, float] = {}
     _mae_prices: Dict[str, float] = {}
+
+    # Last known prices for heartbeat enrichment
+    _last_prices: Dict[str, float] = {}
 
     # Advisory sector exposure tracking (pct-based for Nulrimok).
     # The OMS RiskGateway is the authoritative source for sector caps.
@@ -285,7 +304,7 @@ async def run_nulrimok():
     heartbeat_interval = 30.0  # seconds
 
     # Recover positions from OMS on startup
-    await _recover_positions(oms, position_states)
+    await _recover_positions(oms, position_states, instr=instr)
     if position_states:
         logger.info(f"Startup: recovered {len(position_states)} positions from OMS")
 
@@ -305,6 +324,28 @@ async def run_nulrimok():
                 positions_count=len(position_states),
                 version="1.0.1",
             )
+            hb_positions = []
+            for ticker, pos in position_states.items():
+                px = _last_prices.get(ticker, pos.entry_price)
+                hb_positions.append({
+                    "pair": ticker, "side": "LONG", "qty": pos.remaining_qty,
+                    "entry_price": pos.entry_price, "current_price": px,
+                    "unrealized_pnl": round((px - pos.entry_price) * pos.remaining_qty),
+                    "unrealized_pnl_pct": round((px / pos.entry_price - 1) * 100, 2) if pos.entry_price else 0,
+                    "duration_minutes": int((now - pos.entry_time).total_seconds() / 60),
+                    "strategy_type": "nulrimok",
+                })
+            hb_exposure = {}
+            if hb_positions:
+                hb_exposure = {
+                    "total_positions": len(hb_positions),
+                    "total_exposure_krw": round(sum(p["current_price"] * p["qty"] for p in hb_positions)),
+                    "total_unrealized_pnl": round(sum(p["unrealized_pnl"] for p in hb_positions)),
+                }
+            instr.emit_heartbeat(
+                active_positions=len(position_states),
+                positions=hb_positions, portfolio_exposure=hb_exposure,
+            )
             instr.periodic_tick()
             last_heartbeat_ts = now_ts
 
@@ -322,7 +363,7 @@ async def run_nulrimok():
             populate_lrs(lrs, api, filtered_universe, sector_map_cfg, rate_budget)
 
             # Refresh position state from OMS before DSE
-            await _recover_positions(oms, position_states)
+            await _recover_positions(oms, position_states, instr=instr)
             held = [{"ticker": t, "entry_time": p.entry_time.isoformat(), "avg_price": p.entry_price,
                      "qty": p.qty, "stop": p.stop} for t, p in position_states.items()]
             artifact = dse.run(today, held)
@@ -360,7 +401,7 @@ async def run_nulrimok():
                 and artifact and not flow_exit_done_today):
             # Only execute in the precise 09:00:05-09:01:00 window
             if time(FLOW_EXIT_START[0], FLOW_EXIT_START[1], FLOW_EXIT_START[2]) <= now.time() <= time(FLOW_EXIT_END[0], FLOW_EXIT_END[1], FLOW_EXIT_END[2]):
-                await handle_flow_reversal_exits(artifact.positions, oms, kis_api=api)
+                await handle_flow_reversal_exits(artifact.positions, oms, kis_api=api, instr=instr)
                 flow_exit_done_today = True
                 logger.info("Flow reversal exits executed for today")
 
@@ -382,7 +423,7 @@ async def run_nulrimok():
 
                 # Periodic reconciliation with OMS
                 if last_reconcile_cycle >= reconcile_interval:
-                    await _reconcile_positions(oms, position_states)
+                    await _reconcile_positions(oms, position_states, instr=instr)
                     last_reconcile_cycle = 0
 
                 for ticker in artifact.active_set:
@@ -397,6 +438,7 @@ async def run_nulrimok():
                         continue
 
                     close = bar['close']
+                    _last_prices[ticker] = close
                     volume = bar['volume']
                     sma5 = sma_trackers.get(ticker, RollingSMA(5)).update(close)
 
@@ -501,7 +543,7 @@ async def run_nulrimok():
                             _mae_prices[ticker] = min(_mae_prices[ticker], close)
                         exit_id = await manage_nulrimok_position(
                             pos, bar, avwap,
-                            vol_avg, now.time() >= time(15, 5), oms)
+                            vol_avg, now.time() >= time(15, 5), oms, instr=instr)
                         # Remove position after full exit (not partial)
                         if exit_id and pos.remaining_qty <= 0:
                             if instr:
@@ -539,6 +581,7 @@ async def run_nulrimok():
                                 instr.on_signal_blocked(
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="risk_budget", block_reason="maturity=mid",
+                                    signal_strength=0.0,
                                     filter_decisions=fd,
                                     experiment_id=experiment_cfg.get("experiment_id", ""),
                                     experiment_variant=experiment_cfg.get("experiment_variant", ""),
@@ -562,6 +605,7 @@ async def run_nulrimok():
                                 instr.on_signal_blocked(
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="sector_cap", block_reason="maturity=mid",
+                                    signal_strength=0.0,
                                     filter_decisions=fd,
                                     experiment_id=experiment_cfg.get("experiment_id", ""),
                                     experiment_variant=experiment_cfg.get("experiment_variant", ""),

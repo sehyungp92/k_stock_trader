@@ -170,6 +170,9 @@ async def run_kpr():
     _mfe_prices: Dict[str, float] = {}
     _mae_prices: Dict[str, float] = {}
 
+    # Last known prices for heartbeat enrichment
+    _last_prices: Dict[str, float] = {}
+
     # Track last processed bar timestamp per symbol (fixes VWAP double-counting)
     last_bar_ts: Dict[str, object] = {}
     # Track last poll time per symbol
@@ -240,6 +243,13 @@ async def run_kpr():
                                 logger.info(f"{sym}: Removed local phantom position")
                     drift_monitor.clear_after_reconcile()
             except Exception as e:
+                if instr:
+                    instr.emit_error(
+                        severity="critical",
+                        error_type="drift_check_failed",
+                        message=str(e),
+                        context={"action": "drift_check"},
+                    )
                 logger.warning(f"Drift check failed: {e} — blocking new entries")
                 drift_monitor.block_on_oms_unavailable()
 
@@ -273,6 +283,29 @@ async def run_kpr():
                 symbols_cold=len(universe) - len(getattr(universe_mgr, 'hot', set())) - len(getattr(universe_mgr, 'warm', set())),
                 positions_count=len(positions),
                 version="4.3.1",
+            )
+            hb_positions = []
+            for ticker in positions:
+                s = states.get(ticker)
+                if s and s.fsm == FSMState.IN_POSITION:
+                    px = _last_prices.get(ticker, s.entry_px)
+                    hb_positions.append({
+                        "pair": ticker, "side": "LONG", "qty": s.qty,
+                        "entry_price": s.entry_px, "current_price": px,
+                        "unrealized_pnl": round((px - s.entry_px) * s.qty),
+                        "unrealized_pnl_pct": round((px / s.entry_px - 1) * 100, 2) if s.entry_px else 0,
+                        "strategy_type": "kpr",
+                    })
+            hb_exposure = {}
+            if hb_positions:
+                hb_exposure = {
+                    "total_positions": len(hb_positions),
+                    "total_exposure_krw": round(sum(p["current_price"] * p["qty"] for p in hb_positions)),
+                    "total_unrealized_pnl": round(sum(p["unrealized_pnl"] for p in hb_positions)),
+                }
+            instr.emit_heartbeat(
+                active_positions=len(positions),
+                positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
             last_heartbeat_ts = now_ts
@@ -335,6 +368,7 @@ async def run_kpr():
                 vwap = vwap_ledgers[ticker].vwap
 
                 close = float(bar.get('close', 0))
+                _last_prices[ticker] = close
 
                 # --- MFE/MAE update for in-position symbols ---
                 if ticker in _mfe_prices:
@@ -393,12 +427,32 @@ async def run_kpr():
                         # EXECUTED means order submitted, NOT filled.
                         # Transition to PENDING_EXIT; confirm via OMS allocation on next cycle.
                         if result.status.name in ("EXECUTED", "APPROVED"):
+                            if instr:
+                                instr.on_order_event(
+                                    order_id=getattr(result, 'order_id', '') or '',
+                                    pair=ticker, order_type="LIMIT", status="SUBMITTED",
+                                    requested_qty=exit_qty, related_trade_id="",
+                                )
                             if reason == "partial_target":
                                 s.partial_filled = True
                                 s.trail_stop = max(s.trail_stop, s.entry_px)
                             s._exit_reason = reason
                             s.fsm = FSMState.PENDING_EXIT
                             logger.info(f"{ticker}: Exit submitted, PENDING_EXIT")
+                        else:
+                            if instr:
+                                instr.on_order_event(
+                                    order_id=getattr(result, 'order_id', '') or '',
+                                    pair=ticker, order_type="LIMIT", status="REJECTED",
+                                    requested_qty=exit_qty, reject_reason=result.message or "",
+                                )
+                                instr.emit_error(
+                                    severity="warning",
+                                    error_type="exit_rejected",
+                                    message=f"{result.status.name}: {result.message}",
+                                    context={"symbol": ticker, "action": "exit", "reason": reason},
+                                )
+                            logger.warning(f"{ticker}: Exit {result.status.name} - {result.message}")
                     continue
 
                 # --- PENDING_EXIT: confirm exit fill from OMS allocation ---

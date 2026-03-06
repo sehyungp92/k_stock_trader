@@ -98,7 +98,7 @@ def _momentum_trail_stop(pos: PositionState) -> Optional[float]:
 
 
 async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, vol_avg: float,
-                                   is_market_close: bool, oms) -> Optional[str]:
+                                   is_market_close: bool, oms, instr=None) -> Optional[str]:
     close = float(bar.get('close', 0))
     low = float(bar.get('low', 0))
     pos.max_price = max(pos.max_price, close)
@@ -190,12 +190,27 @@ async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, 
         )
         result = await oms.submit_intent(intent)
         if result.status.name in ("EXECUTED", "APPROVED"):
+            if instr:
+                instr.on_order_event(
+                    order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                    pair=pos.ticker, order_type="LIMIT", status="SUBMITTED",
+                    requested_qty=exit_qty, related_trade_id=intent.intent_id,
+                )
             logger.info(f"{pos.ticker}: Exit triggered - {exit_reason}, qty={exit_qty}")
             return intent.intent_id
+        else:
+            if instr:
+                instr.on_order_event(
+                    order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                    pair=pos.ticker, order_type="LIMIT", status="REJECTED",
+                    requested_qty=exit_qty, reject_reason=result.message or "",
+                    related_trade_id=intent.intent_id,
+                )
+            logger.warning(f"{pos.ticker}: Exit {exit_reason} rejected: {result.message}")
     return None
 
 
-async def handle_flow_reversal_exits(artifacts: list, oms, kis_api=None) -> None:
+async def handle_flow_reversal_exits(artifacts: list, oms, kis_api=None, instr=None) -> None:
     """Execute flow reversal exits with marketable limit pricing."""
     import asyncio
 
@@ -243,6 +258,22 @@ async def handle_flow_reversal_exits(artifacts: list, oms, kis_api=None) -> None
             risk_payload=RiskPayload(rationale_code="flow_reversal"),
         )
         result = await oms.submit_intent(intent)
+
+        if result.status.name in ("EXECUTED", "APPROVED"):
+            if instr:
+                instr.on_order_event(
+                    order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                    pair=artifact.ticker, order_type="LIMIT", status="SUBMITTED",
+                    requested_qty=0, related_trade_id=intent.intent_id,
+                )
+        else:
+            if instr:
+                instr.on_order_event(
+                    order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                    pair=artifact.ticker, order_type="LIMIT", status="REJECTED",
+                    requested_qty=0, reject_reason=result.message or "",
+                    related_trade_id=intent.intent_id,
+                )
 
         # Schedule reprice fallback if order is working
         if result.status.name == "EXECUTED":

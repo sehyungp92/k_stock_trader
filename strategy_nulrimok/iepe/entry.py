@@ -122,6 +122,7 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 instr.on_signal_blocked(
                     symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                     blocked_by="band_invalidation", block_reason="close below band_lower-0.2%",
+                    signal_strength=0.0,
                 )
             logger.info(f"{artifact.ticker}: Entry invalidated (close below band)")
             entry_state.reset()
@@ -137,6 +138,7 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                         symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                         blocked_by="exposure_headroom",
                         block_reason=f"gross={gross_exposure_pct:.1%}, cap={exposure_cap:.0%}",
+                        signal_strength=0.0,
                         filter_decisions=[{
                             "filter": "exposure_headroom", "threshold": round(exposure_cap, 4),
                             "actual": round(gross_exposure_pct, 4), "passed": False,
@@ -204,6 +206,16 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
 
             result = await oms.submit_intent(intent)
             if result.status.name in ("EXECUTED", "APPROVED"):
+                if instr:
+                    instr.on_order_event(
+                        order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                        pair=artifact.ticker,
+                        order_type="LIMIT",
+                        status="SUBMITTED",
+                        requested_qty=qty,
+                        requested_price=artifact.avwap_ref,
+                        related_trade_id=intent.intent_id,
+                    )
                 entry_state.state = EntryState.PENDING_FILL
                 entry_state.conf_type = conf_type
                 entry_state.anchor_date = artifact.anchor_date or ""
@@ -212,10 +224,22 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
 
             # OMS rejected or unreachable — log and do NOT consume a confirmation bar
             if instr:
+                instr.on_order_event(
+                    order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                    pair=artifact.ticker,
+                    order_type="LIMIT",
+                    status="REJECTED",
+                    requested_qty=qty,
+                    requested_price=artifact.avwap_ref,
+                    reject_reason=result.message or "",
+                    related_trade_id=intent.intent_id,
+                )
+            if instr:
                 instr.on_signal_blocked(
                     symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                     blocked_by="oms_rejected",
                     block_reason=f"{result.status.name}: {result.message}",
+                    signal_strength=0.0,
                     blocking_positions=result.blocking_positions,
                     resource_conflict_type=result.resource_conflict_type or "",
                 )
@@ -233,6 +257,7 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                     symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                     blocked_by="confirmation_expired",
                     block_reason=f"confirm_bars={nulrimok_switches.confirm_bars}",
+                    signal_strength=0.0,
                 )
             logger.info(f"{artifact.ticker}: Confirmation window expired, resetting entry state")
             entry_state.reset()

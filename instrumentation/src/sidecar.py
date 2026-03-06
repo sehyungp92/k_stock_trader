@@ -45,6 +45,7 @@ _DIR_TO_EVENT_TYPE = {
     "exit_movements": "exit_movement",
     "heartbeats": "heartbeat",
     "bot_errors": "bot_error",
+    "orders": "order",
 }
 
 # Priority mapping for relay event triage
@@ -58,6 +59,7 @@ _EVENT_TYPE_PRIORITY = {
     "market_snapshot": "low",
     "exit_movement": "normal",
     "heartbeat": "low",
+    "order": "normal",
 }
 _BOT_ERROR_SEVERITY_PRIORITY = {
     "critical": "critical",

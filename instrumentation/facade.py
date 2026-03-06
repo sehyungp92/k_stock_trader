@@ -36,6 +36,7 @@ from .src.regime_classifier import RegimeClassifier
 from .src.daily_snapshot import DailySnapshotBuilder
 from .src.exit_backfill import ExitBackfiller
 from .src.heartbeat import HeartbeatEmitter
+from .src.order_logger import OrderLogger
 from .src.sidecar import Sidecar
 
 
@@ -55,6 +56,7 @@ class InstrumentationKit:
         data_dir: str,
         exit_backfiller: Optional[ExitBackfiller] = None,
         heartbeat: Optional[HeartbeatEmitter] = None,
+        order_logger: Optional[OrderLogger] = None,
         sidecar=None,
     ):
         self._trade_logger = trade_logger
@@ -72,6 +74,10 @@ class InstrumentationKit:
             strategy_type=strategy_type,
             data_dir=data_dir,
         )
+        self._order_logger = order_logger or OrderLogger({
+            "bot_id": f"k_stock_trader_{strategy_type}",
+            "data_dir": data_dir,
+        })
         self._sidecar = sidecar
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="instr_backfill"
@@ -280,6 +286,42 @@ class InstrumentationKit:
         except Exception as e:
             logger.debug(f"Instrumentation on_signal_blocked error: {e}")
 
+    def on_order_event(
+        self,
+        order_id: str,
+        pair: str,
+        order_type: str,
+        status: str,
+        requested_qty: float,
+        filled_qty: float = 0.0,
+        requested_price: float | None = None,
+        fill_price: float | None = None,
+        reject_reason: str = "",
+        latency_ms: float | None = None,
+        related_trade_id: str = "",
+        exchange_timestamp=None,
+        bar_id: str | None = None,
+    ) -> None:
+        """Record an order lifecycle event. Fire-and-forget."""
+        try:
+            self._order_logger.log_order(
+                order_id=order_id,
+                pair=pair,
+                order_type=order_type,
+                status=status,
+                requested_qty=requested_qty,
+                filled_qty=filled_qty,
+                requested_price=requested_price,
+                fill_price=fill_price,
+                reject_reason=reject_reason,
+                latency_ms=latency_ms,
+                related_trade_id=related_trade_id,
+                exchange_timestamp=exchange_timestamp,
+                bar_id=bar_id,
+            )
+        except Exception:
+            pass  # instrumentation must never affect trading
+
     def periodic_tick(self) -> None:
         """Submit backfill to background thread. Call from heartbeat loop."""
         try:
@@ -311,8 +353,15 @@ class InstrumentationKit:
         except Exception:
             return "unknown"
 
-    def emit_heartbeat(self, active_positions: int = 0, open_orders: int = 0,
-                       uptime_s: float = 0, error_count_1h: int = 0) -> None:
+    def emit_heartbeat(
+        self,
+        active_positions: int = 0,
+        open_orders: int = 0,
+        uptime_s: float = 0,
+        error_count_1h: int = 0,
+        positions: list[dict] | None = None,
+        portfolio_exposure: dict | None = None,
+    ) -> None:
         """Emit periodic heartbeat. Call every 30s from strategy main loop."""
         try:
             sidecar_diag = None
@@ -327,6 +376,8 @@ class InstrumentationKit:
                 uptime_s=uptime_s,
                 error_count_1h=error_count_1h,
                 sidecar_diagnostics=sidecar_diag,
+                positions=positions,
+                portfolio_exposure=portfolio_exposure,
             )
         except Exception:
             pass

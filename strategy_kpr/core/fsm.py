@@ -244,6 +244,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 instr.on_signal_blocked(
                     symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                     blocked_by="drift_block", block_reason="maturity=early",
+                    signal_strength=0.0,
                     experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
         logger.debug(f"{s.code}: Entry blocked — drift monitor active")
@@ -268,6 +269,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 instr.on_signal_blocked(
                     symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                     blocked_by="entry_time_gate", block_reason="maturity=early",
+                    signal_strength=0.0,
                     experiment_id=experiment_id, experiment_variant=experiment_variant,
                 )
         return None
@@ -284,6 +286,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             instr.on_signal_blocked(
                 symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                 blocked_by="stop_breach", block_reason=f"maturity=mid, fsm={s.fsm.name}",
+                signal_strength=0.0,
                 experiment_id=experiment_id, experiment_variant=experiment_variant,
             )
         s.fsm = FSMState.INVALIDATED
@@ -354,6 +357,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="sector_cap",
                         block_reason=f"maturity=late, sector={sector_exposure.get_sector(s.code)}",
+                        signal_strength=0.0,
                         experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
                 logger.debug(f"{s.code}: Sector cap reached for {sector_exposure.get_sector(s.code)}")
@@ -368,6 +372,7 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                     instr.on_signal_blocked(
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="confidence_red", block_reason="maturity=late",
+                        signal_strength={"GREEN": 1.0, "YELLOW": 0.5, "RED": 0.0}.get(confidence, 0.0),
                         filter_decisions=fd,
                         experiment_id=experiment_id, experiment_variant=experiment_variant,
                     )
@@ -418,6 +423,16 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
             result = await oms.submit_intent(intent)
             if result.status.name in ("EXECUTED", "APPROVED"):
                 logger.info(f"{s.code}: Entry ACCEPTED qty={qty} intent_id={intent.intent_id}")
+                if instr:
+                    instr.on_order_event(
+                        order_id=result.order_id or intent.intent_id,
+                        pair=s.code,
+                        order_type="LIMIT",
+                        status="SUBMITTED",
+                        requested_qty=qty,
+                        requested_price=close,
+                        related_trade_id=intent.intent_id,
+                    )
                 s.fsm = FSMState.IN_POSITION
                 s.entry_px = close
                 s.entry_ts = now
@@ -452,10 +467,21 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         symbol=s.code, signal="drift_reclaim", signal_id="kpr_mean_reversion",
                         blocked_by="entry_rejected",
                         block_reason=f"maturity=late, status={result.status.name}",
+                        signal_strength={"GREEN": 1.0, "YELLOW": 0.5, "RED": 0.0}.get(confidence, 0.0),
                         filter_decisions=fd,
                         blocking_positions=result.blocking_positions,
                         resource_conflict_type=result.resource_conflict_type or "",
                         experiment_id=experiment_id, experiment_variant=experiment_variant,
+                    )
+                    instr.on_order_event(
+                        order_id=result.order_id or intent.intent_id,
+                        pair=s.code,
+                        order_type="LIMIT",
+                        status="REJECTED",
+                        requested_qty=qty,
+                        requested_price=close,
+                        reject_reason=result.message or "",
+                        related_trade_id=intent.intent_id,
                     )
                 logger.warning(f"{s.code}: Entry REJECTED status={result.status.name} msg={result.message}")
                 return None

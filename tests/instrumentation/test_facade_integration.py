@@ -7,6 +7,7 @@ REQUIRED_METHODS = [
     "on_entry_fill",
     "on_exit_fill",
     "on_signal_blocked",
+    "on_order_event",
     "periodic_tick",
     "build_daily_snapshot",
     "classify_regime",
@@ -79,3 +80,60 @@ def test_jsonl_backward_compat():
     assert d["sizing_context"] is None
     assert d["regime_context"] is None
     assert d["param_set_id"] is None
+
+
+def test_on_order_event_signature():
+    sig = inspect.signature(InstrumentationKit.on_order_event)
+    params = list(sig.parameters.keys())
+    assert "order_id" in params
+    assert "pair" in params
+    assert "order_type" in params
+    assert "status" in params
+    assert "requested_qty" in params
+    assert "reject_reason" in params
+    assert "latency_ms" in params
+
+
+def test_emit_heartbeat_accepts_positions():
+    sig = inspect.signature(InstrumentationKit.emit_heartbeat)
+    params = list(sig.parameters.keys())
+    assert "positions" in params
+    assert "portfolio_exposure" in params
+
+
+def test_daily_snapshot_has_experiment_breakdown():
+    from instrumentation.src.daily_snapshot import DailySnapshot
+    snap = DailySnapshot(date="2026-03-06", bot_id="test", strategy_type="kmp")
+    d = snap.to_dict()
+    assert "experiment_breakdown" in d
+    assert d["experiment_breakdown"] == {}
+
+
+def test_sidecar_orders_mapping():
+    from instrumentation.src.sidecar import _DIR_TO_EVENT_TYPE, _EVENT_TYPE_PRIORITY
+    assert _DIR_TO_EVENT_TYPE["orders"] == "order"
+    assert _EVENT_TYPE_PRIORITY["order"] == "normal"
+
+
+def test_on_order_event_fire_and_forget():
+    """on_order_event should never raise even with bad inputs."""
+    import tempfile
+    from unittest.mock import MagicMock
+    from instrumentation.src.order_logger import OrderLogger
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Create a minimal kit with mocked dependencies
+        kit = InstrumentationKit.__new__(InstrumentationKit)
+        kit._order_logger = OrderLogger({"bot_id": "test", "data_dir": tmpdir})
+        # Call with valid params — should not raise
+        kit.on_order_event(
+            order_id="test_001", pair="005930", order_type="MARKET",
+            status="SUBMITTED", requested_qty=10,
+        )
+        # Call with broken logger — should swallow exception
+        kit._order_logger = MagicMock()
+        kit._order_logger.log_order.side_effect = RuntimeError("boom")
+        kit.on_order_event(
+            order_id="test_002", pair="005930", order_type="MARKET",
+            status="SUBMITTED", requested_qty=10,
+        )  # should not raise

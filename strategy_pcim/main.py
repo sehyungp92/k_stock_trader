@@ -232,6 +232,8 @@ async def run_pcim():
 
     # Instrumentation
     instr = InstrumentationKit.create(api, strategy_type="pcim")
+    import atexit
+    atexit.register(instr.shutdown)
 
     # Rate budget for REST calls (shared across containers via file-based coordination)
     rate_budget = create_strategy_client(
@@ -258,6 +260,9 @@ async def run_pcim():
     # MFE/MAE tracking dicts
     _mfe_prices: Dict[str, float] = {}
     _mae_prices: Dict[str, float] = {}
+
+    # Last known prices for heartbeat enrichment
+    _last_prices: Dict[str, float] = {}
 
     # Runtime state
     candidates: List[Candidate] = []
@@ -297,6 +302,27 @@ async def run_pcim():
                 symbols_hot=len(approved_watchlist),
                 positions_count=len(open_positions),
                 version="1.3.1",
+            )
+            hb_positions = []
+            for pos in open_positions:
+                px = _last_prices.get(pos.symbol, pos.entry_price)
+                hb_positions.append({
+                    "pair": pos.symbol, "side": "LONG", "qty": pos.remaining_qty,
+                    "entry_price": pos.entry_price, "current_price": px,
+                    "unrealized_pnl": round((px - pos.entry_price) * pos.remaining_qty),
+                    "unrealized_pnl_pct": round((px / pos.entry_price - 1) * 100, 2) if pos.entry_price else 0,
+                    "strategy_type": "pcim",
+                })
+            hb_exposure = {}
+            if hb_positions:
+                hb_exposure = {
+                    "total_positions": len(hb_positions),
+                    "total_exposure_krw": round(sum(p["current_price"] * p["qty"] for p in hb_positions)),
+                    "total_unrealized_pnl": round(sum(p["unrealized_pnl"] for p in hb_positions)),
+                }
+            instr.emit_heartbeat(
+                active_positions=len(open_positions),
+                positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
             last_heartbeat_ts = now_ts
@@ -764,17 +790,39 @@ async def run_pcim():
                             result = await oms.submit_intent(intent)
                             # EXECUTED means order submitted, not filled. Track as pending.
                             if result.status.name in ("EXECUTED", "APPROVED"):
+                                if instr:
+                                    instr.on_order_event(
+                                        order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                        pair=c.symbol, order_type="LIMIT", status="SUBMITTED",
+                                        requested_qty=c.final_qty, requested_price=quote['last'],
+                                        related_trade_id=intent.intent_id,
+                                    )
                                 position_manager.track_pending(c.symbol, intent.intent_id, c.final_qty, c.atr_20d)
                                 entry_submitted[c.symbol] = c.final_qty
                                 bucket_a_pending[c.symbol] = c.final_qty  # Track for hit-rate
                                 c.reject_reason = "PENDING"
                             else:
+                                if instr:
+                                    instr.on_order_event(
+                                        order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                        pair=c.symbol, order_type="LIMIT", status="REJECTED",
+                                        requested_qty=c.final_qty, requested_price=quote['last'],
+                                        reject_reason=result.message or "",
+                                        related_trade_id=intent.intent_id,
+                                    )
                                 # Transient: DEFERRED (equity not loaded) or OMS connectivity failure
                                 is_transient = (
                                     result.status == IntentStatus.DEFERRED
                                     or "unreachable" in (result.message or "").lower()
                                 )
                                 if is_transient:
+                                    if instr:
+                                        instr.emit_error(
+                                            severity="warning",
+                                            error_type="oms_transient",
+                                            message=f"{result.status.name}: {result.message}",
+                                            context={"symbol": c.symbol, "bucket": "A", "action": "entry"},
+                                        )
                                     logger.info(
                                         f"OMS_TRANSIENT: {c.symbol} status={result.status.name} "
                                         f"msg={result.message} bucket={c.bucket} — will retry"
@@ -809,16 +857,38 @@ async def run_pcim():
                             result = await oms.submit_intent(intent)
                             # EXECUTED means order submitted, not filled. Track as pending.
                             if result.status.name in ("EXECUTED", "APPROVED"):
+                                if instr:
+                                    instr.on_order_event(
+                                        order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                        pair=c.symbol, order_type="LIMIT", status="SUBMITTED",
+                                        requested_qty=c.final_qty, requested_price=quote['last'],
+                                        related_trade_id=intent.intent_id,
+                                    )
                                 position_manager.track_pending(c.symbol, intent.intent_id, c.final_qty, c.atr_20d)
                                 entry_submitted[c.symbol] = c.final_qty
                                 c.reject_reason = "PENDING"
                             else:
+                                if instr:
+                                    instr.on_order_event(
+                                        order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                        pair=c.symbol, order_type="LIMIT", status="REJECTED",
+                                        requested_qty=c.final_qty, requested_price=quote['last'],
+                                        reject_reason=result.message or "",
+                                        related_trade_id=intent.intent_id,
+                                    )
                                 # Transient: DEFERRED (equity not loaded) or OMS connectivity failure
                                 is_transient = (
                                     result.status == IntentStatus.DEFERRED
                                     or "unreachable" in (result.message or "").lower()
                                 )
                                 if is_transient:
+                                    if instr:
+                                        instr.emit_error(
+                                            severity="warning",
+                                            error_type="oms_transient",
+                                            message=f"{result.status.name}: {result.message}",
+                                            context={"symbol": c.symbol, "bucket": "B", "action": "entry"},
+                                        )
                                     logger.info(
                                         f"OMS_TRANSIENT: {c.symbol} status={result.status.name} "
                                         f"msg={result.message} bucket={c.bucket} — will retry"
@@ -860,6 +930,7 @@ async def run_pcim():
             for pos in position_manager.get_open_positions():
                 quote = api.get_quote(pos.symbol)
                 current_price = quote['last']
+                _last_prices[pos.symbol] = current_price
 
                 # MFE/MAE update
                 if pos.symbol in _mfe_prices:
@@ -870,6 +941,12 @@ async def run_pcim():
                     intent = create_exit_intent(pos.symbol, pos.remaining_qty, "STOP", Urgency.HIGH)
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                pair=pos.symbol, order_type="LIMIT", status="SUBMITTED",
+                                requested_qty=pos.remaining_qty, related_trade_id=intent.intent_id,
+                            )
                         if instr:
                             mfe_mae = build_mfe_mae_context(
                                 entry_price=pos.entry_price,
@@ -887,6 +964,13 @@ async def run_pcim():
                             _mae_prices.pop(pos.symbol, None)
                         position_manager.close_position(pos.symbol, "STOP")
                     else:
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                pair=pos.symbol, order_type="LIMIT", status="REJECTED",
+                                requested_qty=pos.remaining_qty, reject_reason=result.message or "",
+                                related_trade_id=intent.intent_id,
+                            )
                         logger.warning(f"{pos.symbol}: Stop exit {result.status.name} - {result.message}")
                     continue
 
@@ -895,6 +979,12 @@ async def run_pcim():
                     intent = create_partial_exit_intent(pos.symbol, qty, "TAKE_PROFIT")
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                pair=pos.symbol, order_type="LIMIT", status="SUBMITTED",
+                                requested_qty=qty, related_trade_id=intent.intent_id,
+                            )
                         if instr:
                             mfe_mae = build_mfe_mae_context(
                                 entry_price=pos.entry_price,
@@ -910,6 +1000,13 @@ async def run_pcim():
                         pos.tp_done = True
                         position_manager.reduce_position(pos.symbol, qty)
                     else:
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                pair=pos.symbol, order_type="LIMIT", status="REJECTED",
+                                requested_qty=qty, reject_reason=result.message or "",
+                                related_trade_id=intent.intent_id,
+                            )
                         logger.warning(f"{pos.symbol}: Take profit {result.status.name} - {result.message}")
 
                 # Use KRX trading calendar for day count if available
@@ -918,6 +1015,12 @@ async def run_pcim():
                     intent = create_exit_intent(pos.symbol, pos.remaining_qty, "DAY15_EXIT")
                     result = await oms.submit_intent(intent)
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                pair=pos.symbol, order_type="LIMIT", status="SUBMITTED",
+                                requested_qty=pos.remaining_qty, related_trade_id=intent.intent_id,
+                            )
                         if instr:
                             mfe_mae = build_mfe_mae_context(
                                 entry_price=pos.entry_price,
@@ -935,6 +1038,13 @@ async def run_pcim():
                             _mae_prices.pop(pos.symbol, None)
                         position_manager.close_position(pos.symbol, "DAY15_EXIT")
                     else:
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or intent.intent_id,
+                                pair=pos.symbol, order_type="LIMIT", status="REJECTED",
+                                requested_qty=pos.remaining_qty, reject_reason=result.message or "",
+                                related_trade_id=intent.intent_id,
+                            )
                         logger.warning(f"{pos.symbol}: Time exit {result.status.name} - {result.message}")
 
         # =================================================================

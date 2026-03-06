@@ -80,6 +80,11 @@ class DailySnapshot:
     # Per-strategy breakdown (single-key dict for mono-strategy processes)
     per_strategy_summary: dict = field(default_factory=dict)
 
+    # Experiment A/B variant breakdown
+    experiment_breakdown: dict = field(default_factory=dict)
+    # Key: "{experiment_id}:{experiment_variant}"
+    # Value: per-variant aggregate stats
+
     # Health
     error_count: int = 0
     uptime_pct: float = 100.0
@@ -274,7 +279,61 @@ class DailySnapshotBuilder:
             }
         }
 
+        # --- EXPERIMENT BREAKDOWN ---
+        snapshot.experiment_breakdown = self._build_experiment_breakdown(completed)
+
         return snapshot
+
+    def _build_experiment_breakdown(self, completed_trades: list) -> dict:
+        """Group completed trades by experiment_id:experiment_variant."""
+        groups: dict[str, list[dict]] = {}
+        for t in completed_trades:
+            exp_id = t.get("experiment_id") or ""
+            exp_var = t.get("experiment_variant") or ""
+            if not exp_id:
+                continue
+            key = f"{exp_id}:{exp_var}"
+            groups.setdefault(key, []).append(t)
+
+        breakdown = {}
+        for key, trades in groups.items():
+            exp_id, exp_var = key.split(":", 1)
+            wins = [t for t in trades if (t.get("pnl") or 0) > 0]
+            losses = [t for t in trades if (t.get("pnl") or 0) < 0]
+            gross_pnl = sum(t.get("pnl", 0) + t.get("fees_paid", 0) for t in trades)
+            net_pnl = sum(t.get("pnl", 0) for t in trades)
+            scores = [t.get("process_quality_score", 0) for t in trades
+                      if t.get("process_quality_score") is not None]
+            mfe_vals = [t["mfe_pct"] for t in trades if t.get("mfe_pct") is not None]
+            mae_vals = [t["mae_pct"] for t in trades if t.get("mae_pct") is not None]
+
+            breakdown[key] = {
+                "experiment_id": exp_id,
+                "experiment_variant": exp_var,
+                "trades": len(trades),
+                "win_count": len(wins),
+                "loss_count": len(losses),
+                "gross_pnl": round(gross_pnl, 2),
+                "net_pnl": round(net_pnl, 2),
+                "win_rate": round(len(wins) / len(trades), 4) if trades else 0.0,
+                "avg_win": round(
+                    sum(t["pnl"] for t in wins) / len(wins), 2
+                ) if wins else 0.0,
+                "avg_loss": round(
+                    sum(t["pnl"] for t in losses) / len(losses), 2
+                ) if losses else 0.0,
+                "avg_process_quality": round(
+                    sum(scores) / len(scores), 1
+                ) if scores else 0.0,
+                "avg_mfe_pct": round(
+                    sum(mfe_vals) / len(mfe_vals), 4
+                ) if mfe_vals else None,
+                "avg_mae_pct": round(
+                    sum(mae_vals) / len(mae_vals), 4
+                ) if mae_vals else None,
+            }
+
+        return breakdown
 
     def save(self, snapshot: DailySnapshot):
         """Save daily snapshot as a single JSON file."""

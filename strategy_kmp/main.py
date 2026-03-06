@@ -508,10 +508,28 @@ async def run_kmp():
                         risk_payload=RiskPayload(rationale_code="flatten_time"),
                     ))
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or '',
+                                pair=s.code, order_type="LIMIT", status="SUBMITTED",
+                                requested_qty=s.qty, related_trade_id="",
+                            )
                         # Don't immediately mark DONE — wait for fill confirmation
                         s.fsm = State.PENDING_EXIT
                         logger.info(f"{s.code}: Flatten submitted, PENDING_EXIT")
                     else:
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or '',
+                                pair=s.code, order_type="LIMIT", status="REJECTED",
+                                requested_qty=s.qty, reject_reason=result.message or "",
+                            )
+                            instr.emit_error(
+                                severity="warning",
+                                error_type="flatten_rejected",
+                                message=f"{result.status.name}: {result.message}",
+                                context={"symbol": s.code, "action": "flatten"},
+                            )
                         logger.warning(f"{s.code}: Flatten {result.status.name} - {result.message}")
             break
 
@@ -582,6 +600,28 @@ async def run_kmp():
                 symbols_warm=len(candidates) - hot_count,
                 positions_count=positions_count,
                 version="2.3.4",
+            )
+            hb_positions = []
+            for ticker, s in states.items():
+                if s.fsm == State.IN_POSITION:
+                    px = last_prices.get(ticker, s.entry_px)
+                    hb_positions.append({
+                        "pair": ticker, "side": "LONG", "qty": s.qty,
+                        "entry_price": s.entry_px, "current_price": px,
+                        "unrealized_pnl": round((px - s.entry_px) * s.qty),
+                        "unrealized_pnl_pct": round((px / s.entry_px - 1) * 100, 2) if s.entry_px else 0,
+                        "strategy_type": "kmp",
+                    })
+            hb_exposure = {}
+            if hb_positions:
+                hb_exposure = {
+                    "total_positions": len(hb_positions),
+                    "total_exposure_krw": round(sum(p["current_price"] * p["qty"] for p in hb_positions)),
+                    "total_unrealized_pnl": round(sum(p["unrealized_pnl"] for p in hb_positions)),
+                }
+            instr.emit_heartbeat(
+                active_positions=positions_count,
+                positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
             last_heartbeat_ts = _time.time()
@@ -672,10 +712,28 @@ async def run_kmp():
                         risk_payload=RiskPayload(rationale_code=reason),
                     ))
                     if result.status.name in ("EXECUTED", "APPROVED"):
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or '',
+                                pair=ticker, order_type="LIMIT", status="SUBMITTED",
+                                requested_qty=s.qty, related_trade_id="",
+                            )
                         # Don't immediately mark DONE — wait for fill confirmation
                         s.fsm = State.PENDING_EXIT
                         logger.info(f"{ticker}: Exit submitted, PENDING_EXIT")
                     else:
+                        if instr:
+                            instr.on_order_event(
+                                order_id=getattr(result, 'order_id', '') or '',
+                                pair=ticker, order_type="LIMIT", status="REJECTED",
+                                requested_qty=s.qty, reject_reason=result.message or "",
+                            )
+                            instr.emit_error(
+                                severity="warning",
+                                error_type="exit_rejected",
+                                message=f"{result.status.name}: {result.message}",
+                                context={"symbol": ticker, "action": "exit"},
+                            )
                         logger.warning(f"{ticker}: Exit {result.status.name} - {result.message}")
 
         await asyncio.sleep(1)

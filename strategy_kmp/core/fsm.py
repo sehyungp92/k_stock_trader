@@ -420,6 +420,13 @@ async def alpha_step(
             # Release reservation on error
             if exposure is not None:
                 exposure.unreserve(s.code, qty, entry_trigger)
+            if instr:
+                instr.emit_error(
+                    severity="warning",
+                    error_type="oms_submit_failed",
+                    message=str(e),
+                    context={"symbol": s.code, "action": "entry"},
+                )
             logger.warning(f"{s.code}: Entry submission failed - {e}")
             s.fsm = State.DONE
             return None
@@ -431,6 +438,16 @@ async def alpha_step(
             s.oms_received_at = result.oms_received_at
             s.order_submitted_at = result.order_submitted_at
             s.fsm = State.ARMED
+            if instr:
+                instr.on_order_event(
+                    order_id=result.order_id or intent.intent_id,
+                    pair=s.code,
+                    order_type="LIMIT",
+                    status="SUBMITTED",
+                    requested_qty=qty,
+                    requested_price=entry_trigger,
+                    related_trade_id=intent.intent_id,
+                )
             logger.info(f"{s.code}: Armed entry at {entry_trigger:.0f}, qty={qty}")
             return intent.intent_id
         else:
@@ -452,6 +469,16 @@ async def alpha_step(
                     blocking_positions=result.blocking_positions,
                     resource_conflict_type=result.resource_conflict_type or "",
                     experiment_id=experiment_id, experiment_variant=experiment_variant,
+                )
+                instr.on_order_event(
+                    order_id=result.order_id or intent.intent_id,
+                    pair=s.code,
+                    order_type="LIMIT",
+                    status="REJECTED",
+                    requested_qty=qty,
+                    requested_price=entry_trigger,
+                    reject_reason=result.message or "",
+                    related_trade_id=intent.intent_id,
                 )
             logger.warning(f"{s.code}: Entry rejected - {result.message}")
             s.fsm = State.DONE
