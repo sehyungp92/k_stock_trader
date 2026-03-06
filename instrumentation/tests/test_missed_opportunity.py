@@ -173,6 +173,44 @@ class TestMissedOpportunityLogger:
         )
         assert len(self.mol._pending_backfills) == 1
 
+    def test_blocking_positions_written(self):
+        """log_missed with blocking_positions writes field to event."""
+        blocking = [
+            {"strategy": "KPR", "symbol": "000660", "qty": 50, "exposure_pct": 0.065, "side": "LONG"},
+        ]
+        event = self.mol.log_missed(
+            pair="005930",
+            side="LONG",
+            signal="test",
+            signal_id="test",
+            signal_strength=0.5,
+            blocked_by="max_positions",
+            blocking_positions=blocking,
+            resource_conflict_type="max_positions",
+        )
+        assert event.blocking_positions == blocking
+        assert event.resource_conflict_type == "max_positions"
+
+        # Verify it persists to JSONL
+        files = list(Path(self.tmpdir).joinpath("missed").glob("*.jsonl"))
+        assert len(files) == 1
+        data = json.loads(files[0].read_text().strip())
+        assert data["blocking_positions"] == blocking
+        assert data["resource_conflict_type"] == "max_positions"
+
+    def test_blocking_positions_defaults_none(self):
+        """Without blocking_positions param, field defaults to None."""
+        event = self.mol.log_missed(
+            pair="005930",
+            side="LONG",
+            signal="test",
+            signal_id="test",
+            signal_strength=0.5,
+            blocked_by="volume_gate",
+        )
+        assert event.blocking_positions is None
+        assert event.resource_conflict_type == ""
+
     def test_default_simulation_policy_used(self):
         """When no strategy_type given, default policy is used."""
         event = self.mol.log_missed(

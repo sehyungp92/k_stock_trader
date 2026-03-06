@@ -217,6 +217,8 @@ class InstrumentationKit:
         signal_strength: float = 0.0,
         strategy_params: Optional[Dict[str, Any]] = None,
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
+        blocking_positions: Optional[List[Dict[str, Any]]] = None,
+        resource_conflict_type: str = "",
     ) -> None:
         """Record a missed opportunity when a gate blocks a signal."""
         try:
@@ -231,6 +233,8 @@ class InstrumentationKit:
                 strategy_params=strategy_params,
                 strategy_type=self._strategy_type,
                 filter_decisions=filter_decisions or [],
+                blocking_positions=blocking_positions,
+                resource_conflict_type=resource_conflict_type,
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_signal_blocked error: {e}")

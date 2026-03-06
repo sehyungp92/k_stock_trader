@@ -443,6 +443,8 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         blocked_by="entry_rejected",
                         block_reason=f"maturity=late, status={result.status.name}",
                         filter_decisions=fd,
+                        blocking_positions=result.blocking_positions,
+                        resource_conflict_type=result.resource_conflict_type or "",
                     )
                 logger.warning(f"{s.code}: Entry REJECTED status={result.status.name} msg={result.message}")
                 return None

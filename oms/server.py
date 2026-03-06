@@ -9,7 +9,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException
@@ -139,6 +139,8 @@ class IntentResultModel(BaseModel):
     modified_qty: Optional[int] = None
     order_id: Optional[str] = None
     cooldown_until: Optional[float] = None
+    blocking_positions: Optional[List[Dict[str, Any]]] = None
+    resource_conflict_type: Optional[str] = None
 
 
 class AllocationInfo(BaseModel):
@@ -342,6 +344,8 @@ async def submit_intent(req: IntentRequest):
         modified_qty=result.modified_qty,
         order_id=result.order_id,
         cooldown_until=result.cooldown_until,
+        blocking_positions=result.blocking_positions,
+        resource_conflict_type=result.resource_conflict_type,
     )
 
 

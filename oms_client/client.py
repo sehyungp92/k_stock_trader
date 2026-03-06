@@ -183,6 +183,8 @@ class OMSClient:
                         modified_qty=data.get("modified_qty"),
                         order_id=data.get("order_id"),
                         cooldown_until=data.get("cooldown_until"),
+                        blocking_positions=data.get("blocking_positions"),
+                        resource_conflict_type=data.get("resource_conflict_type"),
                     )
             except Exception as e:
                 last_err = e

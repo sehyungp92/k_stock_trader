@@ -7,7 +7,7 @@ Check order: Global -> Daily -> Exposure -> Strategy Budget -> Microstructure
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 import time
 from loguru import logger
 
@@ -30,6 +30,8 @@ class RiskResult:
     reason: str = ""
     modified_qty: Optional[int] = None
     cooldown_sec: Optional[float] = None
+    blocking_positions: Optional[List[Dict[str, Any]]] = None
+    resource_conflict_type: Optional[str] = None
 
 
 @dataclass
@@ -116,6 +118,72 @@ class RiskGateway:
             except Exception:
                 pass
         return fallback
+
+    def _build_blocking_positions(
+        self,
+        positions: Dict,
+        equity: float,
+        filter_fn: Optional[Callable] = None,
+    ) -> List[Dict[str, Any]]:
+        """Build list of positions contributing to a portfolio-level rejection.
+
+        Args:
+            positions: Dict of symbol -> PositionState from state store.
+            equity: Current account equity for exposure_pct calculation.
+            filter_fn: Optional filter; if given, only include positions where
+                       filter_fn(symbol, position) returns True.
+
+        Returns:
+            List of dicts sorted by exposure_pct descending, each with keys:
+            strategy, symbol, qty, exposure_pct, side.
+        """
+        result = []
+        eq = max(equity, 1.0)
+        for symbol, pos in positions.items():
+            total_qty = pos.real_qty + pos.working_qty(side="BUY")
+            if total_qty <= 0:
+                continue
+            if filter_fn and not filter_fn(symbol, pos):
+                continue
+            px = pos.avg_price or self._get_price(symbol) or 0.0
+            notional = total_qty * px
+            exposure_pct = round(notional / eq, 4)
+            # Decompose by strategy allocation
+            if pos.allocations:
+                for strat_id, alloc in pos.allocations.items():
+                    alloc_qty = alloc.qty
+                    if alloc_qty <= 0:
+                        continue
+                    alloc_notional = alloc_qty * px
+                    result.append({
+                        "strategy": strat_id,
+                        "symbol": symbol,
+                        "qty": alloc_qty,
+                        "exposure_pct": round(alloc_notional / eq, 4),
+                        "side": "LONG",
+                    })
+                # Include working-order qty not yet allocated
+                allocated_total = sum(a.qty for a in pos.allocations.values())
+                unallocated = total_qty - allocated_total
+                if unallocated > 0:
+                    un_notional = unallocated * px
+                    result.append({
+                        "strategy": "_PENDING_",
+                        "symbol": symbol,
+                        "qty": unallocated,
+                        "exposure_pct": round(un_notional / eq, 4),
+                        "side": "LONG",
+                    })
+            else:
+                result.append({
+                    "strategy": "_UNKNOWN_",
+                    "symbol": symbol,
+                    "qty": total_qty,
+                    "exposure_pct": exposure_pct,
+                    "side": "LONG",
+                })
+        result.sort(key=lambda x: x["exposure_pct"], reverse=True)
+        return result
 
     def check(self, intent: Intent) -> RiskResult:
         """
@@ -233,7 +301,12 @@ class RiskGateway:
             if p.real_qty > 0 or p.working_qty(side="BUY") > 0
         )
         if active_count >= self.config.max_positions_count:
-            return RiskResult(RiskDecision.REJECT, f"Max positions ({self.config.max_positions_count}) reached")
+            return RiskResult(
+                RiskDecision.REJECT,
+                f"Max positions ({self.config.max_positions_count}) reached",
+                blocking_positions=self._build_blocking_positions(positions, equity),
+                resource_conflict_type="max_positions",
+            )
 
         # Gross exposure: existing + committed + new
         gross = 0.0
@@ -250,7 +323,12 @@ class RiskGateway:
         total_exposure_pct = (gross + new_notional) / equity
 
         if total_exposure_pct > self.config.max_gross_exposure_pct:
-            return RiskResult(RiskDecision.REJECT, f"Gross exposure would exceed {self.config.max_gross_exposure_pct:.0%}")
+            return RiskResult(
+                RiskDecision.REJECT,
+                f"Gross exposure would exceed {self.config.max_gross_exposure_pct:.0%}",
+                blocking_positions=self._build_blocking_positions(positions, equity),
+                resource_conflict_type="gross_exposure",
+            )
 
         # Regime cap (tighter than static limit in CRISIS/WEAK)
         regime_cap = self.config.regime_exposure_caps.get(self.config.current_regime, 1.0)
@@ -258,6 +336,8 @@ class RiskGateway:
             return RiskResult(
                 RiskDecision.REJECT,
                 f"Regime {self.config.current_regime} cap {regime_cap:.0%} exceeded",
+                blocking_positions=self._build_blocking_positions(positions, equity),
+                resource_conflict_type="regime_cap",
             )
 
         # Per-symbol limit (existing + new)
@@ -270,7 +350,15 @@ class RiskGateway:
             max_new = max_total - existing_notional
             max_qty = int(max_new / max(entry_px, 1))
             if max_qty <= 0:
-                return RiskResult(RiskDecision.REJECT, f"Position too large ({position_pct:.1%})")
+                return RiskResult(
+                    RiskDecision.REJECT,
+                    f"Position too large ({position_pct:.1%})",
+                    blocking_positions=self._build_blocking_positions(
+                        positions, equity,
+                        filter_fn=lambda sym, _pos: sym == intent.symbol,
+                    ),
+                    resource_conflict_type="per_symbol",
+                )
             return RiskResult(
                 RiskDecision.MODIFY,
                 f"Scaled from {qty} to {max_qty} for position limit",
@@ -291,9 +379,15 @@ class RiskGateway:
         if not self._sector_exposure.can_enter(intent.symbol, qty, entry_px, equity):
             sector = self._sector_exposure.get_sector(intent.symbol)
             current_pct = self._sector_exposure.sector_pct(sector, equity)
+            all_positions = self.state.get_all_positions()
             return RiskResult(
                 RiskDecision.REJECT,
                 f"Sector {sector} exposure {current_pct:.1%} would exceed {self.config.max_sector_pct:.0%}",
+                blocking_positions=self._build_blocking_positions(
+                    all_positions, equity,
+                    filter_fn=lambda sym, _pos: self._sector_exposure.get_sector(sym) == sector,
+                ),
+                resource_conflict_type="sector_cap",
             )
 
         return RiskResult(RiskDecision.APPROVE)
@@ -314,7 +408,12 @@ class RiskGateway:
         if strategy_positions >= budget["max_positions"]:
             return RiskResult(
                 RiskDecision.REJECT,
-                f"{intent.strategy_id} max positions ({budget['max_positions']}) reached"
+                f"{intent.strategy_id} max positions ({budget['max_positions']}) reached",
+                blocking_positions=self._build_blocking_positions(
+                    positions, max(self.state.equity, 1.0),
+                    filter_fn=lambda sym, p: p.get_allocation(intent.strategy_id) > 0,
+                ),
+                resource_conflict_type="strategy_budget_positions",
             )
 
         # Risk-by-stop: incremental risk = qty * (entry - stop)
@@ -329,7 +428,15 @@ class RiskGateway:
             if trade_risk > max_risk_krw:
                 scaled_qty = int(max_risk_krw / max(risk_per_share, 1.0))
                 if scaled_qty <= 0:
-                    return RiskResult(RiskDecision.REJECT, f"{intent.strategy_id} risk budget exceeded")
+                    return RiskResult(
+                        RiskDecision.REJECT,
+                        f"{intent.strategy_id} risk budget exceeded",
+                        blocking_positions=self._build_blocking_positions(
+                            positions, max(self.state.equity, 1.0),
+                            filter_fn=lambda sym, p: p.get_allocation(intent.strategy_id) > 0,
+                        ),
+                        resource_conflict_type="strategy_budget_risk",
+                    )
                 return RiskResult(
                     RiskDecision.MODIFY,
                     f"Scaled from {qty} to {scaled_qty} for risk budget",

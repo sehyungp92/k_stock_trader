@@ -420,6 +420,8 @@ async def alpha_step(
                     block_reason=f"maturity=late, msg={result.message}",
                     signal_strength=s.surge,
                     filter_decisions=fd,
+                    blocking_positions=result.blocking_positions,
+                    resource_conflict_type=result.resource_conflict_type or "",
                 )
             logger.warning(f"{s.code}: Entry rejected - {result.message}")
             s.fsm = State.DONE

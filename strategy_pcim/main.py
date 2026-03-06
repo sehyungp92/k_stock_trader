@@ -740,6 +740,14 @@ async def run_pcim():
                                         f"OMS_ENTRY_REJECTED: {c.symbol} status={result.status.name} "
                                         f"msg={result.message} bucket={c.bucket}"
                                     )
+                                    if instr:
+                                        instr.on_signal_blocked(
+                                            symbol=c.symbol, signal="pcim_bucket_a", signal_id="pcim_entry",
+                                            blocked_by="oms_rejected",
+                                            block_reason=f"{result.status.name}: {result.message}",
+                                            blocking_positions=result.blocking_positions,
+                                            resource_conflict_type=result.resource_conflict_type or "",
+                                        )
                                     entry_reject_count[c.symbol] = entry_reject_count.get(c.symbol, 0) + 1
                                     if entry_reject_count[c.symbol] >= 3:
                                         c.reject_reason = f"OMS_REJECTED_{result.status.name}"
@@ -774,6 +782,14 @@ async def run_pcim():
                                         f"OMS_ENTRY_REJECTED: {c.symbol} status={result.status.name} "
                                         f"msg={result.message} bucket={c.bucket}"
                                     )
+                                    if instr:
+                                        instr.on_signal_blocked(
+                                            symbol=c.symbol, signal="pcim_bucket_b", signal_id="pcim_entry",
+                                            blocked_by="oms_rejected",
+                                            block_reason=f"{result.status.name}: {result.message}",
+                                            blocking_positions=result.blocking_positions,
+                                            resource_conflict_type=result.resource_conflict_type or "",
+                                        )
                                     entry_reject_count[c.symbol] = entry_reject_count.get(c.symbol, 0) + 1
                                     if entry_reject_count[c.symbol] >= 3:
                                         c.reject_reason = f"OMS_REJECTED_{result.status.name}"

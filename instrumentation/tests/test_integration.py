@@ -218,6 +218,44 @@ class TestFullLifecycle:
         )
         assert missed is not None
 
+    def test_on_signal_blocked_with_blocking_positions(self):
+        """on_signal_blocked with blocking_positions round-trips through JSONL."""
+        from instrumentation.facade import InstrumentationKit
+
+        kit = InstrumentationKit(
+            trade_logger=self.trade_logger,
+            missed_logger=self.missed_logger,
+            snapshot_service=self.snap_service,
+            process_scorer=MagicMock(),
+            regime_classifier=MagicMock(),
+            daily_builder=MagicMock(),
+            data_provider=MagicMock(),
+            strategy_type="kmp",
+            data_dir=self.tmpdir,
+        )
+
+        blocking = [
+            {"strategy": "KPR", "symbol": "000660", "qty": 50, "exposure_pct": 0.065, "side": "LONG"},
+            {"strategy": "KMP", "symbol": "005930", "qty": 100, "exposure_pct": 0.072, "side": "LONG"},
+        ]
+        kit.on_signal_blocked(
+            symbol="035420",
+            signal="momentum breakout",
+            signal_id="kmp_breakout",
+            blocked_by="oms_rejected",
+            block_reason="Max positions (10) reached",
+            blocking_positions=blocking,
+            resource_conflict_type="max_positions",
+        )
+
+        # Verify round-trip through JSONL
+        missed_files = list(Path(self.tmpdir).joinpath("missed").glob("*.jsonl"))
+        assert len(missed_files) == 1
+        data = json.loads(missed_files[0].read_text().strip())
+        assert data["blocking_positions"] == blocking
+        assert data["resource_conflict_type"] == "max_positions"
+        assert data["blocked_by"] == "oms_rejected"
+
     def test_event_ids_are_unique(self):
         """All events from a day should have unique event_ids."""
         # Create multiple events

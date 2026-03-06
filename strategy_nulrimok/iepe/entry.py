@@ -216,6 +216,8 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                     symbol=artifact.ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                     blocked_by="oms_rejected",
                     block_reason=f"{result.status.name}: {result.message}",
+                    blocking_positions=result.blocking_positions,
+                    resource_conflict_type=result.resource_conflict_type or "",
                 )
             logger.warning(
                 f"{artifact.ticker}: Entry confirmed ({conf_type}) but OMS returned "

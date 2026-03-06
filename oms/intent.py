@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, auto
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import time
 import uuid
 
@@ -149,3 +149,5 @@ class IntentResult:
     modified_qty: Optional[int] = None
     order_id: Optional[str] = None
     cooldown_until: Optional[float] = None
+    blocking_positions: Optional[List[Dict[str, Any]]] = None
+    resource_conflict_type: Optional[str] = None

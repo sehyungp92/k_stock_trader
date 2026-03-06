@@ -590,6 +590,135 @@ class TestRiskGatewayExposureEntryPxFallback:
         assert "price unavailable" in result.reason.lower()
 
 
+class TestBuildBlockingPositions:
+    """Tests for _build_blocking_positions helper."""
+
+    @pytest.fixture
+    def gateway(self, state_store_with_equity, risk_config):
+        return RiskGateway(state_store_with_equity, risk_config)
+
+    def test_returns_correct_shape(self, gateway):
+        """Blocking positions have strategy, symbol, qty, exposure_pct, side."""
+        gateway.state.update_position("005930", real_qty=100, avg_price=72000)
+        gateway.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        positions = gateway.state.get_all_positions()
+        result = gateway._build_blocking_positions(positions, gateway.state.equity)
+        assert len(result) >= 1
+        bp = result[0]
+        assert set(bp.keys()) == {"strategy", "symbol", "qty", "exposure_pct", "side"}
+        assert bp["side"] == "LONG"
+        assert bp["strategy"] == "KMP"
+        assert bp["symbol"] == "005930"
+        assert bp["qty"] == 100
+
+    def test_sorted_by_exposure_desc(self, gateway):
+        """Positions are sorted by exposure_pct descending."""
+        gateway.state.update_position("005930", real_qty=100, avg_price=72000)
+        gateway.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        gateway.state.update_position("000660", real_qty=50, avg_price=130000)
+        gateway.state.update_allocation("000660", "KPR", 50, cost_basis=130000)
+        positions = gateway.state.get_all_positions()
+        result = gateway._build_blocking_positions(positions, gateway.state.equity)
+        assert len(result) == 2
+        assert result[0]["exposure_pct"] >= result[1]["exposure_pct"]
+
+    def test_filter_fn_applied(self, gateway):
+        """filter_fn restricts which positions are included."""
+        gateway.state.update_position("005930", real_qty=100, avg_price=72000)
+        gateway.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        gateway.state.update_position("000660", real_qty=50, avg_price=130000)
+        gateway.state.update_allocation("000660", "KPR", 50, cost_basis=130000)
+        positions = gateway.state.get_all_positions()
+        result = gateway._build_blocking_positions(
+            positions, gateway.state.equity,
+            filter_fn=lambda sym, _pos: sym == "005930",
+        )
+        assert len(result) == 1
+        assert result[0]["symbol"] == "005930"
+
+    def test_empty_positions(self, gateway):
+        """Returns empty list when no active positions."""
+        positions = gateway.state.get_all_positions()
+        result = gateway._build_blocking_positions(positions, gateway.state.equity)
+        assert result == []
+
+
+class TestRiskResultBlockingPositions:
+    """Tests for blocking_positions and resource_conflict_type in rejection paths."""
+
+    @pytest.fixture
+    def gateway(self, state_store_with_equity, risk_config):
+        return RiskGateway(state_store_with_equity, risk_config)
+
+    def test_max_positions_includes_blocking(self, gateway):
+        """Max positions rejection includes blocking_positions."""
+        for i in range(10):
+            symbol = f"00{i:04d}"
+            gateway.state.update_position(symbol, real_qty=100)
+        intent = Intent(
+            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+        result = gateway.check(intent)
+        assert result.decision == RiskDecision.REJECT
+        assert result.resource_conflict_type == "max_positions"
+        assert result.blocking_positions is not None
+        assert len(result.blocking_positions) >= 1
+
+    def test_gross_exposure_includes_blocking(self, gateway):
+        """Gross exposure rejection includes blocking_positions."""
+        gateway.state.update_position("000660", real_qty=1000, avg_price=85000)
+        gateway.state.update_allocation("000660", "KPR", 1000, cost_basis=85000)
+        intent = Intent(
+            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+        result = gateway.check(intent)
+        assert result.decision == RiskDecision.REJECT
+        assert result.resource_conflict_type == "gross_exposure"
+        assert result.blocking_positions is not None
+        assert any(bp["strategy"] == "KPR" for bp in result.blocking_positions)
+
+    def test_regime_cap_includes_blocking(self, gateway):
+        """Regime cap rejection includes blocking_positions."""
+        gateway.config.current_regime = "CRISIS"
+        gateway.state.update_position("000660", real_qty=214, avg_price=70000)
+        gateway.state.update_allocation("000660", "KMP", 214, cost_basis=70000)
+        intent = Intent(
+            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+        result = gateway.check(intent)
+        assert result.decision == RiskDecision.REJECT
+        assert result.resource_conflict_type == "regime_cap"
+        assert result.blocking_positions is not None
+
+    def test_strategy_budget_positions_includes_blocking(self, gateway):
+        """Strategy budget (positions) rejection includes blocking_positions."""
+        for i in range(4):
+            symbol = f"00{i:04d}"
+            gateway.state.update_allocation(symbol, "KMP", 100)
+        intent = Intent(
+            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+        result = gateway.check(intent)
+        assert result.decision == RiskDecision.REJECT
+        assert result.resource_conflict_type == "strategy_budget_positions"
+        assert result.blocking_positions is not None
+
+    def test_approve_has_no_blocking(self, gateway):
+        """Approved intents have no blocking_positions."""
+        intent = Intent(
+            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+        result = gateway.check(intent)
+        assert result.decision == RiskDecision.APPROVE
+        assert result.blocking_positions is None
+        assert result.resource_conflict_type is None
+
+
 class TestRiskGatewayUnknownStrategyBudget:
     """Tests for _check_strategy_budget with unknown strategies."""
 

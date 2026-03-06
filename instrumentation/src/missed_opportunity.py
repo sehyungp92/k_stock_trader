@@ -72,6 +72,8 @@ class MissedOpportunityEvent:
     signal_time: str = ""                  # when the signal fired (KST ISO)
     blocked_by: str = ""                   # which filter or limit blocked it
     block_reason: str = ""                 # additional context on why
+    blocking_positions: Optional[List[Dict[str, Any]]] = None  # positions that caused rejection
+    resource_conflict_type: str = ""       # max_positions, gross_exposure, etc.
 
     hypothetical_entry_price: float = 0.0  # price used for simulation
 
@@ -259,6 +261,8 @@ class MissedOpportunityLogger:
         exchange_timestamp: Optional[datetime] = None,
         bar_id: Optional[str] = None,
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
+        blocking_positions: Optional[List[Dict[str, Any]]] = None,
+        resource_conflict_type: str = "",
     ) -> MissedOpportunityEvent:
         """
         Call this when a signal fires but is blocked by a gate, filter, or
@@ -321,6 +325,8 @@ class MissedOpportunityLogger:
                 signal_time=exch_ts.isoformat(),
                 blocked_by=blocked_by,
                 block_reason=block_reason,
+                blocking_positions=blocking_positions,
+                resource_conflict_type=resource_conflict_type,
                 hypothetical_entry_price=hyp_entry,
                 simulation_policy=policy.to_dict(),
                 assumption_tags=assumption_tags,

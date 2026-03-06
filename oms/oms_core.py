@@ -130,6 +130,8 @@ class OMSCore:
             return await self._finalize(
                 intent, IntentStatus.REJECTED, risk_result.reason,
                 cooldown_until=time.time() + (risk_result.cooldown_sec or 0),
+                blocking_positions=risk_result.blocking_positions,
+                resource_conflict_type=risk_result.resource_conflict_type,
             )
         if risk_result.decision == RiskDecision.DEFER:
             self._release_lock_if_entry(intent)
@@ -776,6 +778,8 @@ class OMSCore:
         self, intent: Intent, status: IntentStatus, message: str = "",
         order_id: Optional[str] = None, modified_qty: Optional[int] = None,
         cooldown_until: Optional[float] = None,
+        blocking_positions: Optional[List] = None,
+        resource_conflict_type: Optional[str] = None,
     ) -> IntentResult:
         """Create result, store in idempotency cache, and persist."""
         result = IntentResult(
@@ -785,6 +789,8 @@ class OMSCore:
             order_id=order_id,
             modified_qty=modified_qty,
             cooldown_until=cooldown_until,
+            blocking_positions=blocking_positions,
+            resource_conflict_type=resource_conflict_type,
         )
 
         # Log all intent outcomes for observability
