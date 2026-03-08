@@ -1,0 +1,15 @@
+# Experiment configurations — managed by trading_assistant orchestrator.
+# New experiments are added via PR from the orchestrator.
+# Format:
+#   experiments:
+#     - experiment_id: "abc123"
+#       title: "Test tighter stop on KMP"
+#       variants:
+#         control: {params: {HARD_STOP_ATR_MULT: 1.2}, allocation_pct: 50}
+#         treatment: {params: {HARD_STOP_ATR_MULT: 1.0}, allocation_pct: 50}
+#       primary_metric: "sharpe"
+#       start_date: "2026-03-15"
+#       strategy_type: "kmp"
+#       status: "active"
+
+experiments: []

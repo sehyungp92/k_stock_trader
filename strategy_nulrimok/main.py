@@ -347,6 +347,7 @@ async def run_nulrimok():
                 positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
+            instr.check_config_changes()
             last_heartbeat_ts = now_ts
 
         # Day rollover: increment sessions_held
@@ -524,6 +525,12 @@ async def run_nulrimok():
                                         experiment_id=experiment_cfg.get("experiment_id", ""),
                                         experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                     )
+                                    instr.on_orderbook_context(
+                                        pair=ticker,
+                                        best_bid=cost_basis, best_ask=cost_basis,
+                                        trade_context="entry",
+                                        related_trade_id=f"NULRIMOK:{ticker}:{now.strftime('%Y%m%d')}",
+                                    )
                                 logger.info(f"{ticker}: Fill confirmed, qty={alloc_qty}")
                             else:
                                 entry_state.pending_fill_cycles += 1
@@ -558,6 +565,12 @@ async def run_nulrimok():
                                     exit_price=bar['close'],
                                     exit_reason="managed_exit",
                                     mfe_mae_context=mfe_mae,
+                                )
+                                instr.on_orderbook_context(
+                                    pair=ticker,
+                                    best_bid=bar['close'], best_ask=bar['close'],
+                                    trade_context="exit",
+                                    related_trade_id=f"NULRIMOK:{ticker}:{pos.entry_time.strftime('%Y%m%d')}",
                                 )
                             else:
                                 _mfe_prices.pop(ticker, None)

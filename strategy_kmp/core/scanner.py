@@ -32,6 +32,7 @@ async def scan_at_0915(
     min_surge: float = 3.0,
     top_n: int = 40,
     rate_budget: Optional[SharedRateBudgetClient] = None,
+    instr=None,  # InstrumentationKit
 ) -> List[str]:
     """
     Scan for value surge leaders at 09:15.
@@ -74,6 +75,15 @@ async def scan_at_0915(
                 prev_close = state.prev_close
                 if prev_close > 0 and open_px > 0:
                     gap_pct = abs(open_px - prev_close) / prev_close
+                    if instr is not None:
+                        instr.on_filter_decision(
+                            pair=ticker, filter_name="gap_skip",
+                            passed=gap_pct < GAP_SKIP,
+                            threshold=GAP_SKIP, actual_value=gap_pct,
+                            signal_name="kmp_value_surge",
+                            signal_strength=surge,
+                            strategy_type="kmp",
+                        )
                     if gap_pct >= GAP_SKIP:
                         logger.debug(f"{ticker}: Gap {gap_pct:.1%} >= {GAP_SKIP:.0%}, skip")
                         continue
@@ -103,6 +113,24 @@ async def scan_at_0915(
             state.value15 = value15
             state.surge = surge
             scored.append((ticker, value15))
+
+            # Emit indicator snapshot for candidates passing value surge screen
+            if instr is not None:
+                instr.on_indicator_snapshot(
+                    pair=ticker,
+                    indicators={
+                        "sma_20": state.sma20,
+                        "sma_60": state.sma60,
+                        "atr_14": state.atr_1m or 0.0,
+                        "rvol": state.rvol_1m,
+                        "or_range": state.or_high - state.or_low if state.or_high and state.or_low else 0.0,
+                        "value_surge_ratio": surge,
+                    },
+                    signal_name="kmp_value_surge",
+                    signal_strength=min(surge / 10.0, 1.0),
+                    decision="enter",
+                    strategy_type="kmp",
+                )
 
         except Exception as e:
             logger.debug(f"Scan error for {ticker}: {e}")

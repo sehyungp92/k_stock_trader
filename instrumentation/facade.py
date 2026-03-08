@@ -38,6 +38,11 @@ from .src.exit_backfill import ExitBackfiller
 from .src.heartbeat import HeartbeatEmitter
 from .src.order_logger import OrderLogger
 from .src.sidecar import Sidecar
+from .src.indicator_logger import IndicatorLogger
+from .src.filter_logger import FilterLogger
+from .src.orderbook_logger import OrderBookLogger
+from .src.config_watcher import ConfigWatcher
+from .src.experiment_registry import ExperimentRegistry
 
 
 class InstrumentationKit:
@@ -58,6 +63,11 @@ class InstrumentationKit:
         heartbeat: Optional[HeartbeatEmitter] = None,
         order_logger: Optional[OrderLogger] = None,
         sidecar=None,
+        indicator_logger: Optional[IndicatorLogger] = None,
+        filter_logger: Optional[FilterLogger] = None,
+        orderbook_logger: Optional[OrderBookLogger] = None,
+        config_watcher: Optional[ConfigWatcher] = None,
+        experiment_registry: Optional[ExperimentRegistry] = None,
     ):
         self._trade_logger = trade_logger
         self._missed_logger = missed_logger
@@ -68,17 +78,29 @@ class InstrumentationKit:
         self._data_provider = data_provider
         self._strategy_type = strategy_type
         self._data_dir = Path(data_dir)
+        self._bot_id = f"k_stock_trader_{strategy_type}"
         self._exit_backfiller = exit_backfiller or ExitBackfiller(data_dir=data_dir)
         self._heartbeat = heartbeat or HeartbeatEmitter(
-            bot_id=f"k_stock_trader_{strategy_type}",
+            bot_id=self._bot_id,
             strategy_type=strategy_type,
             data_dir=data_dir,
         )
         self._order_logger = order_logger or OrderLogger({
-            "bot_id": f"k_stock_trader_{strategy_type}",
+            "bot_id": self._bot_id,
             "data_dir": data_dir,
         })
         self._sidecar = sidecar
+        self._indicator_logger = indicator_logger or IndicatorLogger(
+            data_dir=data_dir, bot_id=self._bot_id,
+        )
+        self._filter_logger = filter_logger or FilterLogger(
+            data_dir=data_dir, bot_id=self._bot_id,
+        )
+        self._orderbook_logger = orderbook_logger or OrderBookLogger(
+            data_dir=data_dir, bot_id=self._bot_id,
+        )
+        self._config_watcher = config_watcher
+        self._experiment_registry = experiment_registry
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="instr_backfill"
         )
@@ -97,8 +119,9 @@ class InstrumentationKit:
         data_dir: str = "instrumentation/data",
     ) -> "InstrumentationKit":
         """One-line factory for strategy init."""
+        bot_id = f"k_stock_trader_{strategy_type}"
         config = {
-            "bot_id": f"k_stock_trader_{strategy_type}",
+            "bot_id": bot_id,
             "data_dir": data_dir,
             "data_source_id": "kis_rest",
             "strategy_type": strategy_type,
@@ -123,7 +146,17 @@ class InstrumentationKit:
         missed_logger = MissedOpportunityLogger(config, snapshot_service)
         process_scorer = ProcessScorer()
         regime_classifier = RegimeClassifier(data_provider=data_provider)
-        daily_builder = DailySnapshotBuilder(config)
+
+        # Initialize ExperimentRegistry (before DailySnapshotBuilder which depends on it)
+        experiment_registry = None
+        try:
+            exp_path = Path("config/experiments.yaml")
+            if exp_path.exists():
+                experiment_registry = ExperimentRegistry(exp_path)
+        except Exception as e:
+            logger.debug("ExperimentRegistry init failed (non-fatal): %s", e)
+
+        daily_builder = DailySnapshotBuilder(config, experiment_registry=experiment_registry)
 
         # Initialize sidecar when relay_url is configured
         sidecar = None
@@ -137,6 +170,24 @@ class InstrumentationKit:
                 sidecar = None
         else:
             logger.debug("Sidecar disabled — no SIDECAR_RELAY_URL or relay_url configured")
+
+        # Initialize ConfigWatcher for parameter change detection
+        config_watcher = None
+        try:
+            config_watcher = ConfigWatcher(
+                bot_id=bot_id,
+                config_modules=[
+                    "strategy_kmp.config.constants",
+                    "strategy_kpr.config.constants",
+                    "strategy_pcim.config.constants",
+                    "strategy_nulrimok.config.constants",
+                ],
+                data_dir=Path(data_dir),
+            )
+            config_watcher.take_baseline()
+        except Exception as e:
+            logger.debug("ConfigWatcher init failed (non-fatal): %s", e)
+            config_watcher = None
 
         logger.info(
             f"InstrumentationKit created for {strategy_type} "
@@ -154,6 +205,8 @@ class InstrumentationKit:
             strategy_type=strategy_type,
             data_dir=data_dir,
             sidecar=sidecar,
+            config_watcher=config_watcher,
+            experiment_registry=experiment_registry,
         )
 
     def on_entry_fill(
@@ -415,6 +468,94 @@ class InstrumentationKit:
                 f.write(json.dumps(record, default=str) + "\n")
         except Exception:
             pass
+
+    def on_indicator_snapshot(
+        self,
+        pair: str,
+        indicators: dict[str, float],
+        signal_name: str,
+        signal_strength: float,
+        decision: str,
+        strategy_type: str,
+        exchange_timestamp=None,
+        bar_id: str | None = None,
+        context: dict | None = None,
+    ) -> None:
+        """Fire-and-forget indicator snapshot at signal evaluation."""
+        try:
+            self._indicator_logger.log_snapshot(
+                pair=pair,
+                indicators=indicators,
+                signal_name=signal_name,
+                signal_strength=signal_strength,
+                decision=decision,
+                strategy_type=strategy_type,
+                exchange_timestamp=exchange_timestamp,
+                bar_id=bar_id,
+                context=context,
+            )
+        except Exception:
+            pass  # instrumentation must never affect trading
+
+    def on_filter_decision(
+        self,
+        pair: str,
+        filter_name: str,
+        passed: bool,
+        threshold: float,
+        actual_value: float,
+        signal_name: str = "",
+        signal_strength: float = 0.0,
+        strategy_type: str = "",
+        exchange_timestamp=None,
+        bar_id: str | None = None,
+    ) -> None:
+        """Fire-and-forget filter decision event."""
+        try:
+            self._filter_logger.log_decision(
+                pair=pair, filter_name=filter_name, passed=passed,
+                threshold=threshold, actual_value=actual_value,
+                signal_name=signal_name, signal_strength=signal_strength,
+                strategy_type=strategy_type, exchange_timestamp=exchange_timestamp,
+                bar_id=bar_id,
+            )
+        except Exception:
+            pass
+
+    def on_orderbook_context(
+        self,
+        pair: str,
+        best_bid: float,
+        best_ask: float,
+        trade_context: str | None = None,
+        related_trade_id: str | None = None,
+        bid_depth_10bps: float = 0.0,
+        ask_depth_10bps: float = 0.0,
+        exchange_timestamp=None,
+    ) -> None:
+        """Fire-and-forget order book context capture."""
+        try:
+            self._orderbook_logger.log_context(
+                pair=pair, best_bid=best_bid, best_ask=best_ask,
+                trade_context=trade_context, related_trade_id=related_trade_id,
+                bid_depth_10bps=bid_depth_10bps, ask_depth_10bps=ask_depth_10bps,
+                exchange_timestamp=exchange_timestamp,
+            )
+        except Exception:
+            pass
+
+    def check_config_changes(self) -> None:
+        """Check for parameter changes. Call periodically from main loop."""
+        try:
+            if self._config_watcher:
+                self._config_watcher.check()
+        except Exception:
+            pass
+
+    @property
+    def experiment_registry(self) -> Optional[ExperimentRegistry]:
+        """Access experiment registry for variant assignment."""
+        return self._experiment_registry
 
     def shutdown(self) -> None:
         """Clean up executor and sidecar resources."""

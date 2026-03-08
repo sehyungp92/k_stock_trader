@@ -239,6 +239,34 @@ async def alpha_step(
                 {"note": "Quality score still weights RVOL"},
             )
 
+    # Emit filter decisions for key gates
+    if instr and s.bid > 0 and s.ask > 0:
+        instr.on_filter_decision(
+            pair=s.code, filter_name="spread_max",
+            passed=spread_ok(s),
+            threshold=SPREAD_MAX_PCT, actual_value=s.spread_pct,
+            signal_name="kmp_breakout",
+            signal_strength=s.surge,
+            strategy_type="kmp",
+        )
+    if instr:
+        instr.on_filter_decision(
+            pair=s.code, filter_name="surge_decay",
+            passed=s.surge >= surge_thresh,
+            threshold=surge_thresh, actual_value=s.surge,
+            signal_name="kmp_breakout",
+            signal_strength=s.surge,
+            strategy_type="kmp",
+        )
+        instr.on_filter_decision(
+            pair=s.code, filter_name="rvol_min",
+            passed=rvol_ok(s),
+            threshold=RVOL_MIN, actual_value=s.rvol_1m,
+            signal_name="kmp_breakout",
+            signal_strength=s.surge,
+            strategy_type="kmp",
+        )
+
     # Spread gate
     if s.bid > 0 and s.ask > 0 and not spread_ok(s):
         if "spread" not in s._gate_logged:

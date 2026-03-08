@@ -11,7 +11,7 @@ import yaml
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env, create_strategy_client
 from oms_client import OMSClient, Intent, IntentType, IntentStatus, Urgency, TimeHorizon, RiskPayload
 
-from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION, HARD_FILTERS, SIZING
+from .config.constants import STRATEGY_ID, TIMING, PORTFOLIO, INTRADAY_HALT_KOSPI_DD_PCT, SIGNAL_EXTRACTION, HARD_FILTERS, SIZING, VETOES
 from .config.switches import pcim_switches
 from .external.youtube.watcher import YouTubeWatcher
 from .external.youtube.models import ChannelConfig
@@ -325,6 +325,7 @@ async def run_pcim():
                 positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
+            instr.check_config_changes()
             last_heartbeat_ts = now_ts
 
         # =================================================================
@@ -432,6 +433,16 @@ async def run_pcim():
 
                 has_earnings = api.earnings_within_days(c.symbol, 5)
                 reject = apply_hard_filters(c, has_earnings)
+                # Emit filter decisions for PCIM hard filters
+                if instr:
+                    instr.on_filter_decision(
+                        pair=c.symbol, filter_name="trend_gate",
+                        passed=True, threshold=0.0,
+                        actual_value=c.sma20 if hasattr(c, 'sma20') else 0.0,
+                        signal_name="pcim_influencer_signal",
+                        signal_strength=c.conviction_score,
+                        strategy_type="pcim",
+                    )
                 if reject:
                     c.reject_reason = reject
                     if instr:
@@ -476,6 +487,24 @@ async def run_pcim():
 
                 five_day_ret = (closes[-1] / closes[-5] - 1) if len(closes) >= 5 else 0
                 c.soft_mult = compute_soft_multiplier(c, five_day_ret)
+
+                # Emit indicator snapshot for candidates surviving stats phase
+                if instr:
+                    instr.on_indicator_snapshot(
+                        pair=c.symbol,
+                        indicators={
+                            "conviction_score": c.conviction_score,
+                            "sma_20": c.sma20 if hasattr(c, 'sma20') else 0.0,
+                            "adtv_20d": c.adtv_20d if hasattr(c, 'adtv_20d') else 0.0,
+                            "gap_rev_rate": c.gap_rev_rate,
+                            "soft_mult": c.soft_mult,
+                            "five_day_return": round(five_day_ret, 4),
+                        },
+                        signal_name="pcim_influencer_signal",
+                        signal_strength=c.conviction_score,
+                        decision="enter",
+                        strategy_type="pcim",
+                    )
 
             passed = [c for c in candidates if not c.is_rejected()]
             rejected = [c for c in candidates if c.is_rejected()]
@@ -725,6 +754,15 @@ async def run_pcim():
                                 experiment_id=experiment_cfg.get("experiment_id", ""),
                                 experiment_variant=experiment_cfg.get("experiment_variant", ""),
                             )
+                            bid = getattr(cand, 'bid', 0.0) or 0.0
+                            ask = getattr(cand, 'ask', 0.0) or 0.0
+                            if bid > 0 or ask > 0:
+                                instr.on_orderbook_context(
+                                    pair=symbol,
+                                    best_bid=bid, best_ask=ask,
+                                    trade_context="entry",
+                                    related_trade_id=f"PCIM:{symbol}:{today.strftime('%Y%m%d')}",
+                                )
                         logger.info(f"{symbol}: Fill confirmed, position created @ {avg_price:.0f} qty={alloc_qty}")
                         # Track Bucket A hit (filled)
                         if symbol in bucket_a_pending:
@@ -754,6 +792,29 @@ async def run_pcim():
                     spread_pct = (ask - bid) / last if last > 0 else 0
                     upper_dist = (upper_limit - last) / tick_size if tick_size > 0 and upper_limit > 0 else 999
                     if instr:
+                        from strategy_pcim.config.switches import pcim_switches as _sw
+                        instr.on_filter_decision(
+                            pair=c.symbol, filter_name="vi_check",
+                            passed=not is_vi, threshold=0.0, actual_value=1.0 if is_vi else 0.0,
+                            signal_name="pcim_influencer_signal",
+                            signal_strength=c.conviction_score, strategy_type="pcim",
+                        )
+                        instr.on_filter_decision(
+                            pair=c.symbol, filter_name="near_upper_limit",
+                            passed=upper_dist > VETOES["NEAR_UPPER_LIMIT_TICKS"],
+                            threshold=float(VETOES["NEAR_UPPER_LIMIT_TICKS"]),
+                            actual_value=round(upper_dist, 1),
+                            signal_name="pcim_influencer_signal",
+                            signal_strength=c.conviction_score, strategy_type="pcim",
+                        )
+                        instr.on_filter_decision(
+                            pair=c.symbol, filter_name="spread_veto",
+                            passed=spread_pct <= _sw.spread_veto_pct,
+                            threshold=_sw.spread_veto_pct,
+                            actual_value=round(spread_pct, 5),
+                            signal_name="pcim_influencer_signal",
+                            signal_strength=c.conviction_score, strategy_type="pcim",
+                        )
                         fd = [{
                             "filter": "execution_veto",
                             "threshold": veto,
@@ -959,6 +1020,15 @@ async def run_pcim():
                                 exit_price=current_price, exit_reason="stop",
                                 mfe_mae_context=mfe_mae,
                             )
+                            bid = quote.get('bid', 0)
+                            ask = quote.get('ask', 0)
+                            if bid > 0 or ask > 0:
+                                instr.on_orderbook_context(
+                                    pair=pos.symbol,
+                                    best_bid=bid, best_ask=ask,
+                                    trade_context="exit",
+                                    related_trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                )
                         else:
                             _mfe_prices.pop(pos.symbol, None)
                             _mae_prices.pop(pos.symbol, None)
@@ -997,6 +1067,15 @@ async def run_pcim():
                                 exit_price=current_price, exit_reason="take_profit",
                                 mfe_mae_context=mfe_mae,
                             )
+                            bid = quote.get('bid', 0)
+                            ask = quote.get('ask', 0)
+                            if bid > 0 or ask > 0:
+                                instr.on_orderbook_context(
+                                    pair=pos.symbol,
+                                    best_bid=bid, best_ask=ask,
+                                    trade_context="exit",
+                                    related_trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                )
                         pos.tp_done = True
                         position_manager.reduce_position(pos.symbol, qty)
                     else:
@@ -1033,6 +1112,15 @@ async def run_pcim():
                                 exit_price=current_price, exit_reason="time_exit",
                                 mfe_mae_context=mfe_mae,
                             )
+                            bid = quote.get('bid', 0)
+                            ask = quote.get('ask', 0)
+                            if bid > 0 or ask > 0:
+                                instr.on_orderbook_context(
+                                    pair=pos.symbol,
+                                    best_bid=bid, best_ask=ask,
+                                    trade_context="exit",
+                                    related_trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                )
                         else:
                             _mfe_prices.pop(pos.symbol, None)
                             _mae_prices.pop(pos.symbol, None)

@@ -233,3 +233,32 @@ class TestSidecar:
             for evt in sent_data["events"]:
                 assert "_source_file" not in evt
                 assert "_line_number" not in evt
+
+    def test_new_directories_included(self):
+        """Sidecar picks up indicators/, filter_decisions/, orderbook/, config_changes/."""
+        from instrumentation.src.sidecar import _DIR_TO_EVENT_TYPE
+        assert "indicators" in _DIR_TO_EVENT_TYPE
+        assert "filter_decisions" in _DIR_TO_EVENT_TYPE
+        assert "orderbook" in _DIR_TO_EVENT_TYPE
+        assert "config_changes" in _DIR_TO_EVENT_TYPE
+
+    def test_new_event_type_mapping(self):
+        """Directory name maps to correct event_type string."""
+        from instrumentation.src.sidecar import _DIR_TO_EVENT_TYPE
+        assert _DIR_TO_EVENT_TYPE["indicators"] == "indicator_snapshot"
+        assert _DIR_TO_EVENT_TYPE["filter_decisions"] == "filter_decision"
+        assert _DIR_TO_EVENT_TYPE["orderbook"] == "orderbook_context"
+        assert _DIR_TO_EVENT_TYPE["config_changes"] == "parameter_change"
+
+    def test_new_event_files_discovered(self):
+        """Sidecar discovers JSONL files in new directories."""
+        # Create indicator file
+        ind_dir = Path(self.tmpdir) / "indicators"
+        ind_dir.mkdir()
+        (ind_dir / "indicators_2026-03-15.jsonl").write_text(
+            '{"event_id": "x", "timestamp": "2026-03-15T09:00:00Z"}\n'
+        )
+
+        files = self.sidecar._get_event_files()
+        event_types = [et for _, et in files]
+        assert "indicator_snapshot" in event_types

@@ -105,7 +105,45 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
     close = float(bar.get('close', 0))
 
     if entry_state.state == EntryState.IDLE:
-        if check_entry_conditions(artifact, bar, sma5, vol_avg):
+        conditions_met = check_entry_conditions(artifact, bar, sma5, vol_avg)
+        # Emit indicator snapshot at signal evaluation
+        if instr is not None:
+            volume = float(bar.get('volume', 0))
+            vol_ratio = volume / vol_avg if vol_avg > 0 else 1.0
+            instr.on_indicator_snapshot(
+                pair=artifact.ticker,
+                indicators={
+                    "avwap": artifact.avwap_ref if hasattr(artifact, 'avwap_ref') else 0.0,
+                    "band_upper": artifact.band_upper,
+                    "band_lower": artifact.band_lower,
+                    "sma5": sma5,
+                    "vol_ratio": round(vol_ratio, 3),
+                    "flow_score": artifact.flow_score if hasattr(artifact, 'flow_score') else 0.0,
+                },
+                signal_name="nulrimok_avwap_dip",
+                signal_strength=artifact.flow_score if hasattr(artifact, 'flow_score') else 0.0,
+                decision="enter" if conditions_met else "skip",
+                strategy_type="nulrimok",
+            )
+            # Emit filter decisions for entry conditions
+            high, low = float(bar.get('high', 0)), float(bar.get('low', 0))
+            in_band = (low <= artifact.band_upper) and (high >= artifact.band_lower)
+            is_dip = close < sma5 if sma5 > 0 else False
+            instr.on_filter_decision(
+                pair=artifact.ticker, filter_name="avwap_band",
+                passed=in_band, threshold=artifact.band_upper,
+                actual_value=close,
+                signal_name="nulrimok_avwap_dip",
+                strategy_type="nulrimok",
+            )
+            instr.on_filter_decision(
+                pair=artifact.ticker, filter_name="vol_dryup",
+                passed=vol_ratio < ENTRY_VOL_DRYUP_PCT,
+                threshold=ENTRY_VOL_DRYUP_PCT, actual_value=vol_ratio,
+                signal_name="nulrimok_avwap_dip",
+                strategy_type="nulrimok",
+            )
+        if conditions_met:
             entry_state.state = EntryState.ARMED
             entry_state.arm_time = now
             entry_state.confirm_bars_remaining = nulrimok_switches.confirm_bars

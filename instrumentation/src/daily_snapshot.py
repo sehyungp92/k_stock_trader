@@ -85,6 +85,9 @@ class DailySnapshot:
     # Key: "{experiment_id}:{experiment_variant}"
     # Value: per-variant aggregate stats
 
+    # Active experiment metadata from registry
+    active_experiments: dict = field(default_factory=dict)
+
     # Health
     error_count: int = 0
     uptime_pct: float = 100.0
@@ -105,10 +108,11 @@ class DailySnapshotBuilder:
         builder.save(snapshot)
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, experiment_registry=None):
         self.bot_id = config["bot_id"]
         self.strategy_type = config.get("strategy_type", "unknown")
         self.data_dir = Path(config["data_dir"])
+        self._experiment_registry = experiment_registry
 
     def build(self, date_str: str = None) -> DailySnapshot:
         """Build daily snapshot for the given date (default: today)."""
@@ -281,6 +285,13 @@ class DailySnapshotBuilder:
 
         # --- EXPERIMENT BREAKDOWN ---
         snapshot.experiment_breakdown = self._build_experiment_breakdown(completed)
+
+        # --- ACTIVE EXPERIMENTS ---
+        if self._experiment_registry is not None:
+            try:
+                snapshot.active_experiments = self._experiment_registry.export_active(date_str)
+            except Exception:
+                pass
 
         return snapshot
 

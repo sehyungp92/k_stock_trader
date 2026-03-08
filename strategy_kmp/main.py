@@ -280,6 +280,13 @@ async def _sync_positions(
                         experiment_variant=_exp_cfg.get("experiment_variant", ""),
                         execution_timeline=_exec_timeline,
                     )
+                    if s.bid > 0 or s.ask > 0:
+                        instr.on_orderbook_context(
+                            pair=ticker,
+                            best_bid=s.bid, best_ask=s.ask,
+                            trade_context="entry",
+                            related_trade_id=f"KMP:{ticker}:{now_kst.strftime('%Y%m%d')}",
+                        )
         elif alloc_qty == 0:
             if s.fsm == State.IN_POSITION:
                 # Position closed externally (e.g. by OMS risk)
@@ -302,6 +309,13 @@ async def _sync_positions(
                         exit_reason="exit_confirmed",
                         mfe_mae_context=build_mfe_mae_context(s),
                     )
+                    if s.bid > 0 or s.ask > 0:
+                        instr.on_orderbook_context(
+                            pair=ticker,
+                            best_bid=s.bid, best_ask=s.ask,
+                            trade_context="exit",
+                            related_trade_id=f"KMP:{ticker}:{get_kst_now().strftime('%Y%m%d')}",
+                        )
                 exposure.on_close(ticker, s.qty, s.entry_px)
                 s.fsm = State.DONE
                 logger.info(f"{ticker}: Exit fill confirmed, DONE")
@@ -474,7 +488,7 @@ async def run_kmp():
 
     # 09:15 scan
     logger.info("Running 09:15 scan...")
-    candidates = await scan_at_0915(api, universe, baseline_15m, states, rate_budget=rate_budget)
+    candidates = await scan_at_0915(api, universe, baseline_15m, states, rate_budget=rate_budget, instr=instr)
     logger.info(f"Scan complete. {len(candidates)} candidates")
 
     # Subscribe to candidates (if WS available)
@@ -624,6 +638,7 @@ async def run_kmp():
                 positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
+            instr.check_config_changes()
             last_heartbeat_ts = _time.time()
 
         # Periodic full reconciliation from OMS

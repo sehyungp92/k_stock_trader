@@ -46,6 +46,11 @@ _DIR_TO_EVENT_TYPE = {
     "heartbeats": "heartbeat",
     "bot_errors": "bot_error",
     "orders": "order",
+    # Phase 2B mappings:
+    "indicators": "indicator_snapshot",
+    "filter_decisions": "filter_decision",
+    "orderbook": "orderbook_context",
+    "config_changes": "parameter_change",
 }
 
 # Priority mapping for relay event triage
@@ -60,6 +65,10 @@ _EVENT_TYPE_PRIORITY = {
     "exit_movement": "normal",
     "heartbeat": "low",
     "order": "normal",
+    "indicator_snapshot": "low",
+    "filter_decision": "low",
+    "orderbook_context": "low",
+    "parameter_change": "normal",
 }
 _BOT_ERROR_SEVERITY_PRIORITY = {
     "critical": "critical",

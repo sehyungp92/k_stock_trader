@@ -298,7 +298,28 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
 
     # IDLE -> SETUP_DETECTED
     if s.fsm == FSMState.IDLE:
-        if detect_setup(s, bar, vwap, bar_time):
+        setup_found = detect_setup(s, bar, vwap, bar_time)
+        if instr:
+            depth_pct = (vwap - close) / vwap if vwap > 0 else 0.0
+            drop_pct = (s.hod - close) / s.hod if s.hod > 0 else 0.0
+            drop_dur = (bar_time - s.hod_time).total_seconds() / 60.0 if s.hod_time else 0.0
+            instr.on_indicator_snapshot(
+                pair=s.code,
+                indicators={
+                    "vwap": vwap,
+                    "vwap_depth_pct": round(depth_pct, 4),
+                    "price_vs_vwap_pct": round(depth_pct * 100, 2),
+                    "hod": s.hod,
+                    "drop_from_hod_pct": round(drop_pct * 100, 2),
+                    "drop_duration_min": round(drop_dur, 1),
+                },
+                signal_name="kpr_vwap_pullback",
+                signal_strength=min(depth_pct * 20, 1.0) if setup_found else 0.0,
+                decision="enter" if setup_found else "skip",
+                strategy_type="kpr",
+                context={"setup_type": s.setup_type or "none"},
+            )
+        if setup_found:
             s.fsm = FSMState.SETUP_DETECTED
             logger.info(f"{s.code}: Setup detected")
         return None
@@ -364,6 +385,24 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                 return None
 
             confidence = compute_confidence(investor_sig, micro_sig, program_sig, prog_avail, symbol=s.code)
+            # Emit filter decisions for KPR confidence pillars
+            if instr:
+                from .setup_detection import check_vwap_depth, VWAP_DEPTH_MIN, VWAP_DEPTH_MAX
+                _, depth = check_vwap_depth(close, vwap, symbol=s.code)
+                instr.on_filter_decision(
+                    pair=s.code, filter_name="vwap_depth",
+                    passed=VWAP_DEPTH_MIN <= depth <= VWAP_DEPTH_MAX,
+                    threshold=VWAP_DEPTH_MIN, actual_value=depth,
+                    signal_name="kpr_mean_reversion",
+                    strategy_type="kpr",
+                )
+                instr.on_filter_decision(
+                    pair=s.code, filter_name="confidence",
+                    passed=confidence != "RED",
+                    threshold=0.0, actual_value={"GREEN": 1.0, "YELLOW": 0.5, "RED": 0.0}.get(confidence, 0.0),
+                    signal_name="kpr_mean_reversion",
+                    strategy_type="kpr",
+                )
             if confidence == "RED":
                 if instr:
                     fd = _build_kpr_filter_decisions(

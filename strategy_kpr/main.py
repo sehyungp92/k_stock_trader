@@ -308,6 +308,7 @@ async def run_kpr():
                 positions=hb_positions, portfolio_exposure=hb_exposure,
             )
             instr.periodic_tick()
+            instr.check_config_changes()
             last_heartbeat_ts = now_ts
 
         universe_mgr.rebalance(universe, states, features, positions)
@@ -478,6 +479,13 @@ async def run_kpr():
                                     exit_reason=getattr(s, '_exit_reason', 'unknown'),
                                     mfe_mae_context=mfe_mae,
                                 )
+                                if s.bid > 0 or s.ask > 0:
+                                    instr.on_orderbook_context(
+                                        pair=ticker,
+                                        best_bid=s.bid, best_ask=s.ask,
+                                        trade_context="exit",
+                                        related_trade_id=f"KPR:{ticker}:{(s.entry_ts or now).strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
+                                    )
                             else:
                                 _mfe_prices.pop(ticker, None)
                                 _mae_prices.pop(ticker, None)
@@ -579,6 +587,13 @@ async def run_kpr():
                             experiment_variant=experiment_cfg.get("experiment_variant", ""),
                             execution_timeline=_exec_timeline,
                         )
+                        if s.bid > 0 or s.ask > 0:
+                            instr.on_orderbook_context(
+                                pair=ticker,
+                                best_bid=s.bid, best_ask=s.ask,
+                                trade_context="entry",
+                                related_trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
+                            )
                 else:
                     positions.discard(ticker)
 
