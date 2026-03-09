@@ -1,5 +1,6 @@
 """Nulrimok Intraday Entry Logic."""
 
+import time as _time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
@@ -31,6 +32,9 @@ class TickerEntryState:
     conf_type: str = ""  # Confirmation type for signal_hash
     anchor_date: str = ""  # For signal_hash
     sizing_context: dict | None = None  # Cached for fill confirmation instrumentation
+    signal_generated_at: float | None = None  # Execution timeline timestamps
+    oms_received_at: float | None = None
+    order_submitted_at: float | None = None
 
     def reset(self):
         self.state = EntryState.IDLE
@@ -41,6 +45,9 @@ class TickerEntryState:
         self.conf_type = ""
         self.anchor_date = ""
         self.sizing_context = None
+        self.signal_generated_at = None
+        self.oms_received_at = None
+        self.order_submitted_at = None
 
 
 def check_entry_conditions(artifact: TickerArtifact, bar: dict, sma5: float, vol_avg: float) -> bool:
@@ -242,6 +249,7 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 final_qty=qty, cap_reason=cap_reason, raw_qty=raw_qty,
             )
 
+            _signal_ts = _time.time()
             result = await oms.submit_intent(intent)
             if result.status.name in ("EXECUTED", "APPROVED"):
                 if instr:
@@ -257,6 +265,9 @@ async def process_entry(entry_state: TickerEntryState, artifact: TickerArtifact,
                 entry_state.state = EntryState.PENDING_FILL
                 entry_state.conf_type = conf_type
                 entry_state.anchor_date = artifact.anchor_date or ""
+                entry_state.signal_generated_at = _signal_ts
+                entry_state.oms_received_at = getattr(result, 'oms_received_at', None)
+                entry_state.order_submitted_at = getattr(result, 'order_submitted_at', None)
                 logger.info(f"{artifact.ticker}: Entry submitted, awaiting fill ({conf_type})")
                 return intent.intent_id
 

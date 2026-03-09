@@ -2,7 +2,7 @@
 
 Multi-strategy algorithmic trading system for the Korean stock market (KRX), built on the Korea Investment & Securities (KIS) API.
 
-Four independent strategies share a centralized Order Management System (OMS) with pre-trade risk checks, deployed across Docker containers on two VPS instances.
+Four independent strategies share a centralised Order Management System (OMS) with pre-trade risk checks, deployed across Docker containers on two VPS instances.
 
 ## Architecture
 
@@ -42,17 +42,25 @@ VPS 1 (Account 1)                    VPS 2 (Account 2)
 
 Scans the universe at 09:15 for trend-aligned breakout candidates. An FSM steps each candidate through gates: trend anchor, relative volume surge (2x+), spread check, regime/breadth gate, acceptance timeout, then entry. Positions flatten by 14:30.
 
+KMP attempts to capture the continuation move after a genuine breakout by requiring volume confirmation and trend alignment to filter out false breakouts. The multi-gate FSM ensures entries only fire when institutional participation (program flow) validates the move.
+
 ### KPR - VWAP Pullback Reversal
 
 Watches for pullbacks to VWAP in a tiered universe (HOT/WARM/COLD). Combines investor flow, program flow, and micro-pressure signals to confirm entries. Drift monitoring detects regime shifts for exits.
+
+KPR exploits the tendency of strongly-trending intraday stocks to find support at VWAP. The three-pillar confirmation (investor flow, program flow, micro-pressure) filters for pullbacks driven by temporary liquidity gaps rather than genuine reversals.
 
 ### Nulrimok - Swing Flow Strategy
 
 Pre-market DSE (Daily Selection Engine) ranks the universe by flow score, relative strength, sector weight, and AVWAP proximity. During the day, IEPE (Intraday Entry/Position Engine) watches 30-minute bars for band entry setups. Positions are held across sessions with flow-reversal exits.
 
+Nulrimok looks to capture multi-day mean-reversion to anchored VWAP in names where smart money (institutional/foreign) accumulation is detectable through flow data. Holding across sessions harvests larger moves that intraday strategies must leave on the table.
+
 ### PCIM - AI Premarket Intelligence
 
 Overnight pipeline fetches YouTube videos from configured influencer channels, extracts trading signals via Google Gemini, then scores/filters candidates through gap-reversal checks and trend gates. Two execution buckets (A: early trigger, B: normal) stage entries at market open.
+
+PCIM front-runs the retail attention wave by processing influencer signals overnight before the market opens. AI extraction and scoring allows systematic participation in the opening momentum that retail viewers generate, with trend and gap-reversal filters to avoid crowded or exhausted setups.
 
 ## Project Structure
 

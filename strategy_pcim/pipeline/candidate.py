@@ -54,6 +54,11 @@ class Candidate:
     # Priority (for selection when caps bind)
     priority_key: Optional[Tuple] = None
 
+    # Execution timeline timestamps (set during order submission)
+    signal_generated_at: Optional[float] = None
+    oms_received_at: Optional[float] = None
+    order_submitted_at: Optional[float] = None
+
     def is_rejected(self) -> bool:
         return self.reject_reason is not None
 

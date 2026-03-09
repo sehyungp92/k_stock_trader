@@ -78,7 +78,7 @@ class InstrumentationKit:
         self._data_provider = data_provider
         self._strategy_type = strategy_type
         self._data_dir = Path(data_dir)
-        self._bot_id = f"k_stock_trader_{strategy_type}"
+        self._bot_id = "k_stock_trader"
         self._exit_backfiller = exit_backfiller or ExitBackfiller(data_dir=data_dir)
         self._heartbeat = heartbeat or HeartbeatEmitter(
             bot_id=self._bot_id,
@@ -119,7 +119,7 @@ class InstrumentationKit:
         data_dir: str = "instrumentation/data",
     ) -> "InstrumentationKit":
         """One-line factory for strategy init."""
-        bot_id = f"k_stock_trader_{strategy_type}"
+        bot_id = "k_stock_trader"
         config = {
             "bot_id": bot_id,
             "data_dir": data_dir,

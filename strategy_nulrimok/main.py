@@ -459,6 +459,7 @@ async def run_nulrimok():
                         try:
                             alloc_qty = await oms.get_allocation(ticker, STRATEGY_ID)
                             if alloc_qty > 0:
+                                _fill_confirmed_at = _time.time()
                                 # Fill confirmed, get position for cost basis
                                 oms_pos = await oms.get_position(ticker)
                                 alloc = oms_pos.allocations.get(STRATEGY_ID) if oms_pos else None
@@ -511,6 +512,21 @@ async def run_nulrimok():
                                     _sw_params = nulrimok_switches.to_params_dict()
                                     _strat_params = {"avwap_ref": avwap, "atr30m": atr30m, "stop": stop, **_sw_params}
                                     _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
+                                    _exec_timeline = None
+                                    if entry_state.signal_generated_at:
+                                        _exec_timeline = {
+                                            "signal_generated_at": entry_state.signal_generated_at,
+                                            "oms_received_at": entry_state.oms_received_at,
+                                            "order_submitted_at": entry_state.order_submitted_at,
+                                            "fill_confirmed_at": _fill_confirmed_at,
+                                            "total_latency_ms": int((_fill_confirmed_at - entry_state.signal_generated_at) * 1000),
+                                        }
+                                        if entry_state.oms_received_at:
+                                            _exec_timeline["signal_to_oms_ms"] = int((entry_state.oms_received_at - entry_state.signal_generated_at) * 1000)
+                                        if entry_state.oms_received_at and entry_state.order_submitted_at:
+                                            _exec_timeline["oms_processing_ms"] = int((entry_state.order_submitted_at - entry_state.oms_received_at) * 1000)
+                                        if entry_state.order_submitted_at:
+                                            _exec_timeline["broker_to_fill_ms"] = int((_fill_confirmed_at - entry_state.order_submitted_at) * 1000)
                                     instr.on_entry_fill(
                                         trade_id=f"NULRIMOK:{ticker}:{now.strftime('%Y%m%d')}",
                                         symbol=ticker, entry_price=cost_basis, qty=alloc_qty,
@@ -524,6 +540,7 @@ async def run_nulrimok():
                                         param_set_id=_param_set_id,
                                         experiment_id=experiment_cfg.get("experiment_id", ""),
                                         experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                                        execution_timeline=_exec_timeline,
                                     )
                                     instr.on_orderbook_context(
                                         pair=ticker,
@@ -594,7 +611,7 @@ async def run_nulrimok():
                                 instr.on_signal_blocked(
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="risk_budget", block_reason="maturity=mid",
-                                    signal_strength=0.0,
+                                    signal_strength=float(ticker_artifact.flow_score),
                                     filter_decisions=fd,
                                     experiment_id=experiment_cfg.get("experiment_id", ""),
                                     experiment_variant=experiment_cfg.get("experiment_variant", ""),
@@ -618,7 +635,7 @@ async def run_nulrimok():
                                 instr.on_signal_blocked(
                                     symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                     blocked_by="sector_cap", block_reason="maturity=mid",
-                                    signal_strength=0.0,
+                                    signal_strength=float(ticker_artifact.flow_score),
                                     filter_decisions=fd,
                                     experiment_id=experiment_cfg.get("experiment_id", ""),
                                     experiment_variant=experiment_cfg.get("experiment_variant", ""),
@@ -643,7 +660,7 @@ async def run_nulrimok():
                                 symbol=ticker, signal="avwap_dip_buy", signal_id="nulrimok_dip",
                                 blocked_by="rotation_overflow",
                                 block_reason=f"ticker_in_overflow_queue, active_set_size={len(artifact.active_set)}",
-                                signal_strength=0.0,
+                                signal_strength=float(ticker_artifact.flow_score),
                                 experiment_id=experiment_cfg.get("experiment_id", ""),
                                 experiment_variant=experiment_cfg.get("experiment_variant", ""),
                             )

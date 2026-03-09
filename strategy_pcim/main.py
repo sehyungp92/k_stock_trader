@@ -689,6 +689,7 @@ async def run_pcim():
                 alloc_qty = oms_pos.get_allocation(STRATEGY_ID) if oms_pos else 0
                 alloc_obj = oms_pos.allocations.get(STRATEGY_ID) if oms_pos else None
                 if alloc_qty > 0:
+                    _fill_confirmed_at = _time.time()
                     pending = position_manager.clear_pending(symbol)
                     if pending:
                         avg_price = alloc_obj.cost_basis if alloc_obj else 0.0
@@ -740,6 +741,21 @@ async def run_pcim():
                                 **_sw_params,
                             }
                             _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
+                            _exec_timeline = None
+                            if cand.signal_generated_at:
+                                _exec_timeline = {
+                                    "signal_generated_at": cand.signal_generated_at,
+                                    "oms_received_at": cand.oms_received_at,
+                                    "order_submitted_at": cand.order_submitted_at,
+                                    "fill_confirmed_at": _fill_confirmed_at,
+                                    "total_latency_ms": int((_fill_confirmed_at - cand.signal_generated_at) * 1000),
+                                }
+                                if cand.oms_received_at:
+                                    _exec_timeline["signal_to_oms_ms"] = int((cand.oms_received_at - cand.signal_generated_at) * 1000)
+                                if cand.oms_received_at and cand.order_submitted_at:
+                                    _exec_timeline["oms_processing_ms"] = int((cand.order_submitted_at - cand.oms_received_at) * 1000)
+                                if cand.order_submitted_at:
+                                    _exec_timeline["broker_to_fill_ms"] = int((_fill_confirmed_at - cand.order_submitted_at) * 1000)
                             instr.on_entry_fill(
                                 trade_id=f"PCIM:{symbol}:{today.strftime('%Y%m%d')}",
                                 symbol=symbol, entry_price=avg_price, qty=alloc_qty,
@@ -753,6 +769,7 @@ async def run_pcim():
                                 param_set_id=_param_set_id,
                                 experiment_id=experiment_cfg.get("experiment_id", ""),
                                 experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                                execution_timeline=_exec_timeline,
                             )
                             bid = getattr(cand, 'bid', 0.0) or 0.0
                             ask = getattr(cand, 'ask', 0.0) or 0.0
@@ -847,10 +864,14 @@ async def run_pcim():
                         if signal.triggered:
                             _log_entry_decision(c, "ORB", quote, signal.vol_ratio)
                             # Bucket A: 30-second fill timeout per spec
-                            intent = create_entry_intent(c, quote['last'], urgency=Urgency.HIGH, expiry_ts=_time.time() + 30)
+                            _trigger_ts = _time.time()
+                            intent = create_entry_intent(c, quote['last'], urgency=Urgency.HIGH, expiry_ts=_trigger_ts + 30)
                             result = await oms.submit_intent(intent)
                             # EXECUTED means order submitted, not filled. Track as pending.
                             if result.status.name in ("EXECUTED", "APPROVED"):
+                                c.signal_generated_at = _trigger_ts
+                                c.oms_received_at = getattr(result, 'oms_received_at', None)
+                                c.order_submitted_at = getattr(result, 'order_submitted_at', None)
                                 if instr:
                                     instr.on_order_event(
                                         order_id=getattr(result, 'order_id', '') or intent.intent_id,
@@ -914,10 +935,14 @@ async def run_pcim():
                         signal = check_bucket_b_trigger(bars_1m)
                         if signal.triggered:
                             _log_entry_decision(c, "VWAP_RECLAIM", quote)
+                            _trigger_ts = _time.time()
                             intent = create_entry_intent(c, quote['last'])
                             result = await oms.submit_intent(intent)
                             # EXECUTED means order submitted, not filled. Track as pending.
                             if result.status.name in ("EXECUTED", "APPROVED"):
+                                c.signal_generated_at = _trigger_ts
+                                c.oms_received_at = getattr(result, 'oms_received_at', None)
+                                c.order_submitted_at = getattr(result, 'order_submitted_at', None)
                                 if instr:
                                     instr.on_order_event(
                                         order_id=getattr(result, 'order_id', '') or intent.intent_id,
