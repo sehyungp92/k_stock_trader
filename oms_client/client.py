@@ -78,7 +78,7 @@ class OMSClient:
         if aiohttp is None:
             raise ImportError("aiohttp required: pip install aiohttp")
         if self._session is None or self._session.closed:
-            connector = aiohttp.TCPConnector(force_close=True)
+            connector = aiohttp.TCPConnector(enable_cleanup_closed=True)
             self._session = aiohttp.ClientSession(connector=connector)
         return self._session
 

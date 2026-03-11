@@ -98,7 +98,12 @@ class Sidecar:
         self.data_dir = Path(config["data_dir"])
 
         sidecar_config = config.get("sidecar", {})
-        self.relay_url = sidecar_config.get("relay_url", "")
+        raw_url = os.environ.get("RELAY_URL", "") or sidecar_config.get("relay_url", "")
+        self.relay_url = (
+            raw_url.rstrip("/") + "/events"
+            if raw_url and not raw_url.rstrip("/").endswith("/events")
+            else raw_url
+        )
         self.batch_size = sidecar_config.get("batch_size", 50)
         self.retry_max = sidecar_config.get("retry_max", 5)
         self.retry_backoff_base = sidecar_config.get("retry_backoff_base_seconds", 10)
@@ -173,9 +178,13 @@ class Sidecar:
         events = []
         try:
             if filepath.suffix == ".jsonl":
-                lines = filepath.read_text().strip().split("\n")
-                for i, line in enumerate(lines):
-                    if i >= last_sent and line.strip():
+                with filepath.open("r", encoding="utf-8") as handle:
+                    for i, line in enumerate(handle):
+                        if i < last_sent:
+                            continue
+                        line = line.strip()
+                        if not line:
+                            continue
                         try:
                             raw = json.loads(line)
                             wrapped = self._wrap_event(raw, event_type)

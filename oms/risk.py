@@ -340,9 +340,12 @@ class RiskGateway:
                 resource_conflict_type="regime_cap",
             )
 
-        # Per-symbol limit (existing + new)
+        # Per-symbol limit (existing + committed + new)
         existing_pos = self.state.get_position(intent.symbol)
-        existing_notional = existing_pos.real_qty * (existing_pos.avg_price or entry_px)
+        existing_px = existing_pos.avg_price or entry_px
+        existing_notional = (
+            existing_pos.real_qty + existing_pos.working_qty(side="BUY")
+        ) * existing_px
         total_position_notional = existing_notional + new_notional
         position_pct = total_position_notional / equity
         if position_pct > self.config.max_position_pct:
@@ -495,7 +498,9 @@ class RiskGateway:
         self._sector_exposure.on_close(symbol, qty, price)
 
     def reconcile_sector_exposure(
-        self, positions: Dict[str, tuple], working_orders: Optional[set] = None
+        self,
+        positions: Dict[str, tuple],
+        working_orders: Optional[List[tuple[str, int, float]]] = None,
     ) -> None:
         """Rebuild sector exposure from OMS truth."""
         self._sector_exposure.reconcile(positions, working_orders)

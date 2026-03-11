@@ -28,7 +28,7 @@ class OrderStatus(Enum):
 @dataclass
 class WorkingOrder:
     """Represents an order in flight."""
-    order_id: str
+    order_id: str  # Broker/KIS order ID
     symbol: str
     side: str  # "BUY" or "SELL"
     qty: int
@@ -42,6 +42,9 @@ class WorkingOrder:
     submit_ts: float = field(default_factory=time.time)
     cancel_after_sec: Optional[float] = None
     branch: str = ""  # KRX order branch for cancel/revise
+    intent_id: Optional[str] = None
+    oms_order_id: Optional[str] = None
+    missing_from_broker_count: int = 0
 
 
 @dataclass

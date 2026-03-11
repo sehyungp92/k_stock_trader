@@ -54,6 +54,7 @@ class InMemoryIdempotencyStore(IdempotencyStore):
 
 UNKNOWN_STRATEGY = "_UNKNOWN_"
 DRIFT_TOLERANCE = 0  # shares
+BROKER_MISSING_GRACE_CYCLES = 2
 
 
 class OMSCore:
@@ -179,6 +180,7 @@ class OMSCore:
         for wo in list(pos.working_orders):
             if wo.strategy_id == intent.strategy_id:
                 broker = broker_by_id.get(wo.order_id)
+                prev_status = wo.status
                 if broker:
                     final_delta = broker.filled_qty - wo.filled_qty
                     if final_delta > 0:
@@ -187,7 +189,13 @@ class OMSCore:
 
                 result = await self.adapter.cancel_order(wo.order_id, wo.symbol, wo.qty - wo.filled_qty, branch=wo.branch)
                 if result.success:
-                    self.state.remove_working_order(wo.symbol, wo.order_id)
+                    await self._finalize_working_order(
+                        wo,
+                        OrderStatus.CANCELLED,
+                        prev_status,
+                        "CANCELLED",
+                        payload={"filled_qty": wo.filled_qty, "order_qty": wo.qty},
+                    )
                     cancelled += 1
 
         return await self._finalize(
@@ -279,15 +287,28 @@ class OMSCore:
         else:
             return await self._finalize(intent, IntentStatus.REJECTED, f"Unsupported intent type: {intent.intent_type}", oms_received_at=oms_received_at)
 
+        order_price = plan.limit_price or current_price or 0.0
+        sector_reserved = False
+        if plan.side == "BUY":
+            self.risk.reserve_sector(plan.symbol, plan.qty, order_price)
+            sector_reserved = True
+
         # Execute
-        exec_result = await self.adapter.submit_order(
-            symbol=plan.symbol, side=plan.side, qty=plan.qty,
-            order_type=plan.order_type.name,
-            limit_price=plan.limit_price, stop_price=plan.stop_price,
-        )
+        try:
+            exec_result = await self.adapter.submit_order(
+                symbol=plan.symbol, side=plan.side, qty=plan.qty,
+                order_type=plan.order_type.name,
+                limit_price=plan.limit_price, stop_price=plan.stop_price,
+            )
+        except Exception:
+            if sector_reserved:
+                self.risk.unreserve_sector(plan.symbol, plan.qty, order_price)
+            raise
         order_submitted_at = time.time()
 
         if not exec_result.success:
+            if sector_reserved:
+                self.risk.unreserve_sector(plan.symbol, plan.qty, order_price)
             return await self._finalize(intent, IntentStatus.REJECTED, exec_result.message, oms_received_at=oms_received_at)
 
         # Track as WorkingOrder — allocation is updated on FILL, not here
@@ -301,12 +322,13 @@ class OMSCore:
             status=OrderStatus.WORKING,
             strategy_id=intent.strategy_id,
             cancel_after_sec=plan.cancel_after,
+            intent_id=intent.intent_id,
         )
         self.state.add_working_order(plan.symbol, wo)
 
         # Persist order
         if self.persistence:
-            await self.persistence.record_order(wo, intent_id=intent.intent_id)
+            wo.oms_order_id = await self.persistence.record_order(wo, intent_id=intent.intent_id)
             await self.persistence.record_order_event(
                 "ORDER_SUBMITTED", order_id=wo.order_id, intent_id=intent.intent_id,
                 strategy_id=intent.strategy_id, symbol=plan.symbol,
@@ -354,6 +376,7 @@ class OMSCore:
         if self.persistence:
             exec_id = f"{wo.order_id}:{wo.filled_qty + fill_qty}"
             fill_ts = datetime.now()
+            resolved_intent_id = intent.intent_id if intent else wo.intent_id
             await self.persistence.record_fill(
                 kis_exec_id=exec_id, order_id=wo.order_id,
                 strategy_id=wo.strategy_id, symbol=wo.symbol,
@@ -370,32 +393,74 @@ class OMSCore:
                 # Entry fill → open trade
                 setup_type = intent.risk_payload.rationale_code if intent else ""
                 confidence = intent.risk_payload.confidence if intent else ""
-                intent_id = intent.intent_id if intent else wo.order_id
-                await self.persistence.open_trade(
-                    strategy_id=wo.strategy_id,
-                    symbol=wo.symbol,
-                    direction="LONG",
-                    entry_qty=fill_qty,
-                    entry_price=wo.price,
-                    entry_ts=fill_ts,
-                    entry_intent_id=intent_id,
-                    setup_type=setup_type,
-                    confidence=confidence,
-                )
+                if resolved_intent_id:
+                    await self.persistence.open_trade(
+                        strategy_id=wo.strategy_id,
+                        symbol=wo.symbol,
+                        direction="LONG",
+                        entry_qty=fill_qty,
+                        entry_price=wo.price,
+                        entry_ts=fill_ts,
+                        entry_intent_id=resolved_intent_id,
+                        setup_type=setup_type,
+                        confidence=confidence,
+                    )
             else:
                 # Exit fill → close trade
                 trade_id = await self.persistence.find_open_trade(wo.strategy_id, wo.symbol)
-                if trade_id:
+                if trade_id and resolved_intent_id:
                     exit_reason = intent.risk_payload.rationale_code if intent else "exit"
-                    intent_id = intent.intent_id if intent else wo.order_id
                     await self.persistence.close_trade(
                         trade_id=trade_id,
                         exit_qty=fill_qty,
                         exit_price=wo.price,
                         exit_ts=fill_ts,
-                        exit_intent_id=intent_id,
+                        exit_intent_id=resolved_intent_id,
                         exit_reason=exit_reason,
                     )
+
+    def _remaining_qty(self, wo: WorkingOrder) -> int:
+        """Get remaining unfilled quantity for a working order."""
+        return max(wo.qty - wo.filled_qty, 0)
+
+    def _release_sector_reservation(self, wo: WorkingOrder, qty: Optional[int] = None) -> None:
+        """Release any unfilled BUY reservation held in sector exposure tracking."""
+        if wo.side != "BUY":
+            return
+        release_qty = self._remaining_qty(wo) if qty is None else max(qty, 0)
+        if release_qty <= 0:
+            return
+        self.risk.unreserve_sector(wo.symbol, release_qty, wo.price)
+
+    async def _finalize_working_order(
+        self,
+        wo: WorkingOrder,
+        final_status: OrderStatus,
+        prev_status: OrderStatus,
+        event_type: str,
+        payload: Optional[Dict] = None,
+    ) -> None:
+        """Finalize a working order and persist its terminal state."""
+        wo.status = final_status
+        wo.updated_at = datetime.now()
+        if final_status in (OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.EXPIRED):
+            self._release_sector_reservation(wo)
+        self.state.remove_working_order(wo.symbol, wo.order_id)
+        self.state.release_entry_lock(wo.symbol, wo.strategy_id)
+        if self.persistence:
+            await self.persistence.record_order_event(
+                event_type,
+                order_id=wo.order_id,
+                intent_id=wo.intent_id,
+                strategy_id=wo.strategy_id,
+                symbol=wo.symbol,
+                payload=payload,
+                status_before=prev_status.name,
+                status_after=final_status.name,
+            )
+            await self.persistence.update_order_status(
+                wo.order_id, final_status, wo.filled_qty, wo.price,
+            )
 
     async def _sync_working_orders(self) -> Dict[str, 'BrokerOrder']:
         """Poll broker orders and reconcile with working order state.
@@ -421,6 +486,7 @@ class OMSCore:
                         # Capture branch code for cancellation
                         if broker.branch and not wo.branch:
                             wo.branch = broker.branch
+                        wo.missing_from_broker_count = 0
                         # Still working — detect partial fills via filled_qty delta
                         new_filled = broker.filled_qty
                         fill_delta = new_filled - wo.filled_qty
@@ -436,44 +502,121 @@ class OMSCore:
                                 )
                         wo.filled_qty = new_filled
                         if new_filled >= wo.qty:
-                            wo.status = OrderStatus.FILLED
-                            self.state.release_entry_lock(wo.symbol, wo.strategy_id)
-                            # Record fill event
-                            if self.persistence:
-                                await self.persistence.record_order_event(
-                                    "FILL", order_id=wo.order_id,
-                                    strategy_id=wo.strategy_id, symbol=wo.symbol,
-                                    payload={"filled_qty": wo.filled_qty, "order_qty": wo.qty},
-                                    status_before=prev_status.name, status_after="FILLED",
-                                )
-                                await self.persistence.update_order_status(
-                                    wo.order_id, OrderStatus.FILLED, wo.filled_qty, wo.price,
-                                )
+                            await self._finalize_working_order(
+                                wo,
+                                OrderStatus.FILLED,
+                                prev_status,
+                                "FILL",
+                                payload={"filled_qty": wo.filled_qty, "order_qty": wo.qty},
+                            )
+                            continue
                         else:
-                            wo.status = OrderStatus.WORKING
+                            wo.status = OrderStatus.PARTIAL if wo.filled_qty > 0 else OrderStatus.WORKING
+                            if self.persistence and wo.status == OrderStatus.PARTIAL:
+                                await self.persistence.update_order_status(
+                                    wo.order_id, OrderStatus.PARTIAL, wo.filled_qty, wo.price,
+                                )
                         wo.updated_at = datetime.now()
                     else:
                         # Order disappeared from broker — treat unfilled remainder
-                        final_status = OrderStatus.FILLED if wo.filled_qty >= wo.qty else OrderStatus.CANCELLED
-                        wo.status = final_status
-                        self.state.remove_working_order(wo.symbol, wo.order_id)
-                        self.state.release_entry_lock(wo.symbol, wo.strategy_id)
-                        # Record cancelled/expired event
-                        if self.persistence:
-                            event_type = "FILL" if final_status == OrderStatus.FILLED else "CANCELLED"
-                            await self.persistence.record_order_event(
-                                event_type, order_id=wo.order_id,
-                                strategy_id=wo.strategy_id, symbol=wo.symbol,
+                        if wo.filled_qty >= wo.qty:
+                            await self._finalize_working_order(
+                                wo,
+                                OrderStatus.FILLED,
+                                prev_status,
+                                "FILL",
                                 payload={"filled_qty": wo.filled_qty, "order_qty": wo.qty},
-                                status_before=prev_status.name, status_after=final_status.name,
                             )
-                            await self.persistence.update_order_status(
-                                wo.order_id, final_status, wo.filled_qty, wo.price,
-                            )
-                        if final_status == OrderStatus.CANCELLED and wo.filled_qty > 0:
-                            logger.info(f"Partial cancel: {wo.symbol} filled {wo.filled_qty}/{wo.qty}")
+                            continue
+                        wo.missing_from_broker_count += 1
+                        wo.updated_at = datetime.now()
+                        logger.warning(
+                            f"Working order missing from broker snapshot: {wo.symbol} "
+                            f"{wo.order_id} ({wo.missing_from_broker_count} cycle(s))"
+                        )
 
         return broker_by_id
+
+    async def _reconcile_missing_working_orders(self, position_deltas: Dict[str, int]) -> None:
+        """Infer missing-order terminal states from broker position deltas."""
+        for symbol, pos in self.state.get_all_positions().items():
+            missing_orders = [wo for wo in list(pos.working_orders) if wo.missing_from_broker_count > 0]
+            if not missing_orders:
+                continue
+
+            async with self._symbol_locks[symbol]:
+                buy_delta = max(position_deltas.get(symbol, 0), 0)
+                sell_delta = max(-position_deltas.get(symbol, 0), 0)
+
+                for wo in missing_orders:
+                    prev_status = wo.status
+                    fill_budget = buy_delta if wo.side == "BUY" else sell_delta
+                    inferred_fill = min(self._remaining_qty(wo), fill_budget)
+
+                    if inferred_fill > 0:
+                        logger.warning(
+                            f"Inferred fill for missing order {wo.order_id}: "
+                            f"{wo.symbol} {wo.side} +{inferred_fill}"
+                        )
+                        await self._apply_fill(wo, inferred_fill)
+                        wo.filled_qty += inferred_fill
+                        if wo.side == "BUY":
+                            buy_delta -= inferred_fill
+                        else:
+                            sell_delta -= inferred_fill
+
+                        if wo.filled_qty < wo.qty:
+                            wo.status = OrderStatus.PARTIAL
+                            wo.updated_at = datetime.now()
+                            if self.persistence:
+                                await self.persistence.record_order_event(
+                                    "PARTIAL_FILL",
+                                    order_id=wo.order_id,
+                                    intent_id=wo.intent_id,
+                                    strategy_id=wo.strategy_id,
+                                    symbol=wo.symbol,
+                                    payload={
+                                        "fill_qty": inferred_fill,
+                                        "total_filled": wo.filled_qty,
+                                        "order_qty": wo.qty,
+                                        "inferred": True,
+                                    },
+                                    status_before=prev_status.name,
+                                    status_after="PARTIAL",
+                                )
+                                await self.persistence.update_order_status(
+                                    wo.order_id, OrderStatus.PARTIAL, wo.filled_qty, wo.price,
+                                )
+                            prev_status = wo.status
+
+                    if wo.filled_qty >= wo.qty:
+                        await self._finalize_working_order(
+                            wo,
+                            OrderStatus.FILLED,
+                            prev_status,
+                            "INFERRED_FILL",
+                            payload={
+                                "filled_qty": wo.filled_qty,
+                                "order_qty": wo.qty,
+                                "missing_cycles": wo.missing_from_broker_count,
+                            },
+                        )
+                        continue
+
+                    if wo.missing_from_broker_count >= BROKER_MISSING_GRACE_CYCLES:
+                        if wo.filled_qty > 0:
+                            logger.info(f"Partial cancel: {wo.symbol} filled {wo.filled_qty}/{wo.qty}")
+                        await self._finalize_working_order(
+                            wo,
+                            OrderStatus.CANCELLED,
+                            prev_status,
+                            "CANCELLED",
+                            payload={
+                                "filled_qty": wo.filled_qty,
+                                "order_qty": wo.qty,
+                                "missing_cycles": wo.missing_from_broker_count,
+                            },
+                        )
 
     # ------------------------------------------------------------------
     # Reconciliation
@@ -557,23 +700,17 @@ class OMSCore:
 
                     result = await self.adapter.cancel_order(wo.order_id, wo.symbol, wo.qty - wo.filled_qty, branch=wo.branch)
                     if result.success:
-                        self.state.remove_working_order(wo.symbol, wo.order_id)
-                        self.state.release_entry_lock(wo.symbol, wo.strategy_id)
-                        # Record timeout cancel event
-                        if self.persistence:
-                            await self.persistence.record_order_event(
-                                "TIMEOUT_CANCEL", order_id=wo.order_id,
-                                strategy_id=wo.strategy_id, symbol=wo.symbol,
-                                payload={
-                                    "timeout_sec": wo.cancel_after_sec,
-                                    "filled_qty": wo.filled_qty,
-                                    "order_qty": wo.qty,
-                                },
-                                status_before=prev_status.name, status_after="CANCELLED",
-                            )
-                            await self.persistence.update_order_status(
-                                wo.order_id, OrderStatus.CANCELLED, wo.filled_qty, wo.price,
-                            )
+                        await self._finalize_working_order(
+                            wo,
+                            OrderStatus.CANCELLED,
+                            prev_status,
+                            "TIMEOUT_CANCEL",
+                            payload={
+                                "timeout_sec": wo.cancel_after_sec,
+                                "filled_qty": wo.filled_qty,
+                                "order_qty": wo.qty,
+                            },
+                        )
 
     async def _reconcile(self, cycle_count: int = 0):
         """Full reconciliation cycle: orders → timeouts → positions → drift → account.
@@ -600,20 +737,35 @@ class OMSCore:
             if equity is not None:
                 self.state.equity = equity
 
-            for bp in broker_positions:
-                async with self._symbol_locks[bp.symbol]:
-                    pos = self.state.get_position(bp.symbol)
-                    if pos.real_qty != bp.qty:
-                        logger.info(f"Reconcile {bp.symbol}: {pos.real_qty} -> {bp.qty}")
-                        old_qty = pos.real_qty
-                        self.state.update_position(bp.symbol, real_qty=bp.qty, avg_price=bp.avg_price)
+            tracked_positions = self.state.get_all_positions()
+            tracked_symbols = set(tracked_positions)
+            broker_positions_by_symbol = {bp.symbol: bp for bp in broker_positions}
+            position_deltas: Dict[str, int] = {}
+
+            for symbol in tracked_symbols | set(broker_positions_by_symbol):
+                bp = broker_positions_by_symbol.get(symbol)
+                new_qty = bp.qty if bp else 0
+                new_avg_price = bp.avg_price if bp else 0.0
+
+                async with self._symbol_locks[symbol]:
+                    pos = self.state.get_position(symbol)
+                    old_qty = pos.real_qty
+                    position_deltas[symbol] = new_qty - old_qty
+
+                    if pos.real_qty != new_qty or pos.avg_price != new_avg_price:
+                        logger.info(f"Reconcile {symbol}: {pos.real_qty} -> {new_qty}")
+                        self.state.update_position(symbol, real_qty=new_qty, avg_price=new_avg_price)
                         if self.persistence:
                             await self.persistence.sync_position(pos)
                             await self.persistence.log_recon(
-                                "POSITION_SYNC", symbol=bp.symbol,
+                                "POSITION_SYNC",
+                                symbol=symbol,
                                 before_value={"real_qty": old_qty},
-                                after_value={"real_qty": bp.qty}, action="UPDATED",
+                                after_value={"real_qty": new_qty},
+                                action="UPDATED",
                             )
+
+            await self._reconcile_missing_working_orders(position_deltas)
 
         # 4. Check allocation drift (only if positions were successfully fetched)
         if positions_ok:
@@ -624,7 +776,12 @@ class OMSCore:
                 bp.symbol: (bp.qty, bp.avg_price)
                 for bp in broker_positions if bp.qty > 0
             }
-            self.risk.reconcile_sector_exposure(sector_positions)
+            working_entry_orders = [
+                (wo.symbol, self._remaining_qty(wo), wo.price)
+                for wo in self.state.get_working_orders()
+                if wo.side == "BUY" and self._remaining_qty(wo) > 0
+            ]
+            self.risk.reconcile_sector_exposure(sector_positions, working_entry_orders)
 
         # 5. Update buyable cash (only every 6th cycle — ~30s at 5s interval)
         if cycle_count % 6 == 0:

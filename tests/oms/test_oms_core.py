@@ -570,8 +570,8 @@ class TestSyncWorkingOrders:
         assert wo.status == OrderStatus.FILLED
 
     @pytest.mark.asyncio
-    async def test_broker_order_disappeared_removes_working_order(self, oms):
-        """Test broker order disappeared results in working order removal."""
+    async def test_broker_order_disappeared_waits_for_position_reconcile(self, oms):
+        """Missing broker orders stay pending until position sync clarifies the outcome."""
         from oms.state import WorkingOrder, OrderStatus
 
         wo = WorkingOrder(
@@ -591,10 +591,11 @@ class TestSyncWorkingOrders:
 
         await oms._sync_working_orders()
 
-        # Working order should have been removed
+        # Order should remain until broker positions confirm fill vs cancel
         pos = oms.state.get_position("005930")
-        assert not pos.has_working_orders()
-        assert wo.status == OrderStatus.CANCELLED
+        assert pos.has_working_orders()
+        assert wo.status == OrderStatus.WORKING
+        assert wo.missing_from_broker_count == 1
 
     @pytest.mark.asyncio
     async def test_branch_code_captured_from_broker(self, oms):
@@ -855,6 +856,96 @@ class TestReconcile:
 
         oms.adapter.get_buyable_cash.assert_called_once()
         assert oms.state.buyable_cash == 99_000_000
+
+    @pytest.mark.asyncio
+    async def test_missing_broker_order_infers_fill_from_position_delta(self, oms):
+        """A pending order disappearing from KIS should credit fills before drift handling."""
+        from oms.state import WorkingOrder, OrderStatus
+        from oms.adapter import BrokerPosition
+
+        wo = WorkingOrder(
+            order_id="ORD013",
+            symbol="005930",
+            side="BUY",
+            qty=100,
+            price=72000,
+            strategy_id="KMP",
+            status=OrderStatus.WORKING,
+        )
+        oms.state.add_working_order("005930", wo)
+
+        broker_pos = BrokerPosition(
+            symbol="005930",
+            qty=100,
+            avg_price=72000,
+            current_price=72000,
+            pnl=0.0,
+        )
+        oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[broker_pos]),
+            100_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=50_000_000)
+
+        await oms._reconcile(cycle_count=0)
+
+        pos = oms.state.get_position("005930")
+        assert pos.real_qty == 100
+        assert pos.allocations["KMP"].qty == 100
+        assert not pos.has_working_orders()
+        assert pos.frozen is False
+        assert wo.status == OrderStatus.FILLED
+
+    @pytest.mark.asyncio
+    async def test_missing_broker_symbol_is_zeroed_out(self, oms):
+        """Symbols absent from the broker snapshot should be reset to flat."""
+        oms.state.update_position("005930", real_qty=100, avg_price=70000)
+
+        oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[]),
+            100_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=50_000_000)
+
+        await oms._reconcile(cycle_count=0)
+
+        pos = oms.state.get_position("005930")
+        assert pos.real_qty == 0
+        assert pos.avg_price == 0.0
+
+    @pytest.mark.asyncio
+    async def test_missing_broker_order_cancels_after_grace_cycles(self, oms):
+        """Orders missing from KIS with no position delta should eventually cancel."""
+        from oms.state import WorkingOrder, OrderStatus
+
+        wo = WorkingOrder(
+            order_id="ORD014",
+            symbol="005930",
+            side="BUY",
+            qty=100,
+            price=72000,
+            strategy_id="KMP",
+            status=OrderStatus.WORKING,
+        )
+        oms.state.add_working_order("005930", wo)
+
+        oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[]),
+            100_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=50_000_000)
+
+        await oms._reconcile(cycle_count=0)
+        assert oms.state.get_position("005930").has_working_orders()
+
+        await oms._reconcile(cycle_count=1)
+
+        pos = oms.state.get_position("005930")
+        assert not pos.has_working_orders()
+        assert wo.status == OrderStatus.CANCELLED
 
 
 class TestHandleModifyRisk:

@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import asyncpg
 import json
 import os
+import uuid
 from loguru import logger
 
 from .intent import Intent, IntentResult, IntentStatus
@@ -60,6 +61,41 @@ class OMSPersistence:
         """Track persistence failures."""
         self.consecutive_failures += 1
         self.total_failures += 1
+
+    @staticmethod
+    def _normalize_uuid(value: Optional[str]) -> Optional[str]:
+        """Return canonical UUID string, or None when value is not a UUID."""
+        if not value:
+            return None
+        try:
+            return str(uuid.UUID(str(value)))
+        except (ValueError, TypeError, AttributeError):
+            return None
+
+    async def _resolve_oms_order_id(self, order_id: Optional[str]) -> Optional[str]:
+        """Resolve broker/KIS order IDs back to the OMS UUID primary key."""
+        if not self._is_connected() or not order_id:
+            return None
+
+        normalized = self._normalize_uuid(order_id)
+        if normalized:
+            return normalized
+
+        try:
+            resolved = await self.pool.fetchval(
+                """
+                SELECT oms_order_id
+                FROM orders
+                WHERE kis_order_id = $1
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                order_id,
+            )
+            return str(resolved) if resolved else None
+        except Exception as e:
+            logger.error(f"Failed to resolve oms_order_id for {order_id}: {e}")
+            return None
 
     # ------------------------------------------------------------------
     # Intent Recording
@@ -132,26 +168,68 @@ class OMSPersistence:
         intent_id: Optional[str] = None,
         kis_order_id: Optional[str] = None,
         kis_order_date: Optional[str] = None,
-    ) -> None:
-        """Record order creation or update."""
+    ) -> Optional[str]:
+        """Record order creation or update. Returns OMS order UUID when available."""
         if not self._is_connected():
-            return
+            return None
+
+        broker_order_id = kis_order_id or order.order_id
+        intent_uuid = self._normalize_uuid(intent_id)
+        existing_oms_order_id = self._normalize_uuid(order.oms_order_id)
+        if existing_oms_order_id is None:
+            existing_oms_order_id = await self._resolve_oms_order_id(broker_order_id)
+
         try:
-            await self.pool.execute(
+            if existing_oms_order_id:
+                await self.pool.execute(
+                    """
+                    UPDATE orders SET
+                        strategy_id = $2,
+                        symbol = $3,
+                        side = $4,
+                        order_type = $5,
+                        qty = $6,
+                        filled_qty = $7,
+                        limit_price = COALESCE($8, limit_price),
+                        status = $9,
+                        kis_order_id = COALESCE($10, kis_order_id),
+                        kis_order_date = COALESCE($11, kis_order_date),
+                        intent_id = COALESCE($12::uuid, intent_id),
+                        cancel_after_sec = COALESCE($13, cancel_after_sec),
+                        last_update_at = NOW()
+                    WHERE oms_order_id = $1::uuid
+                    """,
+                    existing_oms_order_id,
+                    order.strategy_id,
+                    order.symbol,
+                    order.side,
+                    order.order_type,
+                    order.qty,
+                    order.filled_qty,
+                    order.price if order.order_type == "LIMIT" else None,
+                    order.status.name,
+                    broker_order_id,
+                    kis_order_date,
+                    intent_uuid,
+                    int(order.cancel_after_sec) if order.cancel_after_sec else None,
+                )
+                order.oms_order_id = existing_oms_order_id
+                self._record_success()
+                return existing_oms_order_id
+
+            oms_order_id = await self.pool.fetchval(
                 """
                 INSERT INTO orders (
-                    oms_order_id, strategy_id, symbol, side, order_type,
+                    strategy_id, symbol, side, order_type,
                     qty, filled_qty, limit_price, stop_price, status,
-                    kis_order_id, kis_order_date, intent_id, cancel_after_sec
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::uuid, $14)
-                ON CONFLICT (oms_order_id) DO UPDATE SET
-                    filled_qty = EXCLUDED.filled_qty,
-                    status = EXCLUDED.status,
-                    kis_order_id = COALESCE(EXCLUDED.kis_order_id, orders.kis_order_id),
-                    kis_order_date = COALESCE(EXCLUDED.kis_order_date, orders.kis_order_date),
-                    last_update_at = NOW()
+                    kis_order_id, kis_order_date, intent_id, cancel_after_sec,
+                    submitted_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9,
+                    $10, $11, $12::uuid, $13, NOW()
+                )
+                RETURNING oms_order_id
                 """,
-                order.order_id,
                 order.strategy_id,
                 order.symbol,
                 order.side,
@@ -161,15 +239,18 @@ class OMSPersistence:
                 order.price if order.order_type == "LIMIT" else None,
                 None,  # stop_price
                 order.status.name,
-                kis_order_id,
+                broker_order_id,
                 kis_order_date,
-                intent_id,
+                intent_uuid,
                 int(order.cancel_after_sec) if order.cancel_after_sec else None,
             )
+            order.oms_order_id = str(oms_order_id) if oms_order_id else None
             self._record_success()
+            return order.oms_order_id
         except Exception as e:
             self._record_failure()
             logger.error(f"Failed to record order: {e}")
+            return None
 
     async def update_order_status(
         self,
@@ -181,6 +262,10 @@ class OMSPersistence:
         """Update order status and fill info."""
         if not self._is_connected():
             return
+        oms_order_id = await self._resolve_oms_order_id(order_id)
+        if oms_order_id is None:
+            logger.warning(f"Skipping order status update: unresolved order_id={order_id}")
+            return
         try:
             await self.pool.execute(
                 """
@@ -191,7 +276,7 @@ class OMSPersistence:
                     last_update_at = NOW()
                 WHERE oms_order_id = $1
                 """,
-                order_id, status.name, filled_qty, avg_fill_price,
+                oms_order_id, status.name, filled_qty, avg_fill_price,
             )
             self._record_success()
         except Exception as e:
@@ -216,6 +301,8 @@ class OMSPersistence:
         """Record an order event."""
         if not self._is_connected():
             return
+        oms_order_id = await self._resolve_oms_order_id(order_id)
+        intent_uuid = self._normalize_uuid(intent_id)
         try:
             await self.pool.execute(
                 """
@@ -224,8 +311,8 @@ class OMSPersistence:
                     event_type, payload, status_before, status_after
                 ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
                 """,
-                order_id,
-                intent_id,
+                oms_order_id,
+                intent_uuid,
                 strategy_id,
                 symbol,
                 event_type,
@@ -258,6 +345,7 @@ class OMSPersistence:
         """Record a fill. Idempotent by kis_exec_id."""
         if not self._is_connected():
             return
+        oms_order_id = await self._resolve_oms_order_id(order_id)
         try:
             await self.pool.execute(
                 """
@@ -267,7 +355,7 @@ class OMSPersistence:
                 ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10)
                 ON CONFLICT (kis_exec_id) DO NOTHING
                 """,
-                kis_exec_id, order_id, strategy_id, symbol,
+                kis_exec_id, oms_order_id, strategy_id, symbol,
                 side, qty, price, commission, tax, fill_ts,
             )
             self._record_success()
@@ -751,7 +839,7 @@ class OMSPersistence:
             orders = []
             for row in rows:
                 orders.append(WorkingOrder(
-                    order_id=str(row["oms_order_id"]),
+                    order_id=row["kis_order_id"] or str(row["oms_order_id"]),
                     symbol=row["symbol"],
                     side=row["side"],
                     qty=row["qty"],
@@ -761,7 +849,10 @@ class OMSPersistence:
                     status=OrderStatus[row["status"]],
                     strategy_id=row["strategy_id"],
                     created_at=row["created_at"],
+                    updated_at=row["last_update_at"],
                     cancel_after_sec=row["cancel_after_sec"],
+                    intent_id=str(row["intent_id"]) if row["intent_id"] else None,
+                    oms_order_id=str(row["oms_order_id"]),
                 ))
             logger.info(f"Loaded {len(orders)} working orders from database")
             return orders

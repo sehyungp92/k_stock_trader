@@ -235,6 +235,36 @@ class TestRiskGatewayExposureLimits:
         # max_qty = 15M / 70000 = 214
         assert result.modified_qty == 214
 
+    def test_position_limit_counts_working_buy_notional(self, gateway):
+        """Per-symbol exposure must include already-committed BUY orders."""
+        pos = gateway.state.get_position("005930")
+        pos.real_qty = 100
+        pos.avg_price = 70000
+        pos.working_orders.append(
+            WorkingOrder(
+                order_id="ORD001",
+                symbol="005930",
+                side="BUY",
+                qty=100,
+                price=70000,
+                strategy_id="KMP",
+                status=OrderStatus.WORKING,
+            )
+        )
+
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="KMP",
+            symbol="005930",
+            desired_qty=50,
+            risk_payload=RiskPayload(entry_px=70000, stop_px=69000),
+        )
+
+        result = gateway.check(intent)
+
+        assert result.decision == RiskDecision.MODIFY
+        assert result.modified_qty == 14
+
     def test_regime_cap_applies(self, gateway, enter_intent):
         """Test regime cap is applied to exposure."""
         gateway.config.current_regime = "CRISIS"
@@ -511,6 +541,17 @@ class TestRiskGatewaySectorReconcile:
         sector = gateway._sector_exposure.get_sector("005930")
         count = gateway._sector_exposure.count_in_sector(sector, include_working=False)
         assert count >= 0  # Reconciliation should not crash
+
+    def test_reconcile_sector_exposure_includes_working_notional(self, gateway):
+        """Working entry orders should remain part of reconciled sector notional."""
+        gateway.reconcile_sector_exposure(
+            {"005930": (100, 72000)},
+            [("000660", 50, 130000)],
+        )
+
+        sector = gateway._sector_exposure.get_sector("005930")
+        expected_notional = (100 * 72000) + (50 * 130000)
+        assert gateway._sector_exposure.notional_in_sector(sector) == expected_notional
 
     def test_update_sector_map(self, gateway):
         """Test update_sector_map replaces the symbol-to-sector mapping."""

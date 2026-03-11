@@ -7,7 +7,7 @@ reserve/unreserve, and reconciliation from OMS truth.
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Literal, Optional, Set
+from typing import Dict, Iterable, Literal, Optional, Tuple, Union
 
 
 @dataclass
@@ -242,7 +242,7 @@ class SectorExposure:
     def reconcile(
         self,
         positions: Dict[str, tuple],
-        working_orders: Optional[Set[str]] = None,
+        working_orders: Optional[Iterable[Union[str, Tuple[str, int, float]]]] = None,
     ) -> None:
         """Rebuild exposure state from OMS truth.
 
@@ -265,15 +265,24 @@ class SectorExposure:
                 self.sector_open_notional.get(sector, 0.0) + notional
             )
 
-        # Rebuild working orders (count only, notional unknown)
+        # Rebuild working orders
         if working_orders:
-            for symbol in working_orders:
+            for item in working_orders:
+                if isinstance(item, tuple):
+                    symbol, qty, price = item
+                else:
+                    symbol, qty, price = item, 1, 0.0
                 sector = self.get_sector(symbol)
                 if sector == "UNKNOWN":
                     continue
                 self.sector_working_count[sector] = (
                     self.sector_working_count.get(sector, 0) + 1
                 )
+                if qty > 0 and price > 0:
+                    self.sector_working_notional[sector] = (
+                        self.sector_working_notional.get(sector, 0.0)
+                        + (qty * price)
+                    )
 
     def count_in_sector(self, sector: str, include_working: bool = True) -> int:
         """Count positions in a given sector.
