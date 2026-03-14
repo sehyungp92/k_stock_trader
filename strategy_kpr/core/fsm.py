@@ -292,8 +292,8 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
         s.fsm = FSMState.INVALIDATED
         return None
 
-    # IN_POSITION is handled by exit engine, not here
-    if s.fsm == FSMState.IN_POSITION:
+    # IN_POSITION / PENDING_ENTRY handled by main loop, not here
+    if s.fsm in (FSMState.IN_POSITION, FSMState.PENDING_ENTRY):
         return None
 
     # IDLE -> SETUP_DETECTED
@@ -472,24 +472,27 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         requested_price=close,
                         related_trade_id=intent.intent_id,
                     )
-                s.fsm = FSMState.IN_POSITION
-                s.entry_px = close
+                # Transition to PENDING_ENTRY — actual fill confirmed via OMS allocation in main loop
+                s.fsm = FSMState.PENDING_ENTRY
                 s.entry_ts = now
-                s.qty = qty
+                s.confidence = confidence
                 s.signal_generated_at = s.setup_time.timestamp() if s.setup_time else time_module.time()
                 s.oms_received_at = result.oms_received_at
                 s.order_submitted_at = result.order_submitted_at
-                s.remaining_qty = qty
-                s.confidence = confidence
-                s.max_price = close
-                s.trail_stop = 0.0
-                s.partial_filled = False
                 # Track order for timeout detection
                 s.entry_order_id = intent.intent_id
                 s.order_submit_ts = time_module.time()
-                # Track sector exposure (on_fill since entry is confirmed)
-                if sector_exposure:
-                    sector_exposure.on_fill(s.code, qty, close)
+                # Store pending qty and pre-build signal context for instrumentation
+                s._pending_qty = qty
+                s._entry_signal_factors = [
+                    {"factor": "investor_flow", "value": str(investor_sig), "threshold": "ACCUMULATE", "contribution": 0.40},
+                    {"factor": "micro_pressure", "value": str(micro_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
+                    {"factor": "program_flow", "value": str(program_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
+                ]
+                s._entry_filter_decisions = _build_kpr_filter_decisions(
+                    investor_sig, micro_sig, program_sig, prog_avail, confidence,
+                )
+                # Note: qty, entry_px, sector_exposure.on_fill deferred to fill confirmation
                 return intent.intent_id
             elif result.status == IntentStatus.DEFERRED:
                 logger.info(f"{s.code}: Entry DEFERRED msg={result.message} — will retry next bar")

@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import time as time_module
 from datetime import datetime, date, time
 from typing import Dict, List, Optional
 from loguru import logger
@@ -39,6 +40,8 @@ from .analytics.hit_tracker import BucketAHitTracker
 from instrumentation.facade import InstrumentationKit
 from instrumentation.src.drawdown import compute_drawdown_context
 from instrumentation.src.mfe_mae import build_mfe_mae_context
+
+PCIM_EXIT_TIMEOUT_SEC = 120
 
 
 def load_config() -> dict:
@@ -1010,10 +1013,88 @@ async def run_pcim():
             cancel_done_today = True
 
         # =================================================================
+        # PENDING EXIT CONFIRMATION
+        # =================================================================
+        if now.time() >= time(10, 0):
+            for pos in list(position_manager.get_open_positions()):
+                if not pos.pending_exit_type:
+                    continue
+                try:
+                    alloc_qty = await oms.get_allocation(pos.symbol, STRATEGY_ID)
+                    exit_type = pos.pending_exit_type
+
+                    if exit_type in ("STOP", "DAY15_EXIT") and alloc_qty <= 0:
+                        # Full exit confirmed
+                        if instr:
+                            mfe_mae = build_mfe_mae_context(
+                                entry_price=pos.entry_price,
+                                stop_price=pos.current_stop,
+                                max_fav_price=_mfe_prices.pop(pos.symbol, 0),
+                                min_adverse_price=_mae_prices.pop(pos.symbol, float('inf')),
+                            )
+                            exit_reason = "stop" if exit_type == "STOP" else "time_exit"
+                            instr.on_exit_fill(
+                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                exit_price=pos.pending_exit_price, exit_reason=exit_reason,
+                                mfe_mae_context=mfe_mae,
+                            )
+                        else:
+                            _mfe_prices.pop(pos.symbol, None)
+                            _mae_prices.pop(pos.symbol, None)
+                        position_manager.close_position(pos.symbol, exit_type)
+                        position_manager.clear_pending_exit(pos.symbol)
+                        logger.info(f"{pos.symbol}: {exit_type} exit fill confirmed")
+
+                    elif exit_type == "TAKE_PROFIT":
+                        expected_remaining = pos.remaining_qty - pos.pending_exit_qty
+                        if alloc_qty <= expected_remaining:
+                            # TP confirmed
+                            actual_sold = pos.remaining_qty - alloc_qty
+                            if instr:
+                                mfe_mae = build_mfe_mae_context(
+                                    entry_price=pos.entry_price,
+                                    stop_price=pos.current_stop,
+                                    max_fav_price=_mfe_prices.get(pos.symbol, 0),
+                                    min_adverse_price=_mae_prices.get(pos.symbol, float('inf')),
+                                )
+                                instr.on_exit_fill(
+                                    trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
+                                    exit_price=pos.pending_exit_price, exit_reason="take_profit",
+                                    mfe_mae_context=mfe_mae,
+                                )
+                            pos.tp_done = True
+                            position_manager.reduce_position(pos.symbol, actual_sold)
+                            position_manager.clear_pending_exit(pos.symbol)
+                            logger.info(f"{pos.symbol}: TAKE_PROFIT exit fill confirmed, sold={actual_sold}")
+
+                    # Timeout check
+                    if pos.pending_exit_type and (time_module.time() - pos.pending_exit_ts > PCIM_EXIT_TIMEOUT_SEC):
+                        logger.warning(f"{pos.symbol}: Pending exit {pos.pending_exit_type} timed out after {PCIM_EXIT_TIMEOUT_SEC}s")
+                        try:
+                            await oms.submit_intent(Intent(
+                                intent_type=IntentType.CANCEL_ORDERS,
+                                strategy_id=STRATEGY_ID,
+                                symbol=pos.symbol,
+                                desired_qty=0,
+                                urgency=Urgency.HIGH,
+                                time_horizon=TimeHorizon.INTRADAY,
+                            ))
+                        except Exception:
+                            pass
+                        position_manager.clear_pending_exit(pos.symbol)
+                        # Position stays OPEN, will re-evaluate exits next cycle
+                except Exception as e:
+                    logger.warning(f"{pos.symbol}: Pending exit check failed: {e}")
+
+        # =================================================================
         # POSITION MANAGEMENT (10:00+)
         # =================================================================
         if now.time() >= time(10, 0):
             for pos in position_manager.get_open_positions():
+                # Skip positions with pending exit orders
+                if position_manager.has_pending_exit(pos.symbol):
+                    continue
+
                 quote = api.get_quote(pos.symbol)
                 current_price = quote['last']
                 _last_prices[pos.symbol] = current_price
@@ -1033,31 +1114,8 @@ async def run_pcim():
                                 pair=pos.symbol, order_type="LIMIT", status="SUBMITTED",
                                 requested_qty=pos.remaining_qty, related_trade_id=intent.intent_id,
                             )
-                        if instr:
-                            mfe_mae = build_mfe_mae_context(
-                                entry_price=pos.entry_price,
-                                stop_price=pos.current_stop,
-                                max_fav_price=_mfe_prices.pop(pos.symbol, 0),
-                                min_adverse_price=_mae_prices.pop(pos.symbol, float('inf')),
-                            )
-                            instr.on_exit_fill(
-                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                exit_price=current_price, exit_reason="stop",
-                                mfe_mae_context=mfe_mae,
-                            )
-                            bid = quote.get('bid', 0)
-                            ask = quote.get('ask', 0)
-                            if bid > 0 or ask > 0:
-                                instr.on_orderbook_context(
-                                    pair=pos.symbol,
-                                    best_bid=bid, best_ask=ask,
-                                    trade_context="exit",
-                                    related_trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                )
-                        else:
-                            _mfe_prices.pop(pos.symbol, None)
-                            _mae_prices.pop(pos.symbol, None)
-                        position_manager.close_position(pos.symbol, "STOP")
+                        # Defer close_position and on_exit_fill to OMS confirmation
+                        position_manager.submit_exit(pos.symbol, "STOP", pos.remaining_qty, intent.intent_id, current_price)
                     else:
                         if instr:
                             instr.on_order_event(
@@ -1080,29 +1138,8 @@ async def run_pcim():
                                 pair=pos.symbol, order_type="LIMIT", status="SUBMITTED",
                                 requested_qty=qty, related_trade_id=intent.intent_id,
                             )
-                        if instr:
-                            mfe_mae = build_mfe_mae_context(
-                                entry_price=pos.entry_price,
-                                stop_price=pos.current_stop,
-                                max_fav_price=_mfe_prices.get(pos.symbol, 0),
-                                min_adverse_price=_mae_prices.get(pos.symbol, float('inf')),
-                            )
-                            instr.on_exit_fill(
-                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                exit_price=current_price, exit_reason="take_profit",
-                                mfe_mae_context=mfe_mae,
-                            )
-                            bid = quote.get('bid', 0)
-                            ask = quote.get('ask', 0)
-                            if bid > 0 or ask > 0:
-                                instr.on_orderbook_context(
-                                    pair=pos.symbol,
-                                    best_bid=bid, best_ask=ask,
-                                    trade_context="exit",
-                                    related_trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                )
-                        pos.tp_done = True
-                        position_manager.reduce_position(pos.symbol, qty)
+                        # Defer reduce_position and on_exit_fill to OMS confirmation
+                        position_manager.submit_exit(pos.symbol, "TAKE_PROFIT", qty, intent.intent_id, current_price)
                     else:
                         if instr:
                             instr.on_order_event(
@@ -1112,6 +1149,7 @@ async def run_pcim():
                                 related_trade_id=intent.intent_id,
                             )
                         logger.warning(f"{pos.symbol}: Take profit {result.status.name} - {result.message}")
+                    continue  # Don't fall through to time_exit while TP is pending
 
                 # Use KRX trading calendar for day count if available
                 is_trading_day = getattr(api, 'is_trading_day', None)
@@ -1125,31 +1163,8 @@ async def run_pcim():
                                 pair=pos.symbol, order_type="LIMIT", status="SUBMITTED",
                                 requested_qty=pos.remaining_qty, related_trade_id=intent.intent_id,
                             )
-                        if instr:
-                            mfe_mae = build_mfe_mae_context(
-                                entry_price=pos.entry_price,
-                                stop_price=pos.current_stop,
-                                max_fav_price=_mfe_prices.pop(pos.symbol, 0),
-                                min_adverse_price=_mae_prices.pop(pos.symbol, float('inf')),
-                            )
-                            instr.on_exit_fill(
-                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                exit_price=current_price, exit_reason="time_exit",
-                                mfe_mae_context=mfe_mae,
-                            )
-                            bid = quote.get('bid', 0)
-                            ask = quote.get('ask', 0)
-                            if bid > 0 or ask > 0:
-                                instr.on_orderbook_context(
-                                    pair=pos.symbol,
-                                    best_bid=bid, best_ask=ask,
-                                    trade_context="exit",
-                                    related_trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                )
-                        else:
-                            _mfe_prices.pop(pos.symbol, None)
-                            _mae_prices.pop(pos.symbol, None)
-                        position_manager.close_position(pos.symbol, "DAY15_EXIT")
+                        # Defer close_position and on_exit_fill to OMS confirmation
+                        position_manager.submit_exit(pos.symbol, "DAY15_EXIT", pos.remaining_qty, intent.intent_id, current_price)
                     else:
                         if instr:
                             instr.on_order_event(

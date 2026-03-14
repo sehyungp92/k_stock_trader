@@ -205,10 +205,18 @@ async def run_kpr():
             last_drift_check = now_ts
             try:
                 all_positions = await oms.get_all_positions()
+
+                # Exclude symbols with pending orders from drift detection —
+                # their state is transitional and handled by fill confirmation loops
+                pending_symbols = {
+                    s.code for s in states.values()
+                    if s.fsm in (FSMState.PENDING_ENTRY, FSMState.PENDING_EXIT)
+                }
+
                 broker_positions = {
                     sym: pos.get_allocation(STRATEGY_ID)
                     for sym, pos in all_positions.items()
-                    if pos.get_allocation(STRATEGY_ID) > 0
+                    if pos.get_allocation(STRATEGY_ID) > 0 and sym not in pending_symbols
                 }
 
                 # Build local view
@@ -273,6 +281,12 @@ async def run_kpr():
                     s.entry_order_id = None
                     s.order_submit_ts = 0.0
                     working_orders.discard(s.code)
+                    # Reset PENDING_ENTRY back to ACCEPTING so it can retry
+                    if s.fsm == FSMState.PENDING_ENTRY:
+                        s.fsm = FSMState.ACCEPTING
+                        s._entry_signal_factors = None
+                        s._entry_filter_decisions = None
+                        s._pending_qty = 0
 
         # Periodic heartbeat
         if now_ts - last_heartbeat_ts > heartbeat_interval:
@@ -331,7 +345,7 @@ async def run_kpr():
             tier = universe_mgr.get_tier(ticker)
 
             # Targeted refresh for relevant symbols (reduces rate limit usage)
-            if tier == Tier.HOT or s.fsm in (FSMState.SETUP_DETECTED, FSMState.ACCEPTING, FSMState.IN_POSITION):
+            if tier == Tier.HOT or s.fsm in (FSMState.SETUP_DETECTED, FSMState.ACCEPTING, FSMState.PENDING_ENTRY, FSMState.IN_POSITION):
                 investor_provider.dispatch_refresh(ticker)
 
             # Micro-window aware polling intervals
@@ -502,6 +516,97 @@ async def run_kpr():
                         logger.warning(f"{ticker}: PENDING_EXIT check failed: {e}")
                     continue
 
+                # --- PENDING_ENTRY: confirm entry fill from OMS allocation ---
+                if s.fsm == FSMState.PENDING_ENTRY:
+                    try:
+                        alloc_qty = await oms.get_allocation(ticker, STRATEGY_ID)
+                        if alloc_qty > 0:
+                            # Fill confirmed — get actual entry price from OMS
+                            actual_price = close  # fallback
+                            try:
+                                oms_pos = await oms.get_position(ticker)
+                                if oms_pos:
+                                    alloc_obj = oms_pos.allocations.get(STRATEGY_ID)
+                                    if alloc_obj and alloc_obj.cost_basis > 0:
+                                        actual_price = alloc_obj.cost_basis
+                            except Exception:
+                                pass
+
+                            s.fsm = FSMState.IN_POSITION
+                            s.entry_px = actual_price
+                            s.qty = alloc_qty
+                            s.remaining_qty = alloc_qty
+                            s.max_price = actual_price
+                            s.trail_stop = 0.0
+                            s.partial_filled = (alloc_qty < s._pending_qty)
+                            s.entry_order_id = None
+                            s.order_submit_ts = 0.0
+                            working_orders.discard(ticker)
+
+                            if sector_exposure:
+                                sector_exposure.on_fill(s.code, alloc_qty, actual_price)
+                            positions.add(ticker)
+                            _mfe_prices[ticker] = actual_price
+                            _mae_prices[ticker] = actual_price
+
+                            # Emit on_entry_fill using pre-built signal context
+                            if s._entry_signal_factors and instr:
+                                portfolio_state = {
+                                    "total_exposure_pct": acct.gross_exposure_pct if acct else 0.0,
+                                    "num_positions": len(positions),
+                                    "concurrent_positions_same_strategy": len(positions),
+                                }
+                                dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
+                                import hashlib, json as _json
+                                _sw_params = kpr_switches.to_params_dict()
+                                _strat_params = {"confidence": s.confidence, "setup_type": s.setup_type, **_sw_params}
+                                _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
+                                _fill_confirmed_at = time_module.time()
+                                _exec_timeline = None
+                                if s.signal_generated_at and s.oms_received_at and s.order_submitted_at:
+                                    _exec_timeline = {
+                                        "signal_generated_at": s.signal_generated_at,
+                                        "oms_received_at": s.oms_received_at,
+                                        "order_submitted_at": s.order_submitted_at,
+                                        "fill_confirmed_at": _fill_confirmed_at,
+                                        "signal_to_oms_ms": int((s.oms_received_at - s.signal_generated_at) * 1000),
+                                        "oms_processing_ms": int((s.order_submitted_at - s.oms_received_at) * 1000),
+                                        "broker_to_fill_ms": int((_fill_confirmed_at - s.order_submitted_at) * 1000),
+                                        "total_latency_ms": int((_fill_confirmed_at - s.signal_generated_at) * 1000),
+                                    }
+                                instr.on_entry_fill(
+                                    trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
+                                    symbol=ticker, entry_price=actual_price, qty=alloc_qty,
+                                    signal=f"{s.setup_type or 'drift'}_reclaim",
+                                    signal_id="kpr_mean_reversion",
+                                    strategy_params=_strat_params,
+                                    signal_factors=s._entry_signal_factors,
+                                    filter_decisions=s._entry_filter_decisions,
+                                    sizing_context=s.sizing_context,
+                                    portfolio_state=portfolio_state,
+                                    drawdown_context=dd_ctx,
+                                    param_set_id=_param_set_id,
+                                    experiment_id=experiment_cfg.get("experiment_id", ""),
+                                    experiment_variant=experiment_cfg.get("experiment_variant", ""),
+                                    execution_timeline=_exec_timeline,
+                                )
+                                if hasattr(s, 'bid') and (s.bid > 0 or s.ask > 0):
+                                    instr.on_orderbook_context(
+                                        pair=ticker,
+                                        best_bid=s.bid, best_ask=s.ask,
+                                        trade_context="entry",
+                                        related_trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
+                                    )
+                            # Clear pending fields
+                            s._entry_signal_factors = None
+                            s._entry_filter_decisions = None
+                            s._pending_qty = 0
+                            logger.info(f"{ticker}: Entry fill confirmed, IN_POSITION qty={alloc_qty} px={actual_price:.0f}")
+                        # else: no allocation yet, stay PENDING_ENTRY
+                    except Exception as e:
+                        logger.warning(f"{ticker}: PENDING_ENTRY check failed: {e}")
+                    continue
+
                 # --- Entry FSM ---
                 investor_age = investor_provider.age_sec(ticker, now_ts)
                 regime_ok = not acct.halt_new_entries
@@ -529,72 +634,8 @@ async def run_kpr():
 
                 if intent_id:
                     working_orders.add(ticker)
-
-                if s.fsm == FSMState.IN_POSITION:
-                    positions.add(ticker)
-                    _mfe_prices[ticker] = s.entry_px
-                    _mae_prices[ticker] = s.entry_px
-                    if intent_id and instr:
-                        signal_factors = [
-                            {"factor": "investor_flow", "value": str(investor_sig), "threshold": "ACCUMULATE", "contribution": 0.40},
-                            {"factor": "micro_pressure", "value": str(micro_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
-                            {"factor": "program_flow", "value": str(program_sig), "threshold": "ACCUMULATE", "contribution": 0.30},
-                        ]
-                        from .core.fsm import _build_kpr_filter_decisions
-                        fd = _build_kpr_filter_decisions(
-                            investor_sig, micro_sig, program_sig,
-                            program_provider.available or False, s.confidence,
-                        )
-                        # Portfolio state at entry — positions set tracks KPR positions only.
-                        # acct.gross_exposure_pct is available from the outer loop.
-                        portfolio_state = {
-                            "total_exposure_pct": acct.gross_exposure_pct if acct else 0.0,
-                            "num_positions": len(positions),
-                            "concurrent_positions_same_strategy": len(positions),
-                        }
-                        dd_ctx = compute_drawdown_context(acct.daily_pnl_pct if acct else 0.0)
-                        import hashlib, json as _json
-                        _sw_params = kpr_switches.to_params_dict()
-                        _strat_params = {"confidence": s.confidence, "setup_type": s.setup_type, **_sw_params}
-                        _param_set_id = hashlib.sha256(_json.dumps(_sw_params, sort_keys=True, default=str).encode()).hexdigest()[:12]
-                        import time as _time
-                        _fill_confirmed_at = _time.time()
-                        _exec_timeline = None
-                        if s.signal_generated_at and s.oms_received_at and s.order_submitted_at:
-                            _exec_timeline = {
-                                "signal_generated_at": s.signal_generated_at,
-                                "oms_received_at": s.oms_received_at,
-                                "order_submitted_at": s.order_submitted_at,
-                                "fill_confirmed_at": _fill_confirmed_at,
-                                "signal_to_oms_ms": int((s.oms_received_at - s.signal_generated_at) * 1000),
-                                "oms_processing_ms": int((s.order_submitted_at - s.oms_received_at) * 1000),
-                                "broker_to_fill_ms": int((_fill_confirmed_at - s.order_submitted_at) * 1000),
-                                "total_latency_ms": int((_fill_confirmed_at - s.signal_generated_at) * 1000),
-                            }
-                        instr.on_entry_fill(
-                            trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
-                            symbol=ticker, entry_price=s.entry_px, qty=s.qty,
-                            signal=f"{s.setup_type or 'drift'}_reclaim",
-                            signal_id="kpr_mean_reversion",
-                            strategy_params=_strat_params,
-                            signal_factors=signal_factors,
-                            filter_decisions=fd,
-                            sizing_context=s.sizing_context,
-                            portfolio_state=portfolio_state,
-                            drawdown_context=dd_ctx,
-                            param_set_id=_param_set_id,
-                            experiment_id=experiment_cfg.get("experiment_id", ""),
-                            experiment_variant=experiment_cfg.get("experiment_variant", ""),
-                            execution_timeline=_exec_timeline,
-                        )
-                        if s.bid > 0 or s.ask > 0:
-                            instr.on_orderbook_context(
-                                pair=ticker,
-                                best_bid=s.bid, best_ask=s.ask,
-                                trade_context="entry",
-                                related_trade_id=f"KPR:{ticker}:{now.strftime('%Y%m%d')}:{s.setup_type or 'drift'}",
-                            )
-                else:
+                # positions.add and on_entry_fill now happen in PENDING_ENTRY confirmation
+                if s.fsm not in (FSMState.IN_POSITION, FSMState.PENDING_ENTRY):
                     positions.discard(ticker)
 
             except Exception as e:

@@ -1,5 +1,6 @@
 """PCIM Position Manager."""
 
+import time as time_module
 from dataclasses import dataclass
 from datetime import date
 from typing import Dict, Optional, List, Set
@@ -30,6 +31,13 @@ class PCIMPosition:
     # Tracking
     max_price: float = 0.0
     close_reason: Optional[str] = None
+
+    # Pending exit tracking (for exit fill confirmation)
+    pending_exit_type: Optional[str] = None    # "STOP", "TAKE_PROFIT", "DAY15_EXIT"
+    pending_exit_qty: int = 0
+    pending_exit_ts: float = 0.0
+    pending_exit_intent_id: Optional[str] = None
+    pending_exit_price: float = 0.0
 
     def __post_init__(self):
         self.remaining_qty = self.qty
@@ -70,6 +78,32 @@ class PositionManager:
             if pos.remaining_qty <= 0:
                 pos.status = "CLOSED"
                 pos.close_reason = "FULLY_SOLD"
+
+    def submit_exit(self, symbol: str, exit_type: str, qty: int, intent_id: str, price: float) -> None:
+        """Mark position as having a pending exit order."""
+        pos = self.positions.get(symbol)
+        if pos:
+            pos.pending_exit_type = exit_type
+            pos.pending_exit_qty = qty
+            pos.pending_exit_ts = time_module.time()
+            pos.pending_exit_intent_id = intent_id
+            pos.pending_exit_price = price
+            logger.info(f"{symbol}: Pending exit {exit_type} qty={qty}")
+
+    def clear_pending_exit(self, symbol: str) -> None:
+        """Clear pending exit state."""
+        pos = self.positions.get(symbol)
+        if pos:
+            pos.pending_exit_type = None
+            pos.pending_exit_qty = 0
+            pos.pending_exit_ts = 0.0
+            pos.pending_exit_intent_id = None
+            pos.pending_exit_price = 0.0
+
+    def has_pending_exit(self, symbol: str) -> bool:
+        """Check if position has a pending exit order."""
+        pos = self.positions.get(symbol)
+        return pos is not None and pos.pending_exit_type is not None
 
     def track_pending(self, symbol: str, intent_id: str, intended_qty: int, atr: float) -> None:
         """Track a pending order until fill confirmed."""
@@ -115,3 +149,12 @@ class PositionManager:
         """Reset daily tracking state."""
         self.submitted_today.clear()
         self.pending_orders.clear()
+        # Warn about stale pending exits
+        for pos in self.positions.values():
+            if pos.pending_exit_type:
+                logger.warning(f"{pos.symbol}: Stale pending exit {pos.pending_exit_type} cleared on daily reset")
+                pos.pending_exit_type = None
+                pos.pending_exit_qty = 0
+                pos.pending_exit_ts = 0.0
+                pos.pending_exit_intent_id = None
+                pos.pending_exit_price = 0.0

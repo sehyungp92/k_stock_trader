@@ -11,6 +11,7 @@ class FSMState(Enum):
     IDLE = auto()
     SETUP_DETECTED = auto()
     ACCEPTING = auto()
+    PENDING_ENTRY = auto()  # Entry order submitted, awaiting fill confirmation
     IN_POSITION = auto()
     PENDING_EXIT = auto()  # Exit order submitted, awaiting fill confirmation
     INVALIDATED = auto()
@@ -61,6 +62,11 @@ class SymbolState:
     # Sizing context (captured at entry for instrumentation)
     sizing_context: Optional[dict] = None
 
+    # Pending entry tracking (for PENDING_ENTRY fill confirmation)
+    _pending_qty: int = 0
+    _entry_signal_factors: Optional[list] = None
+    _entry_filter_decisions: Optional[list] = None
+
     # Execution timeline (for latency decomposition)
     signal_generated_at: float = 0.0
     oms_received_at: Optional[float] = None
@@ -102,3 +108,6 @@ class SymbolState:
         self.program_signal = "NEUTRAL"
         self.drop_from_open = 0.0
         self.in_vwap_band = False
+        self._pending_qty = 0
+        self._entry_signal_factors = None
+        self._entry_filter_decisions = None
