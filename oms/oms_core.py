@@ -512,9 +512,16 @@ class OMSCore:
         wo.updated_at = datetime.now()
         if final_status in (OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.EXPIRED):
             self._release_sector_reservation(wo)
-            # Evict idempotency cache for unfilled SELL orders so exits can be retried
+            # Evict idempotency cache for unfilled SELL orders so exits can be retried,
+            # but respect the rejection cap — if _finalize() already cached after 5
+            # rejections, evicting here would undo that cap and create an infinite loop.
             if wo.side == "SELL" and wo.idempotency_key and wo.filled_qty == 0:
-                if self._idem.remove(wo.idempotency_key):
+                if self._rejection_counts.get(wo.idempotency_key, 0) >= 5:
+                    logger.warning(
+                        f"Idem eviction skipped: {wo.idempotency_key} "
+                        f"(rejection cap reached, {self._rejection_counts[wo.idempotency_key]}x)"
+                    )
+                elif self._idem.remove(wo.idempotency_key):
                     logger.info(
                         f"Idem evicted: {wo.idempotency_key} "
                         f"(SELL {final_status.name}, 0 filled)"
