@@ -12,6 +12,7 @@ from .kis_auth import KoreaInvestEnv, build_kis_config_from_env
 from .kis_client import (
     KoreaInvestAPI,
     CircuitBreaker,
+    OrderResult,
     get_paper_tr_id,
     PAPER_TR_ID_MAP,
     PAPER_TR_ID_PASSTHROUGH,
@@ -59,6 +60,7 @@ __all__ = [
     # Client
     'KoreaInvestAPI',
     'CircuitBreaker',
+    'OrderResult',
     'get_paper_tr_id',
     'PAPER_TR_ID_MAP',
     'PAPER_TR_ID_PASSTHROUGH',

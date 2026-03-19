@@ -615,6 +615,27 @@ async def resolve_drift(req: ResolveDriftRequest):
     return {"status": "ok", "symbol": req.symbol, "frozen": pos.frozen}
 
 
+class CorrectAllocationRequest(BaseModel):
+    symbol: str
+    strategy_id: str
+    new_qty: int
+
+
+@app.post("/api/v1/admin/correct-allocation")
+async def correct_allocation(req: CorrectAllocationRequest):
+    """Admin: set a strategy's allocation to a specific value."""
+    oms = get_oms()
+    pos = oms.state.get_position(req.symbol)
+    if req.strategy_id.upper() not in pos.allocations:
+        raise HTTPException(status_code=404, detail=f"No allocation for {req.strategy_id} on {req.symbol}")
+    if req.new_qty < 0:
+        raise HTTPException(status_code=400, detail="new_qty cannot be negative")
+    if req.new_qty > pos.real_qty:
+        raise HTTPException(status_code=400, detail=f"new_qty ({req.new_qty}) > real_qty ({pos.real_qty})")
+    result = await oms.correct_allocation(req.symbol, req.strategy_id.upper(), req.new_qty)
+    return {"status": "ok", **result}
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------

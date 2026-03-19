@@ -20,6 +20,9 @@ COPY strategy_kmp/ /app/strategy_kmp/
 # Copy instrumentation
 COPY instrumentation/ /app/instrumentation/
 
+# Copy healthcheck script
+COPY scripts/strategy_healthcheck.sh /app/scripts/strategy_healthcheck.sh
+
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "strategy_kmp.main"]

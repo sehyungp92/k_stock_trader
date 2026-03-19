@@ -5,6 +5,12 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import pandas as pd
 
 from tests.mocks.mock_kis_api import MockKoreaInvestAPI, MockPosition
+from kis_core.kis_client import (
+    _get_circuit_breaker,
+    _circuit_breaker_quote,
+    _circuit_breaker_order,
+    _circuit_breaker_investor,
+)
 
 
 class TestGetLastPrice:
@@ -64,45 +70,50 @@ class TestOrderMethods:
         """Test placing limit buy order."""
         api = MockKoreaInvestAPI()
 
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        result = api.place_limit_buy("005930", 72000, 100)
 
-        assert order_id is not None
-        assert order_id.startswith("ORD")
+        assert result.success is True
+        assert result.order_id is not None
+        assert result.order_id.startswith("ORD")
 
     def test_place_limit_sell(self):
         """Test placing limit sell order."""
         api = MockKoreaInvestAPI()
 
-        order_id = api.place_limit_sell("005930", 72000, 100)
+        result = api.place_limit_sell("005930", 72000, 100)
 
-        assert order_id is not None
+        assert result.success is True
+        assert result.order_id is not None
 
     def test_place_market_buy(self):
         """Test placing market buy order."""
         api = MockKoreaInvestAPI(prices={"005930": 72000})
 
-        order_id = api.place_market_buy("005930", 100)
+        result = api.place_market_buy("005930", 100)
 
-        assert order_id is not None
+        assert result.success is True
+        assert result.order_id is not None
         # Market orders fill immediately
-        order = api.get_order(order_id)
+        order = api.get_order(result.order_id)
         assert order.filled_qty == 100
 
     def test_place_market_sell(self):
         """Test placing market sell order."""
         api = MockKoreaInvestAPI(prices={"005930": 72000})
 
-        order_id = api.place_market_sell("005930", 100)
+        result = api.place_market_sell("005930", 100)
 
-        assert order_id is not None
+        assert result.success is True
+        assert result.order_id is not None
 
     def test_order_failure(self):
-        """Test order failure returns None."""
+        """Test order failure returns OrderResult with success=False."""
         api = MockKoreaInvestAPI(fail_orders=True)
 
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        result = api.place_limit_buy("005930", 72000, 100)
 
-        assert order_id is None
+        assert result.success is False
+        assert result.error_code == 'MOCK_REJECT'
 
     def test_rate_limit_retry(self):
         """Test rate limit causes exception."""
@@ -118,7 +129,7 @@ class TestCancelOrder:
     def test_cancel_working_order(self):
         """Test cancelling working order."""
         api = MockKoreaInvestAPI()
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        order_id = api.place_limit_buy("005930", 72000, 100).order_id
 
         result = api.cancel_order(order_id, 100)
 
@@ -129,7 +140,7 @@ class TestCancelOrder:
     def test_cancel_filled_order_fails(self):
         """Test cancelling filled order fails."""
         api = MockKoreaInvestAPI(prices={"005930": 72000})
-        order_id = api.place_market_buy("005930", 100)
+        order_id = api.place_market_buy("005930", 100).order_id
 
         result = api.cancel_order(order_id, 100)
 
@@ -150,7 +161,7 @@ class TestModifyOrder:
     def test_modify_working_order(self):
         """Test modifying working order."""
         api = MockKoreaInvestAPI()
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        order_id = api.place_limit_buy("005930", 72000, 100).order_id
 
         result = api.modify_order(order_id, 73000, 150)
 
@@ -211,7 +222,7 @@ class TestFillSimulation:
     def test_fill_limit_order(self):
         """Test filling limit order."""
         api = MockKoreaInvestAPI()
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        order_id = api.place_limit_buy("005930", 72000, 100).order_id
 
         result = api.fill_order(order_id)
 
@@ -222,7 +233,7 @@ class TestFillSimulation:
     def test_partial_fill(self):
         """Test partial fill."""
         api = MockKoreaInvestAPI()
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        order_id = api.place_limit_buy("005930", 72000, 100).order_id
 
         result = api.fill_order(order_id, fill_qty=50)
 
@@ -234,7 +245,7 @@ class TestFillSimulation:
     def test_fill_updates_position(self):
         """Test fill updates position."""
         api = MockKoreaInvestAPI(prices={"005930": 72000})
-        order_id = api.place_limit_buy("005930", 72000, 100)
+        order_id = api.place_limit_buy("005930", 72000, 100).order_id
 
         api.fill_order(order_id)
 
@@ -265,3 +276,27 @@ class TestReset:
 
         position = api.get_position("005930")
         assert position is None
+
+
+class TestCircuitBreakerRouting:
+    """Tests for _get_circuit_breaker routing logic."""
+
+    def test_investor_url_returns_investor_breaker(self):
+        """inquire-investor should route to _circuit_breaker_investor, not quote."""
+        cb = _get_circuit_breaker('/uapi/domestic-stock/v1/quotations/inquire-investor', False)
+        assert cb is _circuit_breaker_investor
+
+    def test_quote_url_returns_quote_breaker(self):
+        """Regular quote endpoints should still use the quote breaker."""
+        cb = _get_circuit_breaker('/uapi/domestic-stock/v1/quotations/inquire-price', False)
+        assert cb is _circuit_breaker_quote
+
+    def test_order_url_returns_order_breaker(self):
+        """Trading endpoints should use the order breaker even for GET."""
+        cb = _get_circuit_breaker('/uapi/domestic-stock/v1/trading/inquire-daily-ccld', False)
+        assert cb is _circuit_breaker_order
+
+    def test_post_request_returns_order_breaker(self):
+        """Any POST request should use the order breaker."""
+        cb = _get_circuit_breaker('/uapi/domestic-stock/v1/quotations/inquire-price', True)
+        assert cb is _circuit_breaker_order

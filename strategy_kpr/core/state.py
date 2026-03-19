@@ -54,6 +54,7 @@ class SymbolState:
     trail_stop: float = 0.0
     partial_filled: bool = False
     confidence: str = "YELLOW"
+    entry_reject_count: int = 0
 
     # Order tracking (for timeout/drift detection)
     entry_order_id: Optional[str] = None
@@ -84,6 +85,7 @@ class SymbolState:
     def reset_setup(self):
         self.setup_low = self.reclaim_level = self.stop_level = self.setup_time = self.setup_type = None
         self.accept_closes = 0
+        self.entry_reject_count = 0
 
     def reset_for_new_day(self):
         """Reset state for a new trading day."""

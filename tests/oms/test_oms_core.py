@@ -276,8 +276,9 @@ class TestOMSCorePlanAndExecute:
     @pytest.mark.asyncio
     async def test_exit_with_allocation_succeeds(self, oms):
         """Test EXIT with allocation succeeds."""
-        # Set up allocation
+        # Set up allocation and real broker position
         oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_position("005930", real_qty=100)
 
         intent = Intent(
             intent_type=IntentType.EXIT,
@@ -293,8 +294,9 @@ class TestOMSCorePlanAndExecute:
     @pytest.mark.asyncio
     async def test_reduce_creates_sell_order(self, oms):
         """Test REDUCE creates sell order."""
-        # Set up allocation
+        # Set up allocation and real broker position
         oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_position("005930", real_qty=100)
 
         intent = Intent(
             intent_type=IntentType.REDUCE,
@@ -349,8 +351,9 @@ class TestOMSCoreApplyFill:
         """Test sell fill reduces allocation."""
         from oms.state import WorkingOrder
 
-        # Set up initial allocation
+        # Set up initial allocation and real broker position
         oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_position("005930", real_qty=100)
 
         wo = WorkingOrder(
             order_id="ORD001",
@@ -1106,6 +1109,7 @@ class TestPlanAndExecuteSetTarget:
         """Test SET_TARGET with delta < 0 creates SELL order."""
         # Existing allocation of 100, target 50 -> delta = -50
         oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_position("005930", real_qty=100)
 
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
@@ -1168,8 +1172,9 @@ class TestOMSCoreStart:
 
         oms = OMSCore(mock_api, persistence=mock_persistence)
 
-        # Patch start_reconciliation_loop to avoid background task
+        # Patch start_reconciliation_loop and _reconcile to avoid background task/API
         oms.start_reconciliation_loop = AsyncMock()
+        oms._reconcile = AsyncMock()
 
         await oms.start()
 
@@ -1178,6 +1183,7 @@ class TestOMSCoreStart:
         mock_persistence.load_allocations.assert_awaited_once()
         mock_persistence.load_working_orders.assert_awaited_once()
         mock_persistence.load_oms_state.assert_awaited_once()
+        oms._reconcile.assert_awaited_once_with(cycle_count=0)
         oms.start_reconciliation_loop.assert_awaited_once()
 
         # Cleanup
@@ -1190,11 +1196,307 @@ class TestOMSCoreStart:
 
         # Patch start_reconciliation_loop to avoid background task
         oms.start_reconciliation_loop = AsyncMock()
+        # Patch _reconcile to avoid real API calls
+        oms._reconcile = AsyncMock()
 
         await oms.start()
 
-        # Should still start reconciliation loop
+        oms._reconcile.assert_awaited_once_with(cycle_count=0)
         oms.start_reconciliation_loop.assert_awaited_once()
 
         # Cleanup
         await oms.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_start_runs_initial_reconcile_before_loop(self, mock_api):
+        """Test start() runs _reconcile(0) before starting the loop, loading equity."""
+        from oms.adapter import BrokerPosition, BrokerQueryResult
+
+        oms = OMSCore(mock_api, persistence=None)
+        assert oms.state.equity == 0.0  # starts at zero
+
+        # Mock adapter to return equity=53M
+        broker_pos = BrokerPosition(
+            symbol="005930", qty=100, avg_price=70000,
+            current_price=72000, pnl=2.86,
+        )
+        oms.adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
+        oms.adapter.get_balance_snapshot = AsyncMock(return_value=(
+            BrokerQueryResult(ok=True, data=[broker_pos]),
+            53_000_000,
+        ))
+        oms.adapter.get_buyable_cash = AsyncMock(return_value=30_000_000)
+
+        # Patch loop to avoid background task
+        oms.start_reconciliation_loop = AsyncMock()
+
+        await oms.start()
+
+        # Equity should be loaded from the initial reconcile
+        assert oms.state.equity == 53_000_000
+
+        await oms.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_start_continues_if_initial_reconcile_fails(self, mock_api):
+        """Test start() still starts the loop even if initial reconcile fails."""
+        oms = OMSCore(mock_api, persistence=None)
+
+        # Make _reconcile raise an exception
+        oms._reconcile = AsyncMock(side_effect=Exception("KIS unavailable"))
+        oms.start_reconciliation_loop = AsyncMock()
+
+        await oms.start()
+
+        # Loop should still start despite initial reconcile failure
+        oms.start_reconciliation_loop.assert_awaited_once()
+        assert oms.state.equity == 0.0  # not loaded
+
+        await oms.shutdown()
+
+
+class TestExitQtyCappedAtRealQty:
+    """Tests for Fix 1: sell qty capped at real_qty."""
+
+    @pytest.fixture
+    def mock_api(self, mock_kis_api):
+        return mock_kis_api
+
+    @pytest.fixture
+    def oms(self, mock_api):
+        oms = OMSCore(mock_api)
+        oms.state.equity = 100_000_000
+        oms.state.buyable_cash = 50_000_000
+        return oms
+
+    @pytest.mark.asyncio
+    async def test_exit_capped_at_real_qty(self, oms):
+        """EXIT with alloc=19, real_qty=9 should sell 9 (not reject)."""
+        oms.state.update_allocation("005930", "PCIM", 19)
+        oms.state.update_position("005930", real_qty=9)
+
+        intent = Intent(
+            intent_type=IntentType.EXIT,
+            strategy_id="PCIM",
+            symbol="005930",
+            risk_payload=RiskPayload(rationale_code="signal_exit"),
+        )
+
+        result = await oms.submit_intent(intent)
+
+        assert result.status == IntentStatus.EXECUTED
+        # Working order should be for 9 shares, not 19
+        pos = oms.state.get_position("005930")
+        assert pos.has_working_orders()
+        wo = pos.working_orders[0]
+        assert wo.qty == 9
+        assert wo.side == "SELL"
+
+    @pytest.mark.asyncio
+    async def test_exit_rejected_when_real_qty_zero(self, oms):
+        """EXIT with alloc=19, real_qty=0 should be REJECTED."""
+        oms.state.update_allocation("005930", "PCIM", 19)
+        oms.state.update_position("005930", real_qty=0)
+
+        intent = Intent(
+            intent_type=IntentType.EXIT,
+            strategy_id="PCIM",
+            symbol="005930",
+            risk_payload=RiskPayload(rationale_code="signal_exit"),
+        )
+
+        result = await oms.submit_intent(intent)
+
+        assert result.status == IntentStatus.REJECTED
+        assert "no sellable shares" in result.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_reduce_capped_at_real_qty(self, oms):
+        """REDUCE with reduce_qty=50, real_qty=30 should sell 30."""
+        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_position("005930", real_qty=30)
+
+        intent = Intent(
+            intent_type=IntentType.REDUCE,
+            strategy_id="KMP",
+            symbol="005930",
+            desired_qty=50,
+        )
+
+        result = await oms.submit_intent(intent)
+
+        assert result.status == IntentStatus.EXECUTED
+        pos = oms.state.get_position("005930")
+        assert pos.has_working_orders()
+        wo = pos.working_orders[0]
+        assert wo.qty == 30
+        assert wo.side == "SELL"
+
+    @pytest.mark.asyncio
+    async def test_set_target_sell_capped_at_real_qty(self, oms):
+        """SET_TARGET sell with delta=50, real_qty=20 should sell 20."""
+        oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_position("005930", real_qty=20)
+
+        intent = Intent(
+            intent_type=IntentType.SET_TARGET,
+            strategy_id="KMP",
+            symbol="005930",
+            target_qty=50,
+            risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+
+        result = await oms.submit_intent(intent)
+
+        assert result.status == IntentStatus.EXECUTED
+        pos = oms.state.get_position("005930")
+        assert pos.has_working_orders()
+        wo = pos.working_orders[0]
+        assert wo.qty == 20
+        assert wo.side == "SELL"
+
+
+class TestNegativeDriftHandling:
+    """Tests for Fix 2: drift auto-correction and spam prevention."""
+
+    @pytest.fixture
+    def mock_api(self, mock_kis_api):
+        return mock_kis_api
+
+    @pytest.fixture
+    def oms(self, mock_api):
+        oms = OMSCore(mock_api)
+        oms.state.equity = 100_000_000
+        return oms
+
+    @pytest.mark.asyncio
+    async def test_negative_drift_single_strategy_auto_corrects(self, oms):
+        """Single-strategy negative drift should auto-correct allocation."""
+        oms.state.update_position("005930", real_qty=9)
+        oms.state.update_allocation("005930", "PCIM", 19)
+        # Drift = 9 - 19 = -10
+
+        await oms._check_allocation_drift()
+
+        pos = oms.state.get_position("005930")
+        assert pos.allocations["PCIM"].qty == 9  # auto-corrected
+        assert pos.frozen is False  # NOT frozen — drift resolved
+
+    @pytest.mark.asyncio
+    async def test_negative_drift_multi_strategy_freezes(self, oms):
+        """Multi-strategy negative drift should freeze but not correct."""
+        oms.state.update_position("005930", real_qty=20)
+        oms.state.update_allocation("005930", "KMP", 15)
+        oms.state.update_allocation("005930", "PCIM", 10)
+        # Drift = 20 - 25 = -5
+
+        await oms._check_allocation_drift()
+
+        pos = oms.state.get_position("005930")
+        assert pos.frozen is True
+        # Neither allocation was modified
+        assert pos.allocations["KMP"].qty == 15
+        assert pos.allocations["PCIM"].qty == 10
+
+    @pytest.mark.asyncio
+    async def test_frozen_symbol_not_re_logged(self, oms):
+        """Frozen symbol should not be re-processed on subsequent cycles."""
+        oms.state.update_position("005930", real_qty=20)
+        oms.state.update_allocation("005930", "KMP", 15)
+        oms.state.update_allocation("005930", "PCIM", 10)
+
+        # First cycle: freezes
+        await oms._check_allocation_drift()
+        pos = oms.state.get_position("005930")
+        assert pos.frozen is True
+
+        # Mock persistence to verify no re-logging
+        mock_persistence = MagicMock()
+        mock_persistence.log_recon = AsyncMock()
+        oms.persistence = mock_persistence
+
+        # Second cycle: should skip because frozen
+        await oms._check_allocation_drift()
+
+        mock_persistence.log_recon.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_auto_corrected_symbol_not_frozen(self, oms):
+        """After single-strategy auto-correction, drift=0 means not frozen."""
+        oms.state.update_position("005930", real_qty=9)
+        oms.state.update_allocation("005930", "PCIM", 19)
+
+        await oms._check_allocation_drift()
+
+        pos = oms.state.get_position("005930")
+        # Drift should be 0 now (9 - 9 = 0)
+        assert pos.allocation_drift() == 0
+        assert pos.frozen is False
+
+    @pytest.mark.asyncio
+    async def test_auto_correct_freezes_if_unknown_remains(self, oms):
+        """Auto-correction with leftover _UNKNOWN_ allocation freezes to prevent spam."""
+        oms.state.update_position("005930", real_qty=5)
+        oms.state.update_allocation("005930", "PCIM", 10)
+        # Simulate leftover _UNKNOWN_ from a previous positive drift
+        pos = oms.state.get_position("005930")
+        pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=5)
+        # Drift = 5 - 15 = -10; non_unknown = {PCIM: 10} (single)
+        # Auto-corrects PCIM to 5, but _UNKNOWN_=5 remains → drift = 5 - 10 = -5
+
+        await oms._check_allocation_drift()
+
+        assert pos.allocations["PCIM"].qty == 5  # auto-corrected
+        assert pos.frozen is True  # frozen because drift persists
+
+        # Second cycle should NOT re-process (frozen guard)
+        mock_persistence = MagicMock()
+        mock_persistence.log_recon = AsyncMock()
+        oms.persistence = mock_persistence
+
+        await oms._check_allocation_drift()
+        mock_persistence.log_recon.assert_not_called()
+
+
+class TestAdminCorrectAllocation:
+    """Tests for Fix 3: admin allocation correction."""
+
+    @pytest.fixture
+    def mock_api(self, mock_kis_api):
+        return mock_kis_api
+
+    @pytest.fixture
+    def oms(self, mock_api):
+        oms = OMSCore(mock_api)
+        oms.state.equity = 100_000_000
+        return oms
+
+    @pytest.mark.asyncio
+    async def test_admin_correct_allocation(self, oms):
+        """Admin correction sets allocation and unfreezes if drift resolved."""
+        oms.state.update_position("005930", real_qty=9)
+        oms.state.update_allocation("005930", "PCIM", 19)
+        pos = oms.state.get_position("005930")
+        pos.frozen = True
+
+        result = await oms.correct_allocation("005930", "PCIM", 9)
+
+        assert result["old_qty"] == 19
+        assert result["new_qty"] == 9
+        assert result["drift"] == 0
+        assert result["frozen"] is False
+        assert pos.allocations["PCIM"].qty == 9
+
+    @pytest.mark.asyncio
+    async def test_admin_correct_keeps_frozen_if_drift_remains(self, oms):
+        """Admin correction that doesn't fully resolve drift keeps symbol frozen."""
+        oms.state.update_position("005930", real_qty=9)
+        oms.state.update_allocation("005930", "PCIM", 19)
+        oms.state.update_allocation("005930", "KMP", 5)
+        pos = oms.state.get_position("005930")
+        pos.frozen = True
+
+        # Correct PCIM to 9, but KMP still has 5 → total=14, real=9 → drift=-5
+        result = await oms.correct_allocation("005930", "PCIM", 9)
+
+        assert result["frozen"] is True  # still frozen — drift remains

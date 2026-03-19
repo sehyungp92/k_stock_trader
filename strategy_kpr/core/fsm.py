@@ -525,6 +525,15 @@ async def alpha_step(s: SymbolState, bar: dict, vwap: float, now: datetime,
                         reject_reason=result.message or "",
                         related_trade_id=intent.intent_id,
                     )
-                logger.warning(f"{s.code}: Entry REJECTED status={result.status.name} msg={result.message}")
+                s.entry_reject_count += 1
+                msg = result.message or ""
+                if "frozen" in msg.lower():
+                    logger.warning(f"{s.code}: Entry REJECTED (frozen) — INVALIDATED")
+                    s.fsm = FSMState.INVALIDATED
+                elif s.entry_reject_count >= 3:
+                    logger.warning(f"{s.code}: Entry REJECTED {s.entry_reject_count}x — INVALIDATED: {msg}")
+                    s.fsm = FSMState.INVALIDATED
+                else:
+                    logger.warning(f"{s.code}: Entry REJECTED ({s.entry_reject_count}/3) msg={msg}")
                 return None
     return None

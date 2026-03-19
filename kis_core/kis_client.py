@@ -30,10 +30,31 @@ from loguru import logger
 from .kis_decorators import rate_limit
 
 # Paper trading has a lower API rate limit (5 req/sec vs 20 live)
+# Haircut below ceiling to absorb bursts without EGW00201 errors:
+#   Paper: 0.50s = 2 req/sec (60% below 5 req/sec limit)
+#   Live:  0.07s ≈ 14 req/sec (30% below 20 req/sec limit)
 _PAPER_MODE = os.environ.get("KIS_IS_PAPER", "true").lower() == "true"
-_MIN_INTERVAL = 0.50 if _PAPER_MODE else 0.05  # 2 req/sec paper, 20 req/sec live
+_MIN_INTERVAL = 0.50 if _PAPER_MODE else 0.07
 from .kis_responses import APIResponse
 from .tick_table import round_to_tick
+
+
+class OrderResult:
+    """Result of an order placement, preserving KIS error details."""
+    __slots__ = ('success', 'order_id', 'error_code', 'error_message')
+
+    def __init__(self, success: bool, order_id: Optional[str] = None,
+                 error_code: str = '', error_message: str = ''):
+        self.success = success
+        self.order_id = order_id
+        self.error_code = error_code
+        self.error_message = error_message
+
+    def __repr__(self) -> str:
+        if self.success:
+            return f"OrderResult(ok, order_id={self.order_id})"
+        return f"OrderResult(fail, code={self.error_code}, msg={self.error_message!r})"
+
 
 # Type variable for generic decorator
 F = TypeVar('F', bound=Callable[..., Any])
@@ -291,11 +312,16 @@ class CircuitBreaker:
 # Per-category circuit breakers to prevent quote failures from blocking orders
 _circuit_breaker_quote = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
 _circuit_breaker_order = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
+# Separate breaker for inquire-investor: inherently slow endpoint (65s observed)
+# that must not trip the shared quote breaker and block fast market data endpoints
+_circuit_breaker_investor = CircuitBreaker(failure_threshold=8, recovery_timeout=30.0)
 
 def _get_circuit_breaker(api_url: str, is_post_request: bool) -> CircuitBreaker:
     """Get the appropriate circuit breaker for the endpoint category."""
     if is_post_request or '/trading/' in api_url:
         return _circuit_breaker_order
+    if 'inquire-investor' in api_url:
+        return _circuit_breaker_investor
     return _circuit_breaker_quote
 
 
@@ -410,6 +436,8 @@ class KoreaInvestAPI:
     _TIMEOUT_QUOTE = (3, 7)
     # Generous timeout for order operations (must not be dropped)
     _TIMEOUT_ORDER = (5, 15)
+    # inquire-investor is inherently slow (65s observed); generous read timeout
+    _TIMEOUT_INVESTOR = (3, 20)
 
     def _url_fetch(
         self,
@@ -461,6 +489,8 @@ class KoreaInvestAPI:
         # Select timeout profile based on request type
         if is_post_request:
             req_timeout = self._TIMEOUT_ORDER
+        elif 'inquire-investor' in api_url:
+            req_timeout = self._TIMEOUT_INVESTOR
         elif '/quotations/' in api_url or '/price/' in api_url:
             req_timeout = self._TIMEOUT_QUOTE
         else:
@@ -584,13 +614,15 @@ class KoreaInvestAPI:
         return None
 
     def get_circuit_breaker_status(self) -> Dict[str, Any]:
-        """Get current circuit breaker status (worst of quote/order breakers)."""
+        """Get current circuit breaker status (worst of quote/order/investor breakers)."""
         quote_status = _circuit_breaker_quote.get_status()
         order_status = _circuit_breaker_order.get_status()
+        investor_status = _circuit_breaker_investor.get_status()
         # Report the more severe state
-        if order_status['state'] == 'OPEN' or quote_status['state'] == 'OPEN':
+        all_states = [s['state'] for s in (order_status, quote_status, investor_status)]
+        if 'OPEN' in all_states:
             state = 'OPEN'
-        elif order_status['state'] == 'HALF_OPEN' or quote_status['state'] == 'HALF_OPEN':
+        elif 'HALF_OPEN' in all_states:
             state = 'HALF_OPEN'
         else:
             state = 'CLOSED'
@@ -598,6 +630,7 @@ class KoreaInvestAPI:
             'state': state,
             'quote': quote_status,
             'order': order_status,
+            'investor': investor_status,
         }
 
     # =========================================================================
@@ -763,7 +796,8 @@ class KoreaInvestAPI:
     # =========================================================================
 
     def get_daily_chart_data(
-        self, stock_code: str, end_date: Optional[str] = None, count: int = 60
+        self, stock_code: str, end_date: Optional[str] = None, count: int = 60,
+        market_code: str = 'J',
     ) -> Optional[Dict[str, Any]]:
         """
         Fetch raw daily OHLCV data from KIS API.
@@ -781,7 +815,7 @@ class KoreaInvestAPI:
         url = '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice'
         tr_id = "FHKST03010100"
         params = {
-            'FID_COND_MRKT_DIV_CODE': 'J',
+            'FID_COND_MRKT_DIV_CODE': market_code,
             'FID_INPUT_ISCD': stock_code,
             'FID_INPUT_DATE_1': start_date,
             'FID_INPUT_DATE_2': end_date,
@@ -831,7 +865,7 @@ class KoreaInvestAPI:
             return {'output2': output2[:count] if output2 else []}
         return None
 
-    def get_daily_bars(self, ticker: str, days: int = 60) -> pd.DataFrame:
+    def get_daily_bars(self, ticker: str, days: int = 60, market_code: str = 'J') -> pd.DataFrame:
         """
         Get daily OHLCV bars as DataFrame.
 
@@ -843,7 +877,7 @@ class KoreaInvestAPI:
 
         try:
             end_date = datetime.now(tz=KST).strftime("%Y%m%d")
-            raw = self.get_daily_chart_data(stock_code=ticker, end_date=end_date, count=days)
+            raw = self.get_daily_chart_data(stock_code=ticker, end_date=end_date, count=days, market_code=market_code)
             if not raw:
                 return empty_df
 
@@ -1359,67 +1393,75 @@ class KoreaInvestAPI:
             return None
         return order_id
 
-    def place_market_buy(self, stock_code: str, quantity: int, **kwargs) -> Optional[str]:
-        """Place a market buy order. Returns order ID."""
+    def place_market_buy(self, stock_code: str, quantity: int, **kwargs) -> OrderResult:
+        """Place a market buy order. Returns OrderResult."""
         result = self.buy_stock(stock_code, quantity, "0", order_type="01")
         if result and result.is_ok():
             order_id = self._validate_order_id(result.get_body().output.get('ODNO', ''))
             if order_id:
                 logger.info(f"Market BUY: {stock_code} x{quantity}, order_id={order_id}")
-            return order_id
+            return OrderResult(success=True, order_id=order_id)
         if result:
-            logger.warning(f"Market BUY failed: {stock_code} x{quantity} — {result.get_error_message()}")
-        else:
-            logger.warning(f"Market BUY failed: {stock_code} x{quantity} — no response")
-        return None
+            err_code = result.get_error_code()
+            err_msg = result.get_error_message()
+            logger.warning(f"Market BUY failed: {stock_code} x{quantity} — {err_msg}")
+            return OrderResult(success=False, error_code=err_code, error_message=err_msg)
+        logger.warning(f"Market BUY failed: {stock_code} x{quantity} — no response")
+        return OrderResult(success=False, error_code='NO_RESPONSE', error_message='No response from KIS API')
 
-    def place_market_sell(self, stock_code: str, quantity: int, **kwargs) -> Optional[str]:
-        """Place a market sell order. Returns order ID."""
+    def place_market_sell(self, stock_code: str, quantity: int, **kwargs) -> OrderResult:
+        """Place a market sell order. Returns OrderResult."""
         result = self.sell_stock(stock_code, quantity, "0", order_type="01")
         if result and result.is_ok():
             order_id = self._validate_order_id(result.get_body().output.get('ODNO', ''))
             if order_id:
                 logger.info(f"Market SELL: {stock_code} x{quantity}, order_id={order_id}")
-            return order_id
+            return OrderResult(success=True, order_id=order_id)
         if result:
-            logger.warning(f"Market SELL failed: {stock_code} x{quantity} — {result.get_error_message()}")
-        else:
-            logger.warning(f"Market SELL failed: {stock_code} x{quantity} — no response")
-        return None
+            err_code = result.get_error_code()
+            err_msg = result.get_error_message()
+            logger.warning(f"Market SELL failed: {stock_code} x{quantity} — {err_msg}")
+            return OrderResult(success=False, error_code=err_code, error_message=err_msg)
+        logger.warning(f"Market SELL failed: {stock_code} x{quantity} — no response")
+        return OrderResult(success=False, error_code='NO_RESPONSE', error_message='No response from KIS API')
 
     def place_limit_buy(
         self, stock_code: str, price: float, quantity: int, **kwargs
-    ) -> Optional[str]:
-        """Place a limit buy order. Returns order ID."""
+    ) -> OrderResult:
+        """Place a limit buy order. Returns OrderResult."""
         price = round_to_tick(price)
         result = self.buy_stock(stock_code, quantity, str(int(price)), order_type="00")
         if result and result.is_ok():
             order_id = self._validate_order_id(result.get_body().output.get('ODNO', ''))
             if order_id:
                 logger.info(f"Limit BUY: {stock_code} x{quantity} @ {price:.0f}, order_id={order_id}")
-            return order_id
+            return OrderResult(success=True, order_id=order_id)
         if result:
-            logger.warning(f"Limit BUY failed: {stock_code} x{quantity} @ {price:.0f} — {result.get_error_message()}")
-        else:
-            logger.warning(f"Limit BUY failed: {stock_code} x{quantity} @ {price:.0f} — no response")
-        return None
+            err_code = result.get_error_code()
+            err_msg = result.get_error_message()
+            logger.warning(f"Limit BUY failed: {stock_code} x{quantity} @ {price:.0f} — {err_msg}")
+            return OrderResult(success=False, error_code=err_code, error_message=err_msg)
+        logger.warning(f"Limit BUY failed: {stock_code} x{quantity} @ {price:.0f} — no response")
+        return OrderResult(success=False, error_code='NO_RESPONSE', error_message='No response from KIS API')
 
     def place_limit_sell(
         self, stock_code: str, price: float, quantity: int, **kwargs
-    ) -> Optional[str]:
-        """Place a limit sell order. Returns order ID."""
+    ) -> OrderResult:
+        """Place a limit sell order. Returns OrderResult."""
         price = round_to_tick(price)
         result = self.sell_stock(stock_code, quantity, str(int(price)), order_type="00")
         if result and result.is_ok():
             order_id = self._validate_order_id(result.get_body().output.get('ODNO', ''))
             if order_id:
                 logger.info(f"Limit SELL: {stock_code} x{quantity} @ {price:.0f}, order_id={order_id}")
-            return order_id
+            return OrderResult(success=True, order_id=order_id)
         if result:
-            logger.warning(f"Limit SELL failed: {stock_code} x{quantity} @ {price:.0f} — {result.get_error_message()}")
-        else:
-            logger.warning(f"Limit SELL failed: {stock_code} x{quantity} @ {price:.0f} — no response")
-        return None
+            err_code = result.get_error_code()
+            err_msg = result.get_error_message()
+            logger.warning(f"Limit SELL failed: {stock_code} x{quantity} @ {price:.0f} — {err_msg}")
+            return OrderResult(success=False, error_code=err_code, error_message=err_msg)
+        logger.warning(f"Limit SELL failed: {stock_code} x{quantity} @ {price:.0f} — no response")
+        return OrderResult(success=False, error_code='NO_RESPONSE', error_message='No response from KIS API')
 
     def place_order_full(
         self,
@@ -2015,8 +2057,9 @@ class KoreaInvestAPI:
     def get_index_daily(self, index: str, days: int = 60) -> Optional[List[Dict]]:
         """Get daily index bars. index should be 'KOSPI' or 'KOSDAQ'."""
         code = "0001" if index.upper() == "KOSPI" else "1001"
-        df = self.get_daily_bars(code, days)
+        df = self.get_daily_bars(code, days, market_code='U')
         if df is None or df.empty:
+            logger.warning(f"get_index_daily: No data for {index} (code={code}, market_code='U')")
             return None
         return df.to_dict('records')
 

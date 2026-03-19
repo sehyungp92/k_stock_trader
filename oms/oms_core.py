@@ -90,6 +90,7 @@ class OMSCore:
         self._idem = idempotency_store or InMemoryIdempotencyStore()
         self._reconcile_task: Optional[asyncio.Task] = None
         self._symbol_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._rejection_counts: Dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -246,10 +247,11 @@ class OMSCore:
                 intent=intent, current_price=current_price,
             )
         elif intent.intent_type in (IntentType.EXIT, IntentType.FLATTEN):
-            alloc_qty = self.state.get_position(intent.symbol).get_allocation(intent.strategy_id)
+            pos = self.state.get_position(intent.symbol)
+            alloc_qty = pos.get_allocation(intent.strategy_id)
             if alloc_qty <= 0:
                 # Check working BUY orders — cancel instead of sell
-                pending = self.state.get_position(intent.symbol).working_qty(
+                pending = pos.working_qty(
                     strategy_id=intent.strategy_id, side="BUY"
                 )
                 if pending > 0:
@@ -257,30 +259,71 @@ class OMSCore:
                 return await self._finalize(intent, IntentStatus.REJECTED, "No allocation to exit", oms_received_at=oms_received_at)
             # Respect desired_qty for partial exits, capped at allocation
             exit_qty = min(intent.desired_qty, alloc_qty) if intent.desired_qty else alloc_qty
+            # Safety cap — never sell more than broker holds
+            if exit_qty > pos.real_qty:
+                logger.warning(
+                    f"EXIT qty capped: {intent.symbol} alloc={alloc_qty} real_qty={pos.real_qty}"
+                )
+                exit_qty = pos.real_qty
+            if exit_qty <= 0:
+                return await self._finalize(
+                    intent, IntentStatus.REJECTED,
+                    f"No sellable shares: real_qty={pos.real_qty} (alloc={alloc_qty})",
+                    oms_received_at=oms_received_at,
+                )
             plan = self.planner.create_exit_plan(
                 symbol=intent.symbol, qty=exit_qty,
                 strategy_id=intent.strategy_id,
                 intent_id=intent.intent_id, urgency=intent.urgency,
             )
         elif intent.intent_type == IntentType.REDUCE:
+            reduce_qty = abs(final_qty)
+            # Safety cap — never sell more than broker holds
+            pos = self.state.get_position(intent.symbol)
+            if reduce_qty > pos.real_qty:
+                logger.warning(
+                    f"REDUCE qty capped: {intent.symbol} requested={reduce_qty} real_qty={pos.real_qty}"
+                )
+                reduce_qty = pos.real_qty
+            if reduce_qty <= 0:
+                return await self._finalize(
+                    intent, IntentStatus.REJECTED,
+                    f"No sellable shares: real_qty={pos.real_qty}",
+                    oms_received_at=oms_received_at,
+                )
             plan = self.planner.create_exit_plan(
-                symbol=intent.symbol, qty=abs(final_qty),
+                symbol=intent.symbol, qty=reduce_qty,
                 strategy_id=intent.strategy_id,
                 intent_id=intent.intent_id, urgency=intent.urgency,
             )
         elif intent.intent_type == IntentType.SET_TARGET:
             # Compute delta = target_qty - current_allocation
-            current_alloc = self.state.get_position(intent.symbol).get_allocation(intent.strategy_id)
+            pos = self.state.get_position(intent.symbol)
+            current_alloc = pos.get_allocation(intent.strategy_id)
             target_qty = intent.target_qty or 0
             delta = target_qty - current_alloc
             if delta == 0:
                 return await self._finalize(intent, IntentStatus.EXECUTED, "Already at target", oms_received_at=oms_received_at)
             side = "BUY" if delta > 0 else "SELL"
+            sell_qty = abs(delta)
+            if side == "SELL":
+                # Safety cap — never sell more than broker holds
+                if sell_qty > pos.real_qty:
+                    logger.warning(
+                        f"SET_TARGET sell qty capped: {intent.symbol} delta={sell_qty} real_qty={pos.real_qty}"
+                    )
+                    sell_qty = pos.real_qty
+                if sell_qty <= 0:
+                    return await self._finalize(
+                        intent, IntentStatus.REJECTED,
+                        f"No sellable shares: real_qty={pos.real_qty} (alloc={current_alloc})",
+                        oms_received_at=oms_received_at,
+                    )
             plan = self.planner.create_plan(
                 symbol=intent.symbol, side=side, qty=abs(delta),
                 intent=intent, current_price=current_price,
             ) if delta > 0 else self.planner.create_exit_plan(
-                symbol=intent.symbol, qty=abs(delta),
+                symbol=intent.symbol, qty=sell_qty,
                 strategy_id=intent.strategy_id,
                 intent_id=intent.intent_id, urgency=intent.urgency,
             )
@@ -644,9 +687,9 @@ class OMSCore:
                     consecutive_failures = 0
                     # Warn if equity still not loaded after first successful cycle
                     if cycle_count == 0 and self.state.equity <= 0:
-                        logger.critical(
-                            "EQUITY_ZERO: First reconciliation completed but equity=0 "
-                            "— all ENTER intents will be deferred until equity is loaded"
+                        logger.warning(
+                            "EQUITY_ZERO: Reconciliation completed but equity=0 "
+                            "— start() already attempted once; will retry next cycle"
                         )
                 except Exception as e:
                     consecutive_failures += 1
@@ -867,10 +910,10 @@ class OMSCore:
 
         Policy:
         - If working orders exist: allow temporary drift (orders in flight).
-        - If no working orders and drift != 0:
-            - Assign drift to _UNKNOWN_ allocation.
-            - Freeze symbol for new entries until resolved.
-            - Log critical event.
+        - Already frozen: skip re-processing (prevents log spam).
+        - Positive drift: assign to _UNKNOWN_, freeze.
+        - Negative drift, single strategy: auto-correct allocation, don't freeze.
+        - Negative drift, multi-strategy: freeze once, require admin correction.
         """
         for symbol, pos in self.state.get_all_positions().items():
             drift = pos.allocation_drift()
@@ -893,7 +936,11 @@ class OMSCore:
                 # Orders in flight — drift is expected, skip
                 continue
 
-            # Deterministic repair: assign drift to UNKNOWN
+            # Already frozen — skip re-processing to prevent log spam
+            if pos.frozen:
+                continue
+
+            # --- First detection: log and take action ---
             logger.critical(
                 f"ALLOCATION DRIFT {symbol}: real={pos.real_qty} "
                 f"allocated={pos.total_allocated()} drift={drift}"
@@ -904,24 +951,62 @@ class OMSCore:
                 if UNKNOWN_STRATEGY not in pos.allocations:
                     pos.allocations[UNKNOWN_STRATEGY] = StrategyAllocation(strategy_id=UNKNOWN_STRATEGY)
                 pos.allocations[UNKNOWN_STRATEGY].qty += drift
+                pos.frozen = True
+                if self.persistence:
+                    await self.persistence.log_recon(
+                        "ALLOCATION_DRIFT", symbol=symbol,
+                        before_value={"total_allocated": pos.total_allocated() - drift},
+                        after_value={"total_allocated": pos.total_allocated()},
+                        action="ASSIGNED_UNKNOWN",
+                        details=f"Positive drift of {drift} assigned to _UNKNOWN_, symbol frozen",
+                    )
             else:
-                # Negative drift: broker has fewer shares than allocated.
-                # Do NOT assign negative qty — log for manual review only.
-                logger.critical(
-                    f"NEGATIVE DRIFT {symbol}: broker has {pos.real_qty} shares but "
-                    f"allocations sum to {pos.total_allocated()}. "
-                    f"Manual review required — NOT auto-correcting."
-                )
-            pos.frozen = True
+                # Negative drift: allocations exceed real broker qty
+                non_unknown = {
+                    sid: a for sid, a in pos.allocations.items()
+                    if sid != UNKNOWN_STRATEGY and a.qty > 0
+                }
 
-            if self.persistence:
-                await self.persistence.log_recon(
-                    "ALLOCATION_DRIFT", symbol=symbol,
-                    before_value={"total_allocated": pos.total_allocated() - drift},
-                    after_value={"total_allocated": pos.total_allocated(), "drift": drift},
-                    action="ASSIGNED_UNKNOWN",
-                    details=f"Drift of {drift} assigned to _UNKNOWN_, symbol frozen",
-                )
+                if len(non_unknown) == 1:
+                    # Single strategy — safe to auto-correct
+                    strat_id, alloc = next(iter(non_unknown.items()))
+                    old_qty = self.state.set_allocation(symbol, strat_id, pos.real_qty)
+                    logger.warning(
+                        f"AUTO-CORRECTED negative drift {symbol}: "
+                        f"{strat_id} allocation {old_qty} -> {alloc.qty}"
+                    )
+                    # If drift persists (e.g., _UNKNOWN_ allocation remains), freeze
+                    if abs(pos.allocation_drift()) > DRIFT_TOLERANCE:
+                        pos.frozen = True
+                        logger.critical(
+                            f"Drift persists after auto-correction {symbol}: "
+                            f"drift={pos.allocation_drift()} — freezing"
+                        )
+                    if self.persistence:
+                        await self.persistence.sync_allocation(symbol, alloc)
+                        await self.persistence.log_recon(
+                            "ALLOCATION_DRIFT", symbol=symbol,
+                            before_value={"strategy": strat_id, "alloc_qty": old_qty},
+                            after_value={"strategy": strat_id, "alloc_qty": alloc.qty},
+                            action="AUTO_CORRECTED",
+                            details=f"Single-strategy auto-correction: {strat_id} {old_qty} -> {alloc.qty}",
+                        )
+                else:
+                    # Multiple strategies — freeze and log once, require admin
+                    pos.frozen = True
+                    logger.critical(
+                        f"NEGATIVE DRIFT {symbol}: real={pos.real_qty} "
+                        f"alloc={pos.total_allocated()} strategies={list(non_unknown.keys())} "
+                        f"— manual correction required"
+                    )
+                    if self.persistence:
+                        await self.persistence.log_recon(
+                            "ALLOCATION_DRIFT", symbol=symbol,
+                            before_value={"total_allocated": pos.total_allocated()},
+                            after_value={"real_qty": pos.real_qty, "drift": drift},
+                            action="NEGATIVE_DRIFT_FROZEN",
+                            details=f"Negative drift of {drift}, {len(non_unknown)} strategies, frozen",
+                        )
 
     # ------------------------------------------------------------------
     # Helpers
@@ -966,9 +1051,19 @@ class OMSCore:
             f"{intent.intent_type.name} -> {status.name}: {message}"
         )
 
-        # Only cache EXECUTED results — REJECTED/DEFERRED must be retryable
         if status == IntentStatus.EXECUTED:
             self._idem.put(intent.idempotency_key, result)
+            self._rejection_counts.pop(intent.idempotency_key, None)
+        elif status == IntentStatus.REJECTED:
+            key = intent.idempotency_key
+            self._rejection_counts[key] = self._rejection_counts.get(key, 0) + 1
+            if self._rejection_counts[key] >= 5:
+                logger.error(
+                    f"Intent {intent.strategy_id}:{intent.symbol} "
+                    f"{intent.intent_type.name} rejected {self._rejection_counts[key]}x "
+                    f"— caching to stop retries"
+                )
+                self._idem.put(key, result)
 
         # Persist intent
         if self.persistence:
@@ -1014,6 +1109,37 @@ class OMSCore:
         """Get strategy allocation for symbol."""
         return self.state.get_position(symbol).get_allocation(strategy_id)
 
+    async def correct_allocation(self, symbol: str, strategy_id: str, new_qty: int) -> dict:
+        """Admin: set a strategy's allocation to an absolute value."""
+        pos = self.state.get_position(symbol)
+        old_qty = self.state.set_allocation(symbol, strategy_id, new_qty)
+        logger.warning(f"ADMIN: Corrected {symbol}/{strategy_id}: {old_qty} -> {new_qty}")
+
+        if self.persistence:
+            alloc = pos.allocations.get(strategy_id)
+            if alloc:
+                await self.persistence.sync_allocation(symbol, alloc)
+            await self.persistence.log_recon(
+                "ALLOCATION_DRIFT", symbol=symbol,
+                before_value={"strategy": strategy_id, "alloc_qty": old_qty},
+                after_value={"strategy": strategy_id, "alloc_qty": new_qty},
+                action="ADMIN_CORRECTED",
+                details=f"Admin set {strategy_id} allocation from {old_qty} to {new_qty}",
+            )
+
+        # Auto-unfreeze if drift resolved
+        if abs(pos.allocation_drift()) <= DRIFT_TOLERANCE:
+            unknown_qty = pos.get_allocation(UNKNOWN_STRATEGY)
+            if unknown_qty == 0:
+                pos.frozen = False
+                logger.info(f"Unfroze {symbol} after admin correction")
+
+        return {
+            "symbol": symbol, "strategy_id": strategy_id,
+            "old_qty": old_qty, "new_qty": new_qty,
+            "drift": pos.allocation_drift(), "frozen": pos.frozen,
+        }
+
     async def eod_cleanup(self) -> None:
         """End-of-day: cancel all working orders and reset daily state."""
         # Query broker for final fill status before cancelling
@@ -1057,6 +1183,7 @@ class OMSCore:
         self.state.daily_realized_pnl = 0.0
         self.risk.halt_new_entries = False
         self.risk.flatten_in_progress = False
+        self._rejection_counts.clear()
         logger.info("EOD cleanup complete")
 
     async def start(self) -> None:
@@ -1065,6 +1192,20 @@ class OMSCore:
         if self.persistence:
             await self.persistence.connect()
             await self._load_persisted_state()
+
+        # Run first reconciliation synchronously so equity is loaded before
+        # the server starts accepting strategy requests (prevents equity=0 gap)
+        try:
+            await self._reconcile(cycle_count=0)
+            if self.state.equity > 0:
+                logger.info(f"Initial reconciliation complete — equity={self.state.equity:,.0f}")
+            else:
+                logger.warning(
+                    "Initial reconciliation completed but equity=0 "
+                    "— KIS may have returned empty data; will retry in loop"
+                )
+        except Exception as e:
+            logger.error(f"Initial reconciliation failed (will retry in loop): {e}")
 
         # Start reconciliation loop
         await self.start_reconciliation_loop()

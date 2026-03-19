@@ -18,6 +18,11 @@ x-common: &common
     - .env
   networks:
     - kstock
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
 
 x-strategy-base: &strategy-base
   <<: *common
@@ -28,6 +33,12 @@ x-strategy-base: &strategy-base
     <<: *common-env
     OMS_URL: http://oms:8000
     CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
+  healthcheck:
+    test: ["CMD-SHELL", "sh /app/scripts/strategy_healthcheck.sh"]
+    interval: 60s
+    timeout: 5s
+    retries: 3
+    start_period: 120s
 
 services:
   # ===========================================

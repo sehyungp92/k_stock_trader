@@ -20,6 +20,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     restart: unless-stopped
 
   oms:
@@ -57,6 +62,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     restart: unless-stopped
 
   kpr:
@@ -91,6 +101,17 @@ services:
     depends_on:
       oms:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "sh /app/scripts/strategy_healthcheck.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     restart: unless-stopped
 
   pcim:
@@ -126,6 +147,17 @@ services:
     depends_on:
       oms:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "sh /app/scripts/strategy_healthcheck.sh"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     restart: unless-stopped
 
   dashboard:
@@ -141,6 +173,11 @@ services:
     depends_on:
       oms:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     restart: unless-stopped
 
 volumes:

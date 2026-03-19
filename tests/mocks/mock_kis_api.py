@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import uuid
 
+from kis_core.kis_client import OrderResult
+
 
 @dataclass
 class MockOrder:
@@ -119,10 +121,10 @@ class MockKoreaInvestAPI:
         self._order_counter += 1
         return f"ORD{self._order_counter:08d}"
 
-    def place_limit_buy(self, symbol: str, price: float, qty: int) -> Optional[str]:
+    def place_limit_buy(self, symbol: str, price: float, qty: int) -> OrderResult:
         """Place limit buy order."""
         if self.fail_orders:
-            return None
+            return OrderResult(success=False, error_code='MOCK_REJECT', error_message='Order rejected (mock)')
         if self.fail_rate_limit:
             self._fail_count += 1
             if self._fail_count <= 2:
@@ -138,12 +140,12 @@ class MockKoreaInvestAPI:
             qty=qty,
             price=price,
         )
-        return order_id
+        return OrderResult(success=True, order_id=order_id)
 
-    def place_limit_sell(self, symbol: str, price: float, qty: int) -> Optional[str]:
+    def place_limit_sell(self, symbol: str, price: float, qty: int) -> OrderResult:
         """Place limit sell order."""
         if self.fail_orders:
-            return None
+            return OrderResult(success=False, error_code='MOCK_REJECT', error_message='Order rejected (mock)')
 
         order_id = self._generate_order_id()
         self._orders[order_id] = MockOrder(
@@ -154,12 +156,12 @@ class MockKoreaInvestAPI:
             qty=qty,
             price=price,
         )
-        return order_id
+        return OrderResult(success=True, order_id=order_id)
 
-    def place_market_buy(self, symbol: str, qty: int) -> Optional[str]:
+    def place_market_buy(self, symbol: str, qty: int) -> OrderResult:
         """Place market buy order."""
         if self.fail_orders:
-            return None
+            return OrderResult(success=False, error_code='MOCK_REJECT', error_message='Order rejected (mock)')
 
         price = self.prices.get(symbol, 10000)
         order_id = self._generate_order_id()
@@ -178,12 +180,12 @@ class MockKoreaInvestAPI:
 
         # Update position
         self._update_position_on_fill(symbol, qty, price)
-        return order_id
+        return OrderResult(success=True, order_id=order_id)
 
-    def place_market_sell(self, symbol: str, qty: int) -> Optional[str]:
+    def place_market_sell(self, symbol: str, qty: int) -> OrderResult:
         """Place market sell order."""
         if self.fail_orders:
-            return None
+            return OrderResult(success=False, error_code='MOCK_REJECT', error_message='Order rejected (mock)')
 
         price = self.prices.get(symbol, 10000)
         order_id = self._generate_order_id()
@@ -202,7 +204,7 @@ class MockKoreaInvestAPI:
 
         # Update position
         self._update_position_on_fill(symbol, -qty, price)
-        return order_id
+        return OrderResult(success=True, order_id=order_id)
 
     def cancel_order(self, order_id: str, qty: int) -> bool:
         """Cancel order."""

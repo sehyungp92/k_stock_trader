@@ -137,27 +137,42 @@ class KISExecutionAdapter:
             try:
                 if order_type == "MARKET":
                     if side == "BUY":
-                        order_id = await asyncio.to_thread(self.api.place_market_buy, symbol, qty)
+                        order_result = await asyncio.to_thread(self.api.place_market_buy, symbol, qty)
                     else:
-                        order_id = await asyncio.to_thread(self.api.place_market_sell, symbol, qty)
+                        order_result = await asyncio.to_thread(self.api.place_market_sell, symbol, qty)
 
                 elif order_type in ("LIMIT", "MARKETABLE_LIMIT"):
                     if side == "BUY":
-                        order_id = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price, qty)
+                        order_result = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price, qty)
                     else:
-                        order_id = await asyncio.to_thread(self.api.place_limit_sell, symbol, limit_price, qty)
+                        order_result = await asyncio.to_thread(self.api.place_limit_sell, symbol, limit_price, qty)
 
                 elif order_type == "STOP_LIMIT":
                     logger.warning(f"STOP_LIMIT simulated as LIMIT at {stop_price}")
                     if side == "BUY":
-                        order_id = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price or stop_price, qty)
+                        order_result = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price or stop_price, qty)
                     else:
-                        order_id = await asyncio.to_thread(self.api.place_limit_sell, symbol, limit_price or stop_price, qty)
+                        order_result = await asyncio.to_thread(self.api.place_limit_sell, symbol, limit_price or stop_price, qty)
                 else:
                     return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message=f"Unknown order type: {order_type}")
 
-                if order_id:
-                    return AdapterResult(True, order_id=order_id)
+                # Handle both OrderResult objects and legacy str/None returns
+                if hasattr(order_result, 'success'):
+                    if order_result.success:
+                        return AdapterResult(True, order_id=order_result.order_id)
+                    else:
+                        kis_detail = f" [KIS {order_result.error_code}: {order_result.error_message}]" if order_result.error_code else ""
+                        logger.warning(
+                            f"KIS order rejected: {symbol} {side} x{qty} "
+                            f"type={order_type} limit={limit_price}{kis_detail}"
+                        )
+                        return AdapterResult(
+                            False, error=AdapterError.REJECTED_INVALID,
+                            message=f"Order rejected by KIS: {symbol} {side} x{qty} type={order_type}{kis_detail}",
+                        )
+                # Legacy path: str (order_id) or None
+                elif order_result:
+                    return AdapterResult(True, order_id=order_result)
                 else:
                     logger.warning(
                         f"KIS order rejected: {symbol} {side} x{qty} "

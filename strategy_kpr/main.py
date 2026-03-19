@@ -179,6 +179,8 @@ async def run_kpr():
     last_poll: Dict[str, datetime] = {}
     # Track session open price per symbol (for drop_from_open feature)
     day_open: Dict[str, float] = {}
+    exit_reject_count: Dict[str, int] = {}
+    exit_reject_last_ts: Dict[str, float] = {}
 
     while not market_open():
         await asyncio.sleep(60)
@@ -424,6 +426,16 @@ async def run_kpr():
 
                 # --- Exit checks (before entry FSM) ---
                 if s.fsm == FSMState.IN_POSITION:
+                    _exit_rejects = exit_reject_count.get(ticker, 0)
+                    if _exit_rejects > 0:
+                        if _exit_rejects >= 10:
+                            if _exit_rejects == 10:
+                                logger.error(f"{ticker}: Exit rejected 10 times, suspending retries")
+                                exit_reject_count[ticker] = 11
+                            continue
+                        _backoff_secs = min(30 * (2 ** (_exit_rejects - 1)), 300)
+                        if now_ts - exit_reject_last_ts.get(ticker, 0.0) < _backoff_secs:
+                            continue
                     should_exit, reason, exit_qty = check_exits(
                         s, close, now, investor_sig, micro_sig,
                     )
@@ -453,6 +465,8 @@ async def run_kpr():
                                 s.trail_stop = max(s.trail_stop, s.entry_px)
                             s._exit_reason = reason
                             s.fsm = FSMState.PENDING_EXIT
+                            exit_reject_count.pop(ticker, None)
+                            exit_reject_last_ts.pop(ticker, None)
                             logger.info(f"{ticker}: Exit submitted, PENDING_EXIT")
                         else:
                             if instr:
@@ -467,7 +481,12 @@ async def run_kpr():
                                     message=f"{result.status.name}: {result.message}",
                                     context={"symbol": ticker, "action": "exit", "reason": reason},
                                 )
-                            logger.warning(f"{ticker}: Exit {result.status.name} - {result.message}")
+                            exit_reject_count[ticker] = exit_reject_count.get(ticker, 0) + 1
+                            exit_reject_last_ts[ticker] = now_ts
+                            logger.warning(
+                                f"{ticker}: Exit {result.status.name} - {result.message} "
+                                f"(reject #{exit_reject_count[ticker]})"
+                            )
                     continue
 
                 # --- PENDING_EXIT: confirm exit fill from OMS allocation ---

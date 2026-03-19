@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 import asyncio
 
+from kis_core.kis_client import OrderResult
 from oms.adapter import (
     KISExecutionAdapter,
     AdapterResult,
@@ -99,10 +100,10 @@ class TestKISExecutionAdapterSubmitOrder:
     def mock_api(self):
         """Create mock KIS API."""
         api = MagicMock()
-        api.place_market_buy.return_value = "ORD001"
-        api.place_market_sell.return_value = "ORD002"
-        api.place_limit_buy.return_value = "ORD003"
-        api.place_limit_sell.return_value = "ORD004"
+        api.place_market_buy.return_value = OrderResult(success=True, order_id="ORD001")
+        api.place_market_sell.return_value = OrderResult(success=True, order_id="ORD002")
+        api.place_limit_buy.return_value = OrderResult(success=True, order_id="ORD003")
+        api.place_limit_sell.return_value = OrderResult(success=True, order_id="ORD004")
         return api
 
     @pytest.fixture
@@ -212,8 +213,10 @@ class TestKISExecutionAdapterSubmitOrder:
 
     @pytest.mark.asyncio
     async def test_api_returns_none_rejected(self, adapter, mock_api):
-        """Test API returning None is treated as rejection."""
-        mock_api.place_market_buy.return_value = None
+        """Test API returning failure OrderResult is treated as rejection."""
+        mock_api.place_market_buy.return_value = OrderResult(
+            success=False, error_code='MOCK01', error_message='Test rejection'
+        )
 
         result = await adapter.submit_order(
             symbol="005930",
@@ -224,6 +227,7 @@ class TestKISExecutionAdapterSubmitOrder:
 
         assert result.success is False
         assert result.error == AdapterError.REJECTED_INVALID
+        assert "MOCK01" in result.message
 
 
 class TestKISExecutionAdapterRetry:
@@ -240,7 +244,7 @@ class TestKISExecutionAdapterRetry:
             call_count += 1
             if call_count < 3:
                 raise Exception("rate limit exceeded")
-            return "ORD001"
+            return OrderResult(success=True, order_id="ORD001")
 
         mock_api.place_market_buy.side_effect = mock_buy
         adapter = KISExecutionAdapter(mock_api)
@@ -560,7 +564,7 @@ class TestKISExecutionAdapterStopLimitSell:
     def mock_api(self):
         """Create mock KIS API."""
         api = MagicMock()
-        api.place_limit_sell.return_value = "ORD004"
+        api.place_limit_sell.return_value = OrderResult(success=True, order_id="ORD004")
         return api
 
     @pytest.fixture

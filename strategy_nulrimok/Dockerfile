@@ -24,6 +24,9 @@ COPY scripts/backfill_lrs.py /app/scripts/backfill_lrs.py
 # Copy instrumentation
 COPY instrumentation/ /app/instrumentation/
 
+# Copy healthcheck script
+COPY scripts/strategy_healthcheck.sh /app/scripts/strategy_healthcheck.sh
+
 ENV PYTHONPATH=/app
 
 CMD ["python", "-m", "strategy_nulrimok.main"]

@@ -1,9 +1,10 @@
 """PCIM Strategy Main Orchestration."""
 
 import asyncio
+import json
 import os
 import time as time_module
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from typing import Dict, List, Optional
 from loguru import logger
 
@@ -276,13 +277,36 @@ async def run_pcim():
     intraday_halted = False
     entry_submitted: Dict[str, int] = {}  # symbol -> intended_qty
     entry_reject_count: Dict[str, int] = {}  # symbol -> consecutive OMS rejection count
+    exit_reject_count: Dict[str, int] = {}   # symbol -> consecutive exit rejection count
+    exit_reject_last_ts: Dict[str, float] = {}  # symbol -> last rejection timestamp
     cancel_done_today = False
     # Phase-completion flags to prevent repeated computation
     stats_done_today = False
     premarket_done_today = False
     day_reset_done = False  # Guard: reset-for-next-day runs once per day
-    processed_video_ids: set = set()  # Dedup: skip already-extracted videos
-    import time as _time
+    # Dedup: skip already-extracted videos (persisted to disk)
+    _video_dedup_path = os.path.join(state_dir, "processed_videos.json")
+
+    def _load_processed_videos() -> Dict[str, str]:
+        """Load processed video IDs from disk (video_id -> ISO timestamp)."""
+        try:
+            if os.path.exists(_video_dedup_path):
+                with open(_video_dedup_path, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.warning(f"Failed to load processed_videos.json: {e}")
+        return {}
+
+    def _save_processed_videos(vids: Dict[str, str]) -> None:
+        """Save processed video IDs to disk."""
+        try:
+            os.makedirs(os.path.dirname(_video_dedup_path), exist_ok=True)
+            with open(_video_dedup_path, 'w') as f:
+                json.dump(vids, f)
+        except Exception as e:
+            logger.warning(f"Failed to save processed_videos.json: {e}")
+
+    processed_video_ids: Dict[str, str] = _load_processed_videos()
     last_night_pipeline_ts = 0.0
     night_pipeline_interval = 3600.0  # seconds (1 hour)
     last_heartbeat_ts = 0.0
@@ -291,7 +315,7 @@ async def run_pcim():
     while True:
         now = get_kst_now()
         today = now.date()
-        now_ts = _time.time()
+        now_ts = time_module.time()
 
         # Clear day_reset_done flag in the morning so reset can fire again at 18:00
         if now.time() < time(18, 0):
@@ -351,14 +375,19 @@ async def run_pcim():
                 # Clean up transcript before extraction
                 transcript = signal_extractor.punctuate_transcript(raw_transcript)
                 result = signal_extractor.extract_signals(transcript, video_id=video.video_id)
-                processed_video_ids.add(video.video_id)
+                processed_video_ids[video.video_id] = datetime.now().isoformat()
+                _save_processed_videos(processed_video_ids)
                 if not result or not result.signals:
                     continue
 
                 for signal in result.signals:
-                    # Use LLM-provided ticker if available, otherwise resolve
-                    if signal.ticker:
-                        symbol = signal.ticker
+                    # Always validate ticker through KRX lookup
+                    raw_ticker = signal.ticker
+                    if raw_ticker:
+                        symbol = api.resolve_symbol(raw_ticker)
+                        if not symbol:
+                            logger.warning(f"TICKER_INVALID: '{raw_ticker}' for '{signal.company_name}' not on KRX, falling back to name resolve")
+                            symbol = api.resolve_symbol(signal.company_name)
                     else:
                         symbol = api.resolve_symbol(signal.company_name)
 
@@ -1095,7 +1124,24 @@ async def run_pcim():
                 if position_manager.has_pending_exit(pos.symbol):
                     continue
 
+                # Backoff guard: skip if exit was recently rejected (exponential backoff)
+                _exit_rejects = exit_reject_count.get(pos.symbol, 0)
+                if _exit_rejects > 0:
+                    if _exit_rejects >= 10:
+                        # Max retries exceeded — log once per cycle, don't spam KIS
+                        if _exit_rejects == 10:
+                            logger.error(f"{pos.symbol}: Exit rejected 10 times, suspending retries until day reset")
+                            exit_reject_count[pos.symbol] = 11  # prevent repeated log
+                        continue
+                    _backoff_secs = min(30 * (2 ** (_exit_rejects - 1)), 300)
+                    _elapsed = now_ts - exit_reject_last_ts.get(pos.symbol, 0.0)
+                    if _elapsed < _backoff_secs:
+                        continue
+
                 quote = api.get_quote(pos.symbol)
+                if not quote or 'last' not in quote:
+                    logger.warning(f"{pos.symbol}: Quote unavailable, skipping exit checks")
+                    continue
                 current_price = quote['last']
                 _last_prices[pos.symbol] = current_price
 
@@ -1116,7 +1162,11 @@ async def run_pcim():
                             )
                         # Defer close_position and on_exit_fill to OMS confirmation
                         position_manager.submit_exit(pos.symbol, "STOP", pos.remaining_qty, intent.intent_id, current_price)
+                        exit_reject_count.pop(pos.symbol, None)
+                        exit_reject_last_ts.pop(pos.symbol, None)
                     else:
+                        exit_reject_count[pos.symbol] = exit_reject_count.get(pos.symbol, 0) + 1
+                        exit_reject_last_ts[pos.symbol] = now_ts
                         if instr:
                             instr.on_order_event(
                                 order_id=getattr(result, 'order_id', '') or intent.intent_id,
@@ -1124,7 +1174,8 @@ async def run_pcim():
                                 requested_qty=pos.remaining_qty, reject_reason=result.message or "",
                                 related_trade_id=intent.intent_id,
                             )
-                        logger.warning(f"{pos.symbol}: Stop exit {result.status.name} - {result.message}")
+                        logger.warning(f"{pos.symbol}: Stop exit {result.status.name} - {result.message} "
+                                      f"(reject #{exit_reject_count[pos.symbol]}, backoff {min(30 * (2 ** (exit_reject_count[pos.symbol] - 1)), 300)}s)")
                     continue
 
                 should_tp, qty = check_take_profit(pos, current_price)
@@ -1140,7 +1191,11 @@ async def run_pcim():
                             )
                         # Defer reduce_position and on_exit_fill to OMS confirmation
                         position_manager.submit_exit(pos.symbol, "TAKE_PROFIT", qty, intent.intent_id, current_price)
+                        exit_reject_count.pop(pos.symbol, None)
+                        exit_reject_last_ts.pop(pos.symbol, None)
                     else:
+                        exit_reject_count[pos.symbol] = exit_reject_count.get(pos.symbol, 0) + 1
+                        exit_reject_last_ts[pos.symbol] = now_ts
                         if instr:
                             instr.on_order_event(
                                 order_id=getattr(result, 'order_id', '') or intent.intent_id,
@@ -1148,7 +1203,8 @@ async def run_pcim():
                                 requested_qty=qty, reject_reason=result.message or "",
                                 related_trade_id=intent.intent_id,
                             )
-                        logger.warning(f"{pos.symbol}: Take profit {result.status.name} - {result.message}")
+                        logger.warning(f"{pos.symbol}: Take profit {result.status.name} - {result.message} "
+                                      f"(reject #{exit_reject_count[pos.symbol]}, backoff {min(30 * (2 ** (exit_reject_count[pos.symbol] - 1)), 300)}s)")
                     continue  # Don't fall through to time_exit while TP is pending
 
                 # Use KRX trading calendar for day count if available
@@ -1165,7 +1221,11 @@ async def run_pcim():
                             )
                         # Defer close_position and on_exit_fill to OMS confirmation
                         position_manager.submit_exit(pos.symbol, "DAY15_EXIT", pos.remaining_qty, intent.intent_id, current_price)
+                        exit_reject_count.pop(pos.symbol, None)
+                        exit_reject_last_ts.pop(pos.symbol, None)
                     else:
+                        exit_reject_count[pos.symbol] = exit_reject_count.get(pos.symbol, 0) + 1
+                        exit_reject_last_ts[pos.symbol] = now_ts
                         if instr:
                             instr.on_order_event(
                                 order_id=getattr(result, 'order_id', '') or intent.intent_id,
@@ -1173,7 +1233,8 @@ async def run_pcim():
                                 requested_qty=pos.remaining_qty, reject_reason=result.message or "",
                                 related_trade_id=intent.intent_id,
                             )
-                        logger.warning(f"{pos.symbol}: Time exit {result.status.name} - {result.message}")
+                        logger.warning(f"{pos.symbol}: Time exit {result.status.name} - {result.message} "
+                                      f"(reject #{exit_reject_count[pos.symbol]}, backoff {min(30 * (2 ** (exit_reject_count[pos.symbol] - 1)), 300)}s)")
 
         # =================================================================
         # EOD TRAILING UPDATE
@@ -1195,11 +1256,16 @@ async def run_pcim():
             intraday_halted = False
             entry_submitted.clear()
             entry_reject_count.clear()
+            exit_reject_count.clear()
+            exit_reject_last_ts.clear()
             bucket_a_pending.clear()
             cancel_done_today = False
             stats_done_today = False
             premarket_done_today = False
-            processed_video_ids.clear()
+            # Prune video dedup entries older than 7 days
+            _cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+            processed_video_ids = {vid: ts for vid, ts in processed_video_ids.items() if ts > _cutoff}
+            _save_processed_videos(processed_video_ids)
             last_night_pipeline_ts = 0.0
             position_manager.reset_daily_state()
             _mfe_prices.clear()

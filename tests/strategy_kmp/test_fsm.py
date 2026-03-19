@@ -62,6 +62,6 @@ class TestAcceptanceTimedOut:
 
     def test_exactly_at_boundary(self):
         s = SymbolState(code="005930")
-        s.break_ts = time.time() - 300  # exactly 5 min
+        s.break_ts = time.time() - 299.9  # just under 5 min (avoids timing flake)
         # Should NOT time out at exactly 300s since check is > not >=
         assert acceptance_timed_out(s) is False

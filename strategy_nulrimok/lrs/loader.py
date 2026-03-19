@@ -101,13 +101,20 @@ def populate_lrs(
         logger.info(f"LRS loader: sector_map populated ({n} tickers)")
 
     # ------------------------------------------------------------------
-    # 2. Staleness check — skip if today's OHLCV already present
+    # 2. Staleness check — skip only if ALL data tables are fresh today.
+    #    Checking min across tables guards against partial-fetch failures
+    #    (e.g. OHLCV succeeded but flow/index failed mid-way).
     # ------------------------------------------------------------------
-    max_ohlcv = lrs.get_max_date("daily_ohlcv")
-    if max_ohlcv and max_ohlcv >= today:
+    table_dates = {
+        t: lrs.get_max_date(t)
+        for t in ("daily_ohlcv", "daily_flow", "index_ohlcv")
+    }
+    stale_tables = [t for t, d in table_dates.items() if not d or d < today]
+    if not stale_tables:
         elapsed = time.monotonic() - t0
-        logger.info(f"LRS already fresh (max_date={max_ohlcv}), skipping fetch ({elapsed:.1f}s)")
+        logger.info(f"LRS already fresh ({table_dates}), skipping fetch ({elapsed:.1f}s)")
         return
+    logger.info(f"LRS stale tables: {stale_tables} (dates={table_dates})")
 
     logger.info(f"Populating LRS for {len(universe)} tickers (today={today}) ...")
 

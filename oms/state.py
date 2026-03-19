@@ -200,6 +200,26 @@ class StateStore:
             elif alloc.qty <= 0:
                 alloc.entry_ts = None
 
+    def set_allocation(
+        self, symbol: str, strategy_id: str, qty: int,
+        cost_basis: Optional[float] = None,
+    ) -> int:
+        """Set strategy allocation to an absolute value. Returns previous qty."""
+        with self._lock:
+            pos = self.get_position(symbol)
+            if strategy_id not in pos.allocations:
+                pos.allocations[strategy_id] = StrategyAllocation(strategy_id=strategy_id)
+            alloc = pos.allocations[strategy_id]
+            old_qty = alloc.qty
+            alloc.qty = qty
+            if cost_basis is not None:
+                alloc.cost_basis = cost_basis
+            if alloc.qty > 0 and alloc.entry_ts is None:
+                alloc.entry_ts = datetime.now()
+            elif alloc.qty <= 0:
+                alloc.entry_ts = None
+            return old_qty
+
     def set_entry_lock(
         self, symbol: str, strategy_id: str, until_ts: float
     ) -> bool:
