@@ -36,6 +36,10 @@ async def reconcile_exposure(
         logger.debug(f"Reconciliation failed: {e}")
         return
 
+    # Guard: OMS unreachable — skip to preserve existing exposure state
+    if positions is None:
+        return
+
     # Build position data for reconciliation: symbol -> (qty, price)
     position_data: Dict[str, tuple] = {}
     working_orders: Set[str] = set()

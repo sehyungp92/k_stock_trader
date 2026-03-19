@@ -144,7 +144,6 @@ async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, 
             atr_ref = pos.atr30m if pos.atr30m > 0 else (pos.max_price - pos.entry_price)
             if atr_ref > 0 and (close - pos.entry_price) >= MEAN_REV_PARTIAL_ATR_MULT * atr_ref:
                 exit_reason = "mean_rev_partial"
-                pos.partial_taken = True
         else:
             # Trail remaining 30%: higher of entry+0.5×ATR or 5SMA
             atr_ref = pos.atr30m if pos.atr30m > 0 else (pos.max_price - pos.entry_price) * 0.5
@@ -174,12 +173,11 @@ async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, 
         exit_reason = "time_stop_multiday"
 
     if exit_reason:
-        # Partial exit for mean reversion: sell 70%, keep 30%
+        # Compute exit qty before submit (partial exit for mean reversion: sell 70%, keep 30%)
         if exit_reason == "mean_rev_partial":
             exit_qty = int(pos.remaining_qty * 0.70)
             if exit_qty <= 0:
                 return None
-            pos.remaining_qty -= exit_qty
         else:
             exit_qty = pos.remaining_qty
 
@@ -190,6 +188,10 @@ async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, 
         )
         result = await oms.submit_intent(intent)
         if result.status.name in ("EXECUTED", "APPROVED"):
+            # Mutate state only AFTER OMS confirms acceptance
+            if exit_reason == "mean_rev_partial":
+                pos.partial_taken = True
+            pos.remaining_qty -= exit_qty
             if instr:
                 instr.on_order_event(
                     order_id=getattr(result, 'order_id', '') or intent.intent_id,
@@ -246,7 +248,11 @@ async def handle_flow_reversal_exits(artifacts: list, oms, kis_api=None, instr=N
                 if bid > 0:
                     limit_px = bid * 0.995
             except Exception:
-                pass  # Fall back to market-like OMS behavior
+                pass  # Fall back to fallback price below
+
+        # Fallback: use avg_price if quote fetch failed
+        if limit_px is None and artifact.avg_price > 0:
+            limit_px = artifact.avg_price * 0.98  # 2% below entry as fallback
 
         intent = Intent(
             intent_type=IntentType.EXIT,

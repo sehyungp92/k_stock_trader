@@ -51,14 +51,15 @@ class TestMinSurgeThreshold:
 
     def test_at_0916(self):
         """Test threshold at 09:16."""
-        # Base is 3.0
         mock_switches = MagicMock()
+        mock_switches.min_surge_base = 3.0
         mock_switches.min_surge_slope = 0.03
         assert min_surge_threshold(0, mock_switches) == 3.0
 
     def test_at_10_minutes(self):
         """Test threshold at 10 minutes after."""
         mock_switches = MagicMock()
+        mock_switches.min_surge_base = 3.0
         mock_switches.min_surge_slope = 0.03
         # 3.0 + 0.03 * 10 = 3.3
         assert min_surge_threshold(10, mock_switches) == pytest.approx(3.3, abs=0.01)
@@ -66,6 +67,7 @@ class TestMinSurgeThreshold:
     def test_at_44_minutes(self):
         """Test threshold capped at 44 minutes."""
         mock_switches = MagicMock()
+        mock_switches.min_surge_base = 3.0
         mock_switches.min_surge_slope = 0.03
         # 3.0 + 0.03 * 44 = 4.32
         assert min_surge_threshold(44, mock_switches) == pytest.approx(4.32, abs=0.01)
@@ -73,6 +75,7 @@ class TestMinSurgeThreshold:
     def test_beyond_44_minutes(self):
         """Test threshold doesn't increase beyond 44 minutes."""
         mock_switches = MagicMock()
+        mock_switches.min_surge_base = 3.0
         mock_switches.min_surge_slope = 0.03
         threshold_44 = min_surge_threshold(44, mock_switches)
         threshold_60 = min_surge_threshold(60, mock_switches)
@@ -94,7 +97,8 @@ class TestMinSurgeThresholdStrict:
     def test_strict_higher_than_permissive(self):
         """Test strict is higher than permissive at same time."""
         mock_switches = MagicMock()
-        mock_switches.min_surge_slope = 0.03
+        mock_switches.min_surge_base = 2.5
+        mock_switches.min_surge_slope = 0.02
 
         for minutes in [10, 20, 30]:
             permissive = min_surge_threshold(minutes, mock_switches)

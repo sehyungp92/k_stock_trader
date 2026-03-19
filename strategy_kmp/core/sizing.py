@@ -37,7 +37,7 @@ def compute_qty(
         program_mult: Program regime multiplier
         time_mult: Time decay multiplier
         now_kst: Current KST time
-        regime_breadth_ok: Whether leader breadth >= 8
+        regime_breadth_ok: Whether leader breadth meets minimum threshold
         not_chop: Whether market is NOT in chop
 
     Returns:
@@ -74,7 +74,7 @@ def quality_multiplier(
         s: Symbol state
         now_kst: Current KST time
         switches: Optional KMPSwitches instance (defaults to global)
-        regime_breadth_ok: Whether leader breadth >= 8
+        regime_breadth_ok: Whether leader breadth meets minimum threshold
         not_chop: Whether market is NOT in chop
 
     Returns 0.0, 0.5, 1.0, or 1.5 based on score.

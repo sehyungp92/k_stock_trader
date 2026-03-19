@@ -132,3 +132,6 @@ _references/
 
 # Documentation (generated reports)
 docs/
+
+# Claude
+.claudeignore

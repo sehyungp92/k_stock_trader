@@ -192,9 +192,13 @@ async def _cancel_and_handle_partial_fills(
 
             if fill_pct < keep_pct:
                 exit_intent = create_exit_intent(symbol, actual_qty, "PARTIAL_FILL_EXIT", Urgency.HIGH)
-                await oms.submit_intent(exit_intent)
-                position_manager.close_position(symbol, "PARTIAL_FILL_EXIT")
-                logger.info(f"{symbol}: Exiting dust position (fill {fill_pct:.0%} < {keep_pct:.0%})")
+                result = await oms.submit_intent(exit_intent)
+                if result.status.name in ("EXECUTED", "APPROVED"):
+                    position_manager.submit_exit(symbol, "PARTIAL_FILL_EXIT", actual_qty,
+                                                 exit_intent.intent_id, pos.entry_price)
+                    logger.info(f"{symbol}: Exiting dust position (fill {fill_pct:.0%} < {keep_pct:.0%})")
+                else:
+                    logger.warning(f"{symbol}: Dust exit rejected, will retry next cycle")
 
     # Track Bucket A misses (triggered but not filled by cutoff)
     if bucket_a_tracker:
@@ -422,6 +426,10 @@ async def run_pcim():
             logger.info("Refreshing daily stats")
             stats_done_today = True
             acct = await oms.get_account_state()
+            if acct is None:
+                stats_done_today = False  # Retry next cycle
+                await asyncio.sleep(5)
+                continue
             equity = acct.equity or 100_000_000
 
             for c in candidates:
@@ -578,6 +586,10 @@ async def run_pcim():
             logger.info("Premarket classification")
             premarket_done_today = True
             acct = await oms.get_account_state()
+            if acct is None:
+                premarket_done_today = False  # Retry next cycle
+                await asyncio.sleep(5)
+                continue
             equity = acct.equity or 100_000_000
 
             for c in approved_watchlist:
@@ -702,6 +714,9 @@ async def run_pcim():
         if time(9, 1) <= now.time() <= time(cancel_at[0], cancel_at[1]) and not intraday_halted:
             # Refresh account state for accurate exposure tracking in fill instrumentation
             acct = await oms.get_account_state()
+            if acct is None:
+                await asyncio.sleep(5)
+                continue
 
             # Intraday halt check
             if kospi_prev_close:
@@ -716,6 +731,9 @@ async def run_pcim():
 
             # First, check pending orders for fills
             all_positions = await oms.get_all_positions()
+            if all_positions is None:
+                await asyncio.sleep(5)
+                continue
             for symbol in list(position_manager.pending_orders.keys()):
                 oms_pos = all_positions.get(symbol)
                 alloc_qty = oms_pos.get_allocation(STRATEGY_ID) if oms_pos else 0
@@ -1050,6 +1068,8 @@ async def run_pcim():
                     continue
                 try:
                     alloc_qty = await oms.get_allocation(pos.symbol, STRATEGY_ID)
+                    if alloc_qty is None:
+                        continue  # OMS unreachable, stay pending
                     exit_type = pos.pending_exit_type
 
                     if exit_type in ("STOP", "DAY15_EXIT") and alloc_qty <= 0:
@@ -1073,6 +1093,12 @@ async def run_pcim():
                         position_manager.close_position(pos.symbol, exit_type)
                         position_manager.clear_pending_exit(pos.symbol)
                         logger.info(f"{pos.symbol}: {exit_type} exit fill confirmed")
+
+                    elif exit_type in ("STOP", "DAY15_EXIT") and alloc_qty < pos.remaining_qty:
+                        # Partial fill — absorb what was sold, keep pending for rest
+                        filled = pos.remaining_qty - alloc_qty
+                        position_manager.reduce_position(pos.symbol, filled)
+                        logger.info(f"{pos.symbol}: {exit_type} partial fill, {filled} sold, {alloc_qty} remaining")
 
                     elif exit_type == "TAKE_PROFIT":
                         expected_remaining = pos.remaining_qty - pos.pending_exit_qty
@@ -1110,6 +1136,12 @@ async def run_pcim():
                             ))
                         except Exception:
                             pass
+                        # Absorb any partial fills before clearing pending state
+                        current_alloc = await oms.get_allocation(pos.symbol, STRATEGY_ID)
+                        if current_alloc is not None and current_alloc < pos.remaining_qty:
+                            filled = pos.remaining_qty - current_alloc
+                            position_manager.reduce_position(pos.symbol, filled)
+                            logger.info(f"{pos.symbol}: Absorbed {filled} partial fills on timeout")
                         position_manager.clear_pending_exit(pos.symbol)
                         # Position stays OPEN, will re-evaluate exits next cycle
                 except Exception as e:

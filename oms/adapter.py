@@ -8,9 +8,13 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 from loguru import logger
+
+_KST = ZoneInfo("Asia/Seoul")
 
 
 class AdapterError(Enum):
@@ -87,6 +91,7 @@ class KISExecutionAdapter:
 
     def __init__(self, kis_api: 'KoreaInvestAPI'):
         self.api = kis_api
+        self._known_order_ids: set = set()
 
     async def submit_order(
         self,
@@ -113,6 +118,12 @@ class KISExecutionAdapter:
         Returns:
             AdapterResult with order_id if successful
         """
+        # Weekend guard: reject orders when market is closed
+        now_kst = datetime.now(_KST)
+        if now_kst.weekday() >= 5:  # Saturday=5, Sunday=6
+            logger.warning(f"Order rejected: market closed (weekend) {symbol} {side} x{qty}")
+            return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message="Market closed (weekend)")
+
         # Client-side order reference for deduplication across retries.
         # If first attempt succeeds but response times out, the retry
         # would create a duplicate order. This ref lets us detect that
@@ -125,13 +136,25 @@ class KISExecutionAdapter:
                 try:
                     result = await self.get_orders()
                     if result.ok:
-                        for bo in result.data:
-                            if bo.symbol == symbol and bo.side == side and bo.qty == qty:
-                                logger.warning(
-                                    f"Detected likely duplicate order on retry: {bo.order_id} "
-                                    f"(ref={client_ref})"
-                                )
-                                return AdapterResult(True, order_id=bo.order_id)
+                        # Filter to unknown orders only — exclude orders we already track
+                        unknown_matches = [
+                            bo for bo in result.data
+                            if bo.symbol == symbol and bo.side == side and bo.qty == qty
+                            and bo.order_id not in self._known_order_ids
+                        ]
+                        if len(unknown_matches) == 1:
+                            bo = unknown_matches[0]
+                            self._known_order_ids.add(bo.order_id)
+                            logger.warning(
+                                f"Detected likely duplicate order on retry: {bo.order_id} "
+                                f"(ref={client_ref})"
+                            )
+                            return AdapterResult(True, order_id=bo.order_id)
+                        elif len(unknown_matches) > 1:
+                            logger.warning(
+                                f"Ambiguous retry match ({len(unknown_matches)} candidates) "
+                                f"for {symbol} {side} x{qty} — submitting fresh order"
+                            )
                 except Exception:
                     pass  # Best-effort check; proceed with retry
             try:
@@ -159,6 +182,7 @@ class KISExecutionAdapter:
                 # Handle both OrderResult objects and legacy str/None returns
                 if hasattr(order_result, 'success'):
                     if order_result.success:
+                        self._known_order_ids.add(order_result.order_id)
                         return AdapterResult(True, order_id=order_result.order_id)
                     else:
                         kis_detail = f" [KIS {order_result.error_code}: {order_result.error_message}]" if order_result.error_code else ""
@@ -172,6 +196,7 @@ class KISExecutionAdapter:
                         )
                 # Legacy path: str (order_id) or None
                 elif order_result:
+                    self._known_order_ids.add(order_result)
                     return AdapterResult(True, order_id=order_result)
                 else:
                     logger.warning(
@@ -193,6 +218,10 @@ class KISExecutionAdapter:
                 return AdapterResult(False, error=AdapterError.TEMP_ERROR, message=str(e))
 
         return AdapterResult(False, error=AdapterError.TEMP_ERROR, message="Max retries exhausted")
+
+    def reset(self) -> None:
+        """Reset adapter state (called from eod_cleanup)."""
+        self._known_order_ids.clear()
 
     async def cancel_order(self, order_id: str, symbol: str, qty: int, branch: str = "") -> AdapterResult:
         """Cancel order. Looks up branch from open orders if not provided."""

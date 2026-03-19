@@ -206,13 +206,16 @@ class OMSClient:
             message=f"OMS unreachable: {last_err}",
         )
 
-    async def get_account_state(self) -> AccountState:
-        """Get account state from OMS (with capital allocation applied)."""
+    async def get_account_state(self) -> Optional[AccountState]:
+        """Get account state from OMS (with capital allocation applied).
+
+        Returns None if OMS is unreachable (distinguishes from default/empty state).
+        """
         url = f"{self.base_url}/api/v1/state/account"
         params = {"strategy_id": self.strategy_id} if self.strategy_id else {}
         data = await self._get_with_retry(url, params=params)
         if data is None:
-            return AccountState()
+            return None
         return AccountState(
             equity=data.get("equity", 0.0),
             buyable_cash=data.get("buyable_cash", 0.0),
@@ -225,11 +228,14 @@ class OMSClient:
             regime_exposure_cap=data.get("regime_exposure_cap", 1.0),
         )
 
-    async def get_all_positions(self) -> Dict[str, PositionInfo]:
-        """Get all positions from OMS."""
+    async def get_all_positions(self) -> Optional[Dict[str, PositionInfo]]:
+        """Get all positions from OMS.
+
+        Returns None if OMS is unreachable; returns {} if OMS says no positions.
+        """
         data = await self._get_with_retry(f"{self.base_url}/api/v1/positions")
         if data is None:
-            return {}
+            return None
         return {symbol: self._parse_position(symbol, pos) for symbol, pos in data.items()}
 
     async def get_position(self, symbol: str) -> Optional[PositionInfo]:
@@ -239,33 +245,36 @@ class OMSClient:
             return None
         return self._parse_position(symbol, data)
 
-    async def get_allocation(self, symbol: str, strategy_id: str) -> int:
-        """Get allocation qty for strategy on symbol."""
-        pos = await self.get_position(symbol)
-        return pos.get_allocation(strategy_id) if pos else 0
+    async def get_allocation(self, symbol: str, strategy_id: str) -> Optional[int]:
+        """Get allocation qty for strategy on symbol.
 
-    async def get_strategy_allocations(self, strategy_id: str) -> Dict[str, AllocationInfo]:
-        """Get all allocations for a strategy."""
-        session = await self._get_session()
-        try:
-            async with session.get(f"{self.base_url}/api/v1/allocations/{strategy_id}", timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status != 200:
-                    return {}
-                data = await resp.json()
-                return {
-                    symbol: AllocationInfo(
-                        strategy_id=alloc["strategy_id"],
-                        qty=alloc["qty"],
-                        cost_basis=alloc["cost_basis"],
-                        entry_ts=alloc.get("entry_ts"),
-                        soft_stop_px=alloc.get("soft_stop_px"),
-                        time_stop_ts=alloc.get("time_stop_ts"),
-                    )
-                    for symbol, alloc in data.items()
-                }
-        except Exception as e:
-            logger.debug(f"get_strategy_allocations failed: {e}")
-            return {}
+        Returns None if OMS is unreachable; returns 0 if position exists but no allocation.
+        """
+        pos = await self.get_position(symbol)
+        if pos is None:
+            return None
+        return pos.get_allocation(strategy_id)
+
+    async def get_strategy_allocations(self, strategy_id: str) -> Optional[Dict[str, AllocationInfo]]:
+        """Get all allocations for a strategy.
+
+        Returns None if OMS is unreachable; returns {} if no allocations exist.
+        """
+        url = f"{self.base_url}/api/v1/allocations/{strategy_id}"
+        data = await self._get_with_retry(url)
+        if data is None:
+            return None
+        return {
+            symbol: AllocationInfo(
+                strategy_id=alloc["strategy_id"],
+                qty=alloc["qty"],
+                cost_basis=alloc["cost_basis"],
+                entry_ts=alloc.get("entry_ts"),
+                soft_stop_px=alloc.get("soft_stop_px"),
+                time_stop_ts=alloc.get("time_stop_ts"),
+            )
+            for symbol, alloc in data.items()
+        }
 
     async def set_vi_cooldown(self, symbol: str, duration_sec: int):
         """Notify OMS of VI cooldown."""
@@ -396,8 +405,12 @@ class _OMSStateProxy:
     async def refresh(self):
         """Refresh cached state. Must be awaited before reading properties."""
         import time
-        self._cached_account = await self._client.get_account_state()
-        self._cached_positions = await self._client.get_all_positions()
+        acct = await self._client.get_account_state()
+        if acct is not None:
+            self._cached_account = acct
+        positions = await self._client.get_all_positions()
+        if positions is not None:
+            self._cached_positions = positions
         self._last_refresh = time.time()
 
     def get_all_positions(self) -> Dict[str, PositionInfo]:

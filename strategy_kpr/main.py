@@ -193,6 +193,9 @@ async def run_kpr():
         now = get_kst_now()
         now_ts = time_module.time()
         acct = await oms.get_account_state()
+        if acct is None:
+            await asyncio.sleep(1)
+            continue
         equity = acct.equity or 100_000_000
         if acct.equity is not None and acct.equity <= 0 and not equity_warned:
             logger.warning(f"KPR: OMS equity=0 — entries will be DEFERRED until reconciliation")
@@ -207,6 +210,12 @@ async def run_kpr():
             last_drift_check = now_ts
             try:
                 all_positions = await oms.get_all_positions()
+
+                # Guard: OMS unreachable — skip drift to avoid wiping local positions
+                if all_positions is None:
+                    logger.debug("Drift check skipped: OMS unreachable")
+                    drift_monitor.block_on_oms_unavailable()
+                    continue
 
                 # Exclude symbols with pending orders from drift detection —
                 # their state is transitional and handled by fill confirmation loops
@@ -493,6 +502,8 @@ async def run_kpr():
                 if s.fsm == FSMState.PENDING_EXIT:
                     try:
                         alloc_qty = await oms.get_allocation(ticker, STRATEGY_ID)
+                        if alloc_qty is None:
+                            continue  # OMS unreachable, stay PENDING_EXIT
                         if alloc_qty <= 0:
                             # Fully exited
                             s.remaining_qty = 0
@@ -539,6 +550,8 @@ async def run_kpr():
                 if s.fsm == FSMState.PENDING_ENTRY:
                     try:
                         alloc_qty = await oms.get_allocation(ticker, STRATEGY_ID)
+                        if alloc_qty is None:
+                            continue  # OMS unreachable, stay PENDING_ENTRY
                         if alloc_qty > 0:
                             # Fill confirmed — get actual entry price from OMS
                             actual_price = close  # fallback

@@ -16,7 +16,7 @@ from kis_core import (
     filter_universe, build_kis_config_from_env,
     create_strategy_client,
 )
-from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, RiskPayload, IntentStatus
+from oms_client import OMSClient, AccountState, Intent, IntentType, Urgency, TimeHorizon, RiskPayload, IntentStatus
 
 from .config.constants import STRATEGY_ID, FLATTEN_TIME, RVOL_MIN
 from .config.switches import kmp_switches
@@ -105,7 +105,7 @@ def compute_regime_ok(
         if s is None or s.fsm == State.DONE:
             continue
         price = last_prices.get(t, 0.0)
-        if s.surge >= 3.0 and s.rvol_1m >= LEADER_RVOL_MIN and s.vwap > 0 and price >= s.vwap:
+        if s.surge >= kmp_switches.min_surge_base and s.rvol_1m >= LEADER_RVOL_MIN and s.vwap > 0 and price >= s.vwap:
             breadth += 1
 
     breadth_ok = breadth >= kmp_switches.regime_breadth_min
@@ -136,7 +136,7 @@ class ChopDetector:
     Detect range-bound / choppy market conditions.
 
     Chop = narrow KOSPI intraday range (<0.4%) AND weak leadership breadth
-    (last 3 breadth readings all < 8).
+    (last 3 breadth readings all below threshold).
     """
 
     def __init__(self):
@@ -165,8 +165,10 @@ class ChopDetector:
         intraday_range = (self._kospi_high - self._kospi_low) / self._kospi_open
         narrow = intraday_range < CHOP_RANGE_THRESHOLD
 
-        # Weak breadth: all recent readings < 8
-        weak_breadth = all(b < 8 for b in self._breadth_history)
+        # Weak breadth: all recent readings below scaled threshold
+        # Uses regime_breadth_min * 3 so threshold scales with switch config
+        chop_breadth_thresh = kmp_switches.regime_breadth_min * 3
+        weak_breadth = all(b < chop_breadth_thresh for b in self._breadth_history)
 
         return narrow and weak_breadth
 
@@ -188,6 +190,10 @@ async def _sync_positions(
 ) -> None:
     """Sync FSM state from OMS positions each loop."""
     all_positions = await oms.get_all_positions()
+
+    # Guard: OMS unreachable — skip sync entirely to avoid wiping state
+    if all_positions is None:
+        return
 
     # Guard: if OMS returned empty but we have active positions, skip sync
     if not all_positions:
@@ -488,7 +494,9 @@ async def run_kmp():
 
     # 09:15 scan
     logger.info("Running 09:15 scan...")
-    candidates = await scan_at_0915(api, universe, baseline_15m, states, rate_budget=rate_budget, instr=instr)
+    candidates = await scan_at_0915(api, universe, baseline_15m, states,
+                                    min_surge=kmp_switches.min_surge_base,
+                                    rate_budget=rate_budget, instr=instr)
     logger.info(f"Scan complete. {len(candidates)} candidates")
 
     # Subscribe to candidates (if WS available)
@@ -602,6 +610,8 @@ async def run_kmp():
 
         # Get account state
         acct = await oms.get_account_state()
+        if acct is None:
+            acct = AccountState()
         equity = acct.equity or 100_000_000
 
         # Periodic heartbeat
@@ -704,7 +714,7 @@ async def run_kmp():
                     oms=oms,
                     exposure=exposure,
                     max_per_sector=max_per_sector,
-                    regime_breadth_ok=(breadth >= 8),
+                    regime_breadth_ok=(breadth >= kmp_switches.regime_breadth_min),
                     not_chop=(not is_chop),
                     instr=instr,
                     experiment_id=experiment_cfg.get("experiment_id", ""),

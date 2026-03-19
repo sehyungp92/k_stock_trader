@@ -36,6 +36,16 @@ class IdempotencyStore(ABC):
     def put(self, key: str, result: IntentResult) -> None:
         ...
 
+    @abstractmethod
+    def remove(self, key: str) -> bool:
+        """Remove a cached result. Returns True if key existed."""
+        ...
+
+    @abstractmethod
+    def clear(self) -> None:
+        """Remove all cached results."""
+        ...
+
 
 class InMemoryIdempotencyStore(IdempotencyStore):
     def __init__(self):
@@ -46,6 +56,12 @@ class InMemoryIdempotencyStore(IdempotencyStore):
 
     def put(self, key: str, result: IntentResult) -> None:
         self._store[key] = result
+
+    def remove(self, key: str) -> bool:
+        return self._store.pop(key, None) is not None
+
+    def clear(self) -> None:
+        self._store.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +382,7 @@ class OMSCore:
             strategy_id=intent.strategy_id,
             cancel_after_sec=plan.cancel_after,
             intent_id=intent.intent_id,
+            idempotency_key=intent.idempotency_key,
         )
         self.state.add_working_order(plan.symbol, wo)
 
@@ -405,6 +422,13 @@ class OMSCore:
             wo.symbol, wo.strategy_id, qty_delta,
             cost_basis=wo.price,
         )
+
+        # Persist soft_stop_px from intent risk payload on BUY fills
+        if wo.side == "BUY" and intent and intent.risk_payload and intent.risk_payload.stop_px is not None:
+            pos = self.state.get_position(wo.symbol)
+            alloc = pos.allocations.get(wo.strategy_id) if pos else None
+            if alloc:
+                alloc.soft_stop_px = intent.risk_payload.stop_px
 
         # Update OMS risk gateway sector exposure on fills
         if wo.side == "BUY":
@@ -488,6 +512,13 @@ class OMSCore:
         wo.updated_at = datetime.now()
         if final_status in (OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.EXPIRED):
             self._release_sector_reservation(wo)
+            # Evict idempotency cache for unfilled SELL orders so exits can be retried
+            if wo.side == "SELL" and wo.idempotency_key and wo.filled_qty == 0:
+                if self._idem.remove(wo.idempotency_key):
+                    logger.info(
+                        f"Idem evicted: {wo.idempotency_key} "
+                        f"(SELL {final_status.name}, 0 filled)"
+                    )
         self.state.remove_working_order(wo.symbol, wo.order_id)
         self.state.release_entry_lock(wo.symbol, wo.strategy_id)
         if self.persistence:
@@ -1184,6 +1215,8 @@ class OMSCore:
         self.risk.halt_new_entries = False
         self.risk.flatten_in_progress = False
         self._rejection_counts.clear()
+        self._idem.clear()
+        self.adapter.reset()
         logger.info("EOD cleanup complete")
 
     async def start(self) -> None:

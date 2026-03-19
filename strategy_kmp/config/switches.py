@@ -35,6 +35,11 @@ class KMPSwitches:
     # 0.055 = stricter 5.5% max (conservative)
     or_range_max: float = 0.07  # Conservative: 0.055
 
+    # CRITICAL: Minimum surge base for scanner and decay
+    # 2.5 = lower bar, more candidates pass 09:15 scan (more trades)
+    # 3.0 = original strict threshold (conservative)
+    min_surge_base: float = 2.5  # Conservative: 3.0
+
     # MEDIUM PRIORITY: Surge decay slope
     # 0.02 = slowest decay, easiest to qualify later (more trades)
     # 0.04 = faster decay, harder to qualify (conservative)
@@ -188,6 +193,7 @@ class KMPSwitches:
             require_held_support=kmp_data.get("require_held_support", False),
             quality_min_threshold=kmp_data.get("quality_min_threshold", 30),
             or_range_max=kmp_data.get("or_range_max", 0.07),
+            min_surge_base=kmp_data.get("min_surge_base", 2.5),
             min_surge_slope=kmp_data.get("min_surge_slope", 0.02),
             enable_rvol_hard_gate=kmp_data.get("enable_rvol_hard_gate", False),
             regime_breadth_min=kmp_data.get("regime_breadth_min", 1),
@@ -202,6 +208,7 @@ class KMPSwitches:
             require_held_support=True,
             quality_min_threshold=40,
             or_range_max=0.055,
+            min_surge_base=3.0,
             min_surge_slope=0.04,
             enable_rvol_hard_gate=True,
             regime_breadth_min=2,

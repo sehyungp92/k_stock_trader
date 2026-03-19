@@ -8,7 +8,7 @@ import time
 from .state import SymbolState
 from ..config.constants import (
     RVOL_MIN, SPREAD_MAX_PCT, VI_WALL_TICKS, VI_COOLDOWN_MIN,
-    OR_RANGE_MIN, OR_RANGE_MAX, MIN_SURGE_BASE, MIN_SURGE_SLOPE,
+    OR_RANGE_MIN, OR_RANGE_MAX,
     SIZE_DECAY_SLOPE, SIZE_DECAY_FLOOR,
 )
 from ..config.switches import kmp_switches
@@ -29,8 +29,8 @@ def min_surge_threshold(minutes: float, switches=None) -> float:
         minutes: Minutes since 09:16
         switches: Optional KMPSwitches instance (defaults to global)
 
-    Starts at 3.0, increases by slope per minute.
-    Default slope 0.03 (permissive), conservative 0.04.
+    Starts at switches.min_surge_base (default 2.5), increases by
+    switches.min_surge_slope (default 0.02) per minute.
     """
     if switches is None:
         switches = kmp_switches
@@ -38,13 +38,18 @@ def min_surge_threshold(minutes: float, switches=None) -> float:
     m = max(0.0, min(44.0, minutes))
     slope = switches.min_surge_slope
 
-    return MIN_SURGE_BASE + slope * m
+    return switches.min_surge_base + slope * m
 
 
 def min_surge_threshold_strict(minutes: float) -> float:
-    """Calculate minimum surge threshold using conservative (strict) slope."""
+    """Calculate minimum surge threshold using conservative (strict) settings.
+
+    Always uses conservative base (3.0) and slope (0.04) regardless of
+    current switch values. Used for would-block logging to compare
+    permissive vs strict behavior.
+    """
     m = max(0.0, min(44.0, minutes))
-    return MIN_SURGE_BASE + 0.04 * m
+    return 3.0 + 0.04 * m
 
 
 def size_time_multiplier(minutes: float) -> float:

@@ -17,12 +17,12 @@ from kis_core import (
     filter_universe, build_kis_config_from_env,
     create_strategy_client,
 )
-from oms_client import OMSClient
+from oms_client import OMSClient, Intent, IntentType, Urgency, TimeHorizon, IntentConstraints, RiskPayload
 
 from .config.constants import (
     STRATEGY_ID, DSE_START, DSE_END, IEPE_START, IEPE_END, ACTIVE_SET_K,
     SECTOR_CAP_PCT, FLOW_EXIT_CHECK_START, FLOW_EXIT_START, FLOW_EXIT_END,
-    ENTRY_VOL_DRYUP_PCT,
+    ENTRY_VOL_DRYUP_PCT, TIME_STOP_MULTI_DAYS,
 )
 from .config.switches import nulrimok_switches
 from .lrs.db import LRSDatabase
@@ -51,7 +51,11 @@ def compute_total_open_risk(
         return 0.0
     total_risk = 0.0
     for pos in position_states.values():
-        risk_per_share = max(pos.entry_price - pos.stop, 0.0)
+        if pos.stop > 0:
+            risk_per_share = max(pos.entry_price - pos.stop, 0.0)
+        else:
+            # No stop set — cap assumed risk at 10% of entry price
+            risk_per_share = pos.entry_price * 0.10
         total_risk += pos.remaining_qty * risk_per_share
     return total_risk / equity
 
@@ -128,6 +132,9 @@ async def _recover_positions(oms, position_states: Dict[str, PositionState], ins
     """Recover position state from OMS allocations on startup/DSE."""
     try:
         allocations = await oms.get_strategy_allocations(STRATEGY_ID)
+        if allocations is None:
+            logger.warning("Position recovery skipped: OMS unreachable")
+            return
         for ticker, alloc in allocations.items():
             if ticker in position_states:
                 # Already tracked locally, just sync qty
@@ -167,9 +174,13 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState], i
     """Reconcile local position state against OMS allocations."""
     try:
         allocations = await oms.get_strategy_allocations(STRATEGY_ID)
+        # Guard: OMS unreachable — skip to preserve local state
+        if allocations is None:
+            logger.debug("Reconciliation skipped: OMS unreachable")
+            return
         oms_tickers = {ticker: alloc for ticker, alloc in allocations.items() if alloc.qty > 0}
 
-        # Check for positions closed externally
+        # Pass 1: Check for positions closed externally
         for ticker in list(position_states.keys()):
             if ticker not in oms_tickers:
                 logger.info(f"{ticker}: Position closed externally, removing from local state")
@@ -178,6 +189,28 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState], i
                 # Partial exit happened externally
                 position_states[ticker].remaining_qty = oms_tickers[ticker].qty
                 logger.info(f"{ticker}: Updated remaining_qty to {oms_tickers[ticker].qty} from OMS")
+
+        # Pass 2: Recreate positions from OMS that are missing locally
+        for ticker, alloc in oms_tickers.items():
+            if ticker not in position_states and alloc.qty > 0:
+                entry_ts = getattr(alloc, 'entry_ts', None) or get_kst_now()
+                if isinstance(entry_ts, str):
+                    from datetime import datetime as dt
+                    entry_ts = dt.fromisoformat(entry_ts.replace('Z', '+00:00'))
+                pos = PositionState(
+                    ticker=ticker,
+                    entry_time=entry_ts,
+                    entry_price=alloc.cost_basis or 0.0,
+                    qty=alloc.qty,
+                    stop=getattr(alloc, 'soft_stop_px', 0.0) or 0.0,
+                )
+                pos.remaining_qty = alloc.qty
+                pos.setup = SetupType.UNKNOWN
+                # Estimate sessions_held from entry date (matches _recover_positions)
+                days_held = (get_kst_now().date() - entry_ts.date()).days if hasattr(entry_ts, 'date') else 0
+                pos.sessions_held = max(0, days_held)
+                position_states[ticker] = pos
+                logger.info(f"{ticker}: Recreated from OMS allocation, qty={alloc.qty}")
     except Exception as e:
         if instr:
             instr.emit_error(
@@ -250,6 +283,9 @@ async def run_nulrimok():
 
     # Last known prices for heartbeat enrichment
     _last_prices: Dict[str, float] = {}
+
+    # Orphan exit tracking — only attempt once per day per ticker
+    _orphan_exit_attempted: set = set()
 
     # Advisory sector exposure tracking (pct-based for Nulrimok).
     # The OMS RiskGateway is the authoritative source for sector caps.
@@ -369,7 +405,15 @@ async def run_nulrimok():
                      "qty": p.qty, "stop": p.stop} for t, p in position_states.items()]
             artifact = dse.run(today, held)
             entry_states = {t: TickerEntryState(ticker=t) for t in artifact.active_set}
-            sma_trackers = {t: RollingSMA(period=5) for t in artifact.active_set}
+            sma_trackers = {}
+            for t in artifact.active_set:
+                tracker = RollingSMA(period=5)
+                try:
+                    for c in lrs.get_closes(t, 5):
+                        tracker.update(c)
+                except Exception:
+                    logger.debug(f"{t}: SMA5 seed failed, starting cold")
+                sma_trackers[t] = tracker
             dse_ran_today = True
 
             # Initialize sector exposure with sector map from artifact
@@ -395,6 +439,7 @@ async def run_nulrimok():
         if now.hour == 0 and now.minute < 5:
             dse_ran_today = False
             flow_exit_done_today = False
+            _orphan_exit_attempted.clear()
 
         # Pre-market flow reversal exit phase (08:55-09:01)
         # Execute flow reversal exits in tight window at session open
@@ -418,6 +463,8 @@ async def run_nulrimok():
                 last_30m_boundary = current_boundary
                 last_reconcile_cycle += 1
                 acct = await oms.get_account_state()
+                if acct is None:
+                    continue  # Skip this 30m boundary, retry next cycle
                 equity = acct.equity or 100_000_000
                 gross_exposure_pct = acct.gross_exposure_pct
                 regime_exposure_cap = acct.regime_exposure_cap
@@ -458,6 +505,12 @@ async def run_nulrimok():
                     if entry_state.state == EntryState.PENDING_FILL:
                         try:
                             alloc_qty = await oms.get_allocation(ticker, STRATEGY_ID)
+                            if alloc_qty is None:
+                                entry_state.pending_fill_cycles += 1
+                                if entry_state.pending_fill_cycles >= PENDING_FILL_MAX_CYCLES:
+                                    logger.info(f"{ticker}: Fill timeout (OMS unreachable), resetting entry state")
+                                    entry_state.reset()
+                                continue
                             if alloc_qty > 0:
                                 _fill_confirmed_at = _time.time()
                                 # Fill confirmed, get position for cost basis
@@ -617,7 +670,7 @@ async def run_nulrimok():
                                     experiment_variant=experiment_cfg.get("experiment_variant", ""),
                                 )
                             logger.debug(f"{ticker}: Skipping entry — daily risk budget exhausted "
-                                         f"(open_risk >= {budget:.1%})")
+                                         f"(open_risk={current_risk:.2%} >= {budget:.1%})")
                             continue
 
                         # Sector cap check before entry
@@ -683,6 +736,50 @@ async def run_nulrimok():
                         active_set_ref.clear()
                         active_set_ref.update(new_active)
                         prev_active_set = new_active.copy()
+
+                # Orphan position exit: exit held positions not in active_set
+                active_tickers = set(artifact.active_set)
+                for ticker in list(position_states.keys()):
+                    if ticker in active_tickers or ticker in _orphan_exit_attempted:
+                        continue
+                    pos = position_states[ticker]
+                    is_close = now.time() >= time(15, 5)
+                    if pos.sessions_held >= TIME_STOP_MULTI_DAYS or is_close:
+                        # Get current bid for accurate limit; fall back to entry_price
+                        ref_price = _last_prices.get(ticker)
+                        if ref_price is None:
+                            try:
+                                quote = api.get_current_price(ticker)
+                                bid = float(quote.get('bid', 0))
+                                if bid > 0:
+                                    ref_price = bid
+                            except Exception:
+                                pass
+                        if ref_price is None:
+                            ref_price = pos.entry_price
+                        limit_px = ref_price * 0.995
+                        if limit_px <= 0:
+                            logger.warning(f"{ticker}: Orphan exit skipped — no valid price")
+                            _orphan_exit_attempted.add(ticker)
+                            continue
+                        try:
+                            intent = Intent(
+                                intent_type=IntentType.EXIT, strategy_id=STRATEGY_ID, symbol=ticker,
+                                desired_qty=pos.remaining_qty, urgency=Urgency.MEDIUM,
+                                time_horizon=TimeHorizon.SWING,
+                                constraints=IntentConstraints(limit_price=limit_px),
+                                risk_payload=RiskPayload(rationale_code="orphan_position_exit"),
+                            )
+                            result = await oms.submit_intent(intent)
+                            _orphan_exit_attempted.add(ticker)
+                            if result.status.name in ("EXECUTED", "APPROVED"):
+                                del position_states[ticker]
+                                logger.info(f"{ticker}: Orphan position exit submitted (held={pos.sessions_held}d)")
+                            else:
+                                logger.warning(f"{ticker}: Orphan exit rejected: {result.message}")
+                        except Exception as e:
+                            _orphan_exit_attempted.add(ticker)
+                            logger.warning(f"{ticker}: Orphan exit failed: {e}")
 
         await asyncio.sleep(5)
 
