@@ -306,6 +306,7 @@ class TestIdempotencyEviction:
         core.risk = MagicMock()
         core.persistence = None
         core._release_sector_reservation = MagicMock()
+        core._rejection_counts = {}
 
         # Call the real method
         await OMSCore._finalize_working_order(
@@ -599,7 +600,7 @@ class TestNulrimokMutationDeferral:
 
     @pytest.mark.asyncio
     async def test_partial_taken_set_on_success(self):
-        """pos.partial_taken set to True and remaining_qty decremented on success."""
+        """On OMS acceptance, pos enters pending_exit state (qty deferred to fill confirmation)."""
         from strategy_nulrimok.iepe.exits import PositionState, SetupType, manage_nulrimok_position
         from tests.mocks.mock_oms_client import MockOMSClient
 
@@ -618,8 +619,12 @@ class TestNulrimokMutationDeferral:
         result = await manage_nulrimok_position(pos, bar, avwap, 500, False, oms)
 
         assert result is not None  # Exit accepted
-        assert pos.partial_taken is True
-        assert pos.remaining_qty == 30  # 100 - 70 (70% sold)
+        # Fix 2: partial_taken is now deferred until fill confirmation
+        assert pos.pending_exit is True
+        assert pos.pending_exit_reason == "mean_rev_partial"
+        assert pos.pending_exit_qty == 70  # 70% of 100
+        assert pos.remaining_qty == 100  # Unchanged until fill confirmed
+        assert pos.partial_taken is False  # Deferred until fill confirmed
 
 
 class TestNulrimokTwoWayReconciliation:

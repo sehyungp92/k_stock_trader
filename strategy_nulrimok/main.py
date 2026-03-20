@@ -188,6 +188,7 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState], i
             elif oms_tickers[ticker].qty < position_states[ticker].remaining_qty:
                 # Partial exit happened externally
                 position_states[ticker].remaining_qty = oms_tickers[ticker].qty
+                position_states[ticker].pending_exit = False  # OMS is source of truth
                 logger.info(f"{ticker}: Updated remaining_qty to {oms_tickers[ticker].qty} from OMS")
 
         # Pass 2: Recreate positions from OMS that are missing locally
@@ -614,6 +615,43 @@ async def run_nulrimok():
 
                     if ticker in position_states:
                         pos = position_states[ticker]
+
+                        # --- PENDING_EXIT confirmation (mirrors PENDING_FILL pattern) ---
+                        if pos.pending_exit:
+                            try:
+                                alloc_qty = await oms.get_allocation(ticker, STRATEGY_ID)
+                                if alloc_qty is None:
+                                    pos.pending_exit_cycles += 1
+                                    if pos.pending_exit_cycles >= PENDING_FILL_MAX_CYCLES:
+                                        logger.info(f"{ticker}: Pending exit timeout (OMS unreachable), resetting")
+                                        pos.pending_exit = False
+                                elif alloc_qty <= 0:
+                                    if pos.pending_exit_reason == "mean_rev_partial":
+                                        pos.partial_taken = True
+                                    pos.remaining_qty = 0
+                                    pos.pending_exit = False
+                                    logger.info(f"{ticker}: Exit fill confirmed (alloc=0)")
+                                    _mfe_prices.pop(ticker, None)
+                                    _mae_prices.pop(ticker, None)
+                                    if sector_exposure:
+                                        sector_exposure.on_close(ticker, pos.qty, pos.entry_price)
+                                    del position_states[ticker]
+                                elif alloc_qty < pos.remaining_qty:
+                                    if pos.pending_exit_reason == "mean_rev_partial":
+                                        pos.partial_taken = True
+                                    pos.remaining_qty = alloc_qty
+                                    pos.pending_exit = False
+                                    logger.info(f"{ticker}: Partial exit confirmed, remaining={alloc_qty}")
+                                else:
+                                    pos.pending_exit_cycles += 1
+                                    if pos.pending_exit_cycles >= PENDING_FILL_MAX_CYCLES:
+                                        logger.info(f"{ticker}: Exit fill timeout, resetting pending state")
+                                        pos.pending_exit = False
+                            except Exception as e:
+                                logger.debug(f"{ticker}: PENDING_EXIT check error: {e}")
+                                pos.pending_exit_cycles += 1
+                            continue  # Skip normal exit evaluation this cycle
+
                         # MFE/MAE update
                         if ticker in _mfe_prices:
                             _mfe_prices[ticker] = max(_mfe_prices[ticker], close)
@@ -773,8 +811,12 @@ async def run_nulrimok():
                             result = await oms.submit_intent(intent)
                             _orphan_exit_attempted.add(ticker)
                             if result.status.name in ("EXECUTED", "APPROVED"):
-                                del position_states[ticker]
-                                logger.info(f"{ticker}: Orphan position exit submitted (held={pos.sessions_held}d)")
+                                pos.pending_exit = True
+                                pos.pending_exit_reason = "orphan_position_exit"
+                                pos.pending_exit_qty = pos.remaining_qty
+                                pos.pending_exit_intent_id = intent.intent_id
+                                pos.pending_exit_cycles = 0
+                                logger.info(f"{ticker}: Orphan exit submitted, awaiting fill confirmation (held={pos.sessions_held}d)")
                             else:
                                 logger.warning(f"{ticker}: Orphan exit rejected: {result.message}")
                         except Exception as e:

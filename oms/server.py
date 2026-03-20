@@ -607,10 +607,19 @@ async def resolve_drift(req: ResolveDriftRequest):
         logger.info(f"Unfroze {req.symbol} after drift resolution")
 
     if oms.persistence:
+        if req.action == "reassign":
+            target_alloc = pos.allocations.get(target_id)
+            if target_alloc:
+                await oms.persistence.sync_allocation(req.symbol, target_alloc)
+        await oms.persistence.sync_allocation(req.symbol, unknown_alloc)
+        await oms.persistence.sync_position(pos)
         await oms.persistence.log_recon(
             "ALLOCATION_DRIFT", symbol=req.symbol, action=f"RESOLVED_{req.action.upper()}",
             details=f"Admin resolved drift via {req.action}",
         )
+
+    if unknown_alloc.qty == 0:
+        pos.allocations.pop("_UNKNOWN_", None)
 
     return {"status": "ok", "symbol": req.symbol, "frozen": pos.frozen}
 

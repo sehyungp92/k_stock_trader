@@ -123,6 +123,9 @@ class PositionManager:
     async def reconcile_from_oms(self, oms, api, today: date) -> None:
         """Reconcile positions from OMS allocations at startup."""
         allocations = await oms.get_strategy_allocations(STRATEGY_ID)
+        if allocations is None:
+            logger.warning("PCIM reconciliation skipped: OMS unreachable")
+            return
         for symbol, alloc in allocations.items():
             if alloc.qty <= 0:
                 continue

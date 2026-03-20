@@ -955,15 +955,17 @@ class OMSCore:
         """
         for symbol, pos in self.state.get_all_positions().items():
             drift = pos.allocation_drift()
+            unknown_qty = pos.get_allocation(UNKNOWN_STRATEGY)
 
             if abs(drift) <= DRIFT_TOLERANCE:
                 # No drift — unfreeze if previously frozen and UNKNOWN cleared
                 if pos.frozen:
-                    unknown_qty = pos.get_allocation(UNKNOWN_STRATEGY)
                     if unknown_qty == 0:
                         pos.frozen = False
+                        pos.allocations.pop(UNKNOWN_STRATEGY, None)
                         logger.info(f"Unfroze {symbol}: drift resolved")
                         if self.persistence:
+                            await self.persistence.sync_position(pos)
                             await self.persistence.log_recon(
                                 "ALLOCATION_DRIFT", symbol=symbol, action="UNFROZEN",
                                 details="Drift resolved, symbol unfrozen",
@@ -974,8 +976,35 @@ class OMSCore:
                 # Orders in flight — drift is expected, skip
                 continue
 
-            # Already frozen — skip re-processing to prevent log spam
+            non_unknown = {
+                sid: a for sid, a in pos.allocations.items()
+                if sid != UNKNOWN_STRATEGY and a.qty > 0
+            }
+
+            # Already frozen — avoid repeated alerts, but still allow safe self-heal.
             if pos.frozen:
+                if drift < 0 and unknown_qty == 0 and len(non_unknown) == 1:
+                    strat_id, alloc = next(iter(non_unknown.items()))
+                    old_qty = self.state.set_allocation(symbol, strat_id, pos.real_qty)
+                    pos.allocations.pop(UNKNOWN_STRATEGY, None)
+                    pos.frozen = False
+                    logger.warning(
+                        f"RECOVERED frozen negative drift {symbol}: "
+                        f"{strat_id} allocation {old_qty} -> {alloc.qty}"
+                    )
+                    if self.persistence:
+                        await self.persistence.sync_allocation(symbol, alloc)
+                        await self.persistence.sync_position(pos)
+                        await self.persistence.log_recon(
+                            "ALLOCATION_DRIFT", symbol=symbol,
+                            before_value={"strategy": strat_id, "alloc_qty": old_qty, "frozen": True},
+                            after_value={"strategy": strat_id, "alloc_qty": alloc.qty, "frozen": False},
+                            action="AUTO_CORRECTED_FROZEN",
+                            details=(
+                                "Recovered frozen single-strategy negative drift after "
+                                "_UNKNOWN_ was cleared"
+                            ),
+                        )
                 continue
 
             # --- First detection: log and take action ---
@@ -991,6 +1020,8 @@ class OMSCore:
                 pos.allocations[UNKNOWN_STRATEGY].qty += drift
                 pos.frozen = True
                 if self.persistence:
+                    await self.persistence.sync_allocation(symbol, pos.allocations[UNKNOWN_STRATEGY])
+                    await self.persistence.sync_position(pos)
                     await self.persistence.log_recon(
                         "ALLOCATION_DRIFT", symbol=symbol,
                         before_value={"total_allocated": pos.total_allocated() - drift},
@@ -1000,11 +1031,6 @@ class OMSCore:
                     )
             else:
                 # Negative drift: allocations exceed real broker qty
-                non_unknown = {
-                    sid: a for sid, a in pos.allocations.items()
-                    if sid != UNKNOWN_STRATEGY and a.qty > 0
-                }
-
                 if len(non_unknown) == 1:
                     # Single strategy — safe to auto-correct
                     strat_id, alloc = next(iter(non_unknown.items()))
@@ -1022,6 +1048,7 @@ class OMSCore:
                         )
                     if self.persistence:
                         await self.persistence.sync_allocation(symbol, alloc)
+                        await self.persistence.sync_position(pos)
                         await self.persistence.log_recon(
                             "ALLOCATION_DRIFT", symbol=symbol,
                             before_value={"strategy": strat_id, "alloc_qty": old_qty},
@@ -1038,6 +1065,7 @@ class OMSCore:
                         f"— manual correction required"
                     )
                     if self.persistence:
+                        await self.persistence.sync_position(pos)
                         await self.persistence.log_recon(
                             "ALLOCATION_DRIFT", symbol=symbol,
                             before_value={"total_allocated": pos.total_allocated()},
@@ -1170,7 +1198,10 @@ class OMSCore:
             unknown_qty = pos.get_allocation(UNKNOWN_STRATEGY)
             if unknown_qty == 0:
                 pos.frozen = False
+                pos.allocations.pop(UNKNOWN_STRATEGY, None)
                 logger.info(f"Unfroze {symbol} after admin correction")
+                if self.persistence:
+                    await self.persistence.sync_position(pos)
 
         return {
             "symbol": symbol, "strategy_id": strategy_id,
@@ -1213,8 +1244,13 @@ class OMSCore:
                             await self._apply_fill(wo, late_delta)
                             wo.filled_qty = post_broker.filled_qty
 
-                self.state.remove_working_order(wo.symbol, wo.order_id)
-                self.state.release_entry_lock(wo.symbol, wo.strategy_id)
+                await self._finalize_working_order(
+                    wo,
+                    final_status=OrderStatus.CANCELLED,
+                    prev_status=wo.status,
+                    event_type="EOD_CANCEL",
+                    payload={"reason": "eod_cleanup", "filled_qty": wo.filled_qty},
+                )
 
         self.state.daily_pnl = 0.0
         self.state.daily_pnl_pct = 0.0

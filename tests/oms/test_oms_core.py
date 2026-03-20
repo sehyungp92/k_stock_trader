@@ -1457,6 +1457,21 @@ class TestNegativeDriftHandling:
         await oms._check_allocation_drift()
         mock_persistence.log_recon.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_frozen_single_strategy_negative_drift_self_heals_when_unknown_cleared(self, oms):
+        """Frozen stale drift should self-heal once only one strategy remains and _UNKNOWN_ is cleared."""
+        oms.state.update_position("068270", real_qty=7)
+        oms.state.update_allocation("068270", "NULRIMOK", 31)
+        pos = oms.state.get_position("068270")
+        pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=0)
+        pos.frozen = True
+
+        await oms._check_allocation_drift()
+
+        assert pos.allocations["NULRIMOK"].qty == 7
+        assert pos.frozen is False
+        assert "_UNKNOWN_" not in pos.allocations
+
 
 class TestAdminCorrectAllocation:
     """Tests for Fix 3: admin allocation correction."""

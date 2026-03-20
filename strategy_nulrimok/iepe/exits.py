@@ -47,6 +47,12 @@ class PositionState:
     remaining_qty: int = 0
     atr30m: float = 0.0
     flow_grind_bars_below_avwap: int = 0  # For FLOW_GRIND 2-bar exit
+    # Pending exit tracking (mirrors PENDING_FILL pattern for entries)
+    pending_exit: bool = False
+    pending_exit_reason: Optional[str] = None
+    pending_exit_qty: int = 0
+    pending_exit_intent_id: Optional[str] = None
+    pending_exit_cycles: int = 0
 
     def __post_init__(self):
         if self.remaining_qty == 0:
@@ -111,6 +117,10 @@ async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, 
 
     # Classify setup after enough bars
     pos.setup = classify_setup(pos, bar, avwap)
+
+    # Skip exit evaluation if an exit is already in flight
+    if pos.pending_exit:
+        return None
 
     exit_reason, urgency = None, Urgency.LOW
 
@@ -188,10 +198,11 @@ async def manage_nulrimok_position(pos: PositionState, bar: dict, avwap: float, 
         )
         result = await oms.submit_intent(intent)
         if result.status.name in ("EXECUTED", "APPROVED"):
-            # Mutate state only AFTER OMS confirms acceptance
-            if exit_reason == "mean_rev_partial":
-                pos.partial_taken = True
-            pos.remaining_qty -= exit_qty
+            pos.pending_exit = True
+            pos.pending_exit_reason = exit_reason
+            pos.pending_exit_qty = exit_qty
+            pos.pending_exit_intent_id = intent.intent_id
+            pos.pending_exit_cycles = 0
             if instr:
                 instr.on_order_event(
                     order_id=getattr(result, 'order_id', '') or intent.intent_id,

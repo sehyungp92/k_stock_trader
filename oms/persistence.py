@@ -432,7 +432,9 @@ class OMSPersistence:
                 alloc.soft_stop_px,
                 alloc.time_stop_ts,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to sync allocation: {e}")
 
     # ------------------------------------------------------------------
@@ -485,7 +487,9 @@ class OMSPersistence:
                 int(gross_exposure_krw), gross_pct, positions_count,
                 halted, safe_mode, regime,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to update portfolio risk: {e}")
 
     async def update_daily_risk_strategy(
@@ -521,7 +525,9 @@ class OMSPersistence:
                 trade_date, strategy_id, int(realized_pnl_krw), int(unrealized_pnl_krw),
                 trades_count, wins, losses, halted,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to update strategy risk: {e}")
 
     # ------------------------------------------------------------------
@@ -563,7 +569,9 @@ class OMSPersistence:
                 strategy_id, mode, symbols_hot, symbols_warm, symbols_cold,
                 positions_count, last_error, version,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to update strategy state: {e}")
 
     # ------------------------------------------------------------------
@@ -609,7 +617,9 @@ class OMSPersistence:
                 daily_pnl_pct, safe_mode, halt_new_entries, kis_connected,
                 recon_status, drift_count, version,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to update heartbeat: {e}")
 
     # ------------------------------------------------------------------
@@ -646,9 +656,11 @@ class OMSPersistence:
                 entry_qty, entry_price, entry_ts, entry_intent_id,
                 setup_type, confidence,
             )
+            self._record_success()
             logger.debug(f"Opened trade {trade_id}: {symbol} {direction} {entry_qty}@{entry_price}")
             return trade_id
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to open trade: {e}")
             return None
 
@@ -681,8 +693,10 @@ class OMSPersistence:
                 """,
                 trade_id, exit_qty, exit_price, exit_ts, exit_intent_id, exit_reason,
             )
+            self._record_success()
             logger.debug(f"Closed trade {trade_id}: {exit_qty}@{exit_price} reason={exit_reason}")
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to close trade: {e}")
 
     async def record_trade_marks(
@@ -710,7 +724,9 @@ class OMSPersistence:
                 """,
                 trade_id, duration_seconds, mae_pct, mfe_pct, capture_ratio,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to record trade marks: {e}")
 
     async def find_open_trade(
@@ -730,8 +746,10 @@ class OMSPersistence:
                 """,
                 strategy_id, symbol,
             )
+            self._record_success()
             return str(row['trade_id']) if row else None
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to find open trade: {e}")
             return None
 
@@ -765,7 +783,9 @@ class OMSPersistence:
                 json.dumps(after_value) if after_value else None,
                 action, details,
             )
+            self._record_success()
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to log recon: {e}")
 
     # ------------------------------------------------------------------
@@ -794,9 +814,11 @@ class OMSPersistence:
                     frozen=row["frozen"],
                 )
                 positions[row["symbol"]] = pos
+            self._record_success()
             logger.info(f"Loaded {len(positions)} positions from database")
             return positions
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to load positions: {e}")
             return {}
 
@@ -819,9 +841,11 @@ class OMSPersistence:
                     soft_stop_px=float(row["soft_stop_px"]) if row["soft_stop_px"] else None,
                     time_stop_ts=row["time_stop_ts"].timestamp() if row["time_stop_ts"] else None,
                 )
+            self._record_success()
             logger.info(f"Loaded allocations for {len(allocs)} symbols from database")
             return allocs
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to load allocations: {e}")
             return {}
 
@@ -854,9 +878,11 @@ class OMSPersistence:
                     intent_id=str(row["intent_id"]) if row["intent_id"] else None,
                     oms_order_id=str(row["oms_order_id"]),
                 ))
+            self._record_success()
             logger.info(f"Loaded {len(orders)} working orders from database")
             return orders
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to load working orders: {e}")
             return []
 
@@ -868,9 +894,11 @@ class OMSPersistence:
             row = await self.pool.fetchrow(
                 "SELECT * FROM oms_state WHERE oms_id = 'primary'"
             )
+            self._record_success()
             if row:
                 return dict(row)
             return None
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to load OMS state: {e}")
             return None
