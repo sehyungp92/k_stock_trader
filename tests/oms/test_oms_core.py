@@ -1473,6 +1473,85 @@ class TestNegativeDriftHandling:
         assert "_UNKNOWN_" not in pos.allocations
 
 
+class TestZeroPositionCleanup:
+    """Tests for zero-position auto-cleanup of stale allocations."""
+
+    @pytest.fixture
+    def mock_api(self, mock_kis_api):
+        return mock_kis_api
+
+    @pytest.fixture
+    def oms(self, mock_api):
+        oms = OMSCore(mock_api)
+        oms.state.equity = 100_000_000
+        return oms
+
+    @pytest.mark.asyncio
+    async def test_zero_position_unknown_only_auto_clears(self, oms):
+        """real_qty=0 with only _UNKNOWN_ allocation should clear and unfreeze."""
+        oms.state.update_position("259960", real_qty=0)
+        pos = oms.state.get_position("259960")
+        pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=2)
+        pos.frozen = True
+
+        await oms._check_allocation_drift()
+
+        assert len(pos.allocations) == 0
+        assert pos.frozen is False
+
+    @pytest.mark.asyncio
+    async def test_zero_position_strategy_alloc_auto_clears(self, oms):
+        """real_qty=0 with a strategy allocation should clear it."""
+        oms.state.update_position("005930", real_qty=0)
+        oms.state.update_allocation("005930", "PCIM", 10)
+
+        await oms._check_allocation_drift()
+
+        pos = oms.state.get_position("005930")
+        assert len(pos.allocations) == 0
+        assert pos.frozen is False
+
+    @pytest.mark.asyncio
+    async def test_zero_position_mixed_allocs_auto_clears(self, oms):
+        """real_qty=0 with mixed _UNKNOWN_ + strategy allocations should clear all."""
+        oms.state.update_position("068270", real_qty=0)
+        oms.state.update_allocation("068270", "KPR", 10)
+        pos = oms.state.get_position("068270")
+        pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=5)
+        pos.frozen = True
+
+        await oms._check_allocation_drift()
+
+        assert len(pos.allocations) == 0
+        assert pos.frozen is False
+
+    @pytest.mark.asyncio
+    async def test_zero_position_with_working_orders_skipped(self, oms):
+        """real_qty=0 with working orders should NOT be cleaned up."""
+        from oms.state import WorkingOrder
+
+        oms.state.update_position("009150", real_qty=0)
+        pos = oms.state.get_position("009150")
+        pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=2)
+        pos.frozen = True
+        pos.working_orders.append(
+            WorkingOrder(
+                order_id="ORD999",
+                symbol="009150",
+                side="BUY",
+                qty=2,
+                price=5000,
+                strategy_id="_UNKNOWN_",
+            )
+        )
+
+        await oms._check_allocation_drift()
+
+        # Should be skipped — working orders guard runs first
+        assert pos.allocations["_UNKNOWN_"].qty == 2
+        assert pos.frozen is True
+
+
 class TestAdminCorrectAllocation:
     """Tests for Fix 3: admin allocation correction."""
 

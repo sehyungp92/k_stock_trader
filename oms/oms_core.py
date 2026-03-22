@@ -948,6 +948,7 @@ class OMSCore:
 
         Policy:
         - If working orders exist: allow temporary drift (orders in flight).
+        - Zero position: broker holds 0 shares, clear all allocations, unfreeze.
         - Already frozen: skip re-processing (prevents log spam).
         - Positive drift: assign to _UNKNOWN_, freeze.
         - Negative drift, single strategy: auto-correct allocation, don't freeze.
@@ -974,6 +975,33 @@ class OMSCore:
 
             if pos.has_working_orders():
                 # Orders in flight — drift is expected, skip
+                continue
+
+            # Zero-position auto-cleanup: broker holds no shares
+            if pos.real_qty == 0 and pos.total_allocated() > 0:
+                cleared = {}
+                for sid, alloc in list(pos.allocations.items()):
+                    if alloc.qty > 0:
+                        old_qty = self.state.set_allocation(symbol, sid, 0)
+                        cleared[sid] = old_qty
+                        if self.persistence:
+                            await self.persistence.sync_allocation(symbol, alloc)
+                pos.allocations.clear()
+                was_frozen = pos.frozen
+                pos.frozen = False
+                logger.warning(
+                    f"ZERO-POSITION CLEANUP {symbol}: broker holds 0 shares, "
+                    f"cleared allocations {cleared}, unfrozen={was_frozen}"
+                )
+                if self.persistence:
+                    await self.persistence.sync_position(pos)
+                    await self.persistence.log_recon(
+                        "ALLOCATION_DRIFT", symbol=symbol,
+                        before_value={"allocations": cleared, "frozen": was_frozen},
+                        after_value={"allocations": {}, "frozen": False},
+                        action="ZERO_POSITION_CLEANUP",
+                        details="Broker holds 0 shares, all allocations cleared",
+                    )
                 continue
 
             non_unknown = {
