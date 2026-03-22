@@ -38,8 +38,8 @@ class SignalExtractor:
             prompt = PUNCTUATION_PROMPT.format(transcript=raw_transcript)
             result = self.client.generate(
                 prompt,
-                model="gemini-2.5-flash",
-                thinking=None,
+                model="gemini-3.1-flash-lite-preview",
+                thinking="LOW",
             )
             if result:
                 logger.debug(f"PUNCTUATION: input={len(raw_transcript)} output={len(result)} chars")

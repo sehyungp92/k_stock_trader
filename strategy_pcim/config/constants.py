@@ -178,7 +178,7 @@ EXITS = {
 # GEMINI LLM
 # =============================================================================
 GEMINI = {
-    "MODEL_FLASH_25": "gemini-2.5-flash",
+    "MODEL_FLASH_LITE_31": "gemini-3.1-flash-lite-preview",
     "MODEL_FLASH_3": "gemini-3-flash-preview",
     "MAX_RETRIES": 5,
     "THINKING_BUDGET": {
