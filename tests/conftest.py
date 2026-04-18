@@ -377,6 +377,14 @@ def kpr_symbol_state():
 # Async Test Helpers
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def mock_trading_calendar_for_adapter():
+    """Ensure adapter always sees a trading day in tests."""
+    with patch('oms.adapter.get_trading_calendar') as mock_cal:
+        mock_cal.return_value.is_trading_day.return_value = True
+        yield mock_cal
+
+
 @pytest.fixture
 def event_loop():
     """Create event loop for async tests."""

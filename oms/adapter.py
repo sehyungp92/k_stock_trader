@@ -13,6 +13,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 from loguru import logger
+from kis_core.trading_calendar import get_trading_calendar
 
 _KST = ZoneInfo("Asia/Seoul")
 
@@ -118,11 +119,10 @@ class KISExecutionAdapter:
         Returns:
             AdapterResult with order_id if successful
         """
-        # Weekend guard: reject orders when market is closed
-        now_kst = datetime.now(_KST)
-        if now_kst.weekday() >= 5:  # Saturday=5, Sunday=6
-            logger.warning(f"Order rejected: market closed (weekend) {symbol} {side} x{qty}")
-            return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message="Market closed (weekend)")
+        # Market closed guard: reject orders on weekends and KRX holidays
+        if not get_trading_calendar().is_trading_day(datetime.now(_KST).date()):
+            logger.warning(f"Order rejected: market closed {symbol} {side} x{qty}")
+            return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message="Market closed")
 
         # Client-side order reference for deduplication across retries.
         # If first attempt succeeds but response times out, the retry

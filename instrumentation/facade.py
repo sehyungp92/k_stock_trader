@@ -257,6 +257,8 @@ class InstrumentationKit:
                 experiment_variant=experiment_variant,
                 param_set_id=param_set_id,
                 execution_timeline=execution_timeline,
+                bot_id=self._bot_id,
+                strategy_id=self._strategy_type.upper(),
             )
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")

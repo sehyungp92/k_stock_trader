@@ -247,7 +247,9 @@ async def lifespan(app: FastAPI):
     api = KoreaInvestAPI(env)
 
     # Initialize persistence (optional - will degrade gracefully if Postgres unavailable)
-    persistence = OMSPersistence()
+    oms_id = os.environ.get("OMS_ID", "primary")
+    persistence = OMSPersistence(oms_id=oms_id)
+    logger.info(f"OMS instance: {oms_id}")
 
     _oms = OMSCore(api, risk_config=risk_config, persistence=persistence)
     await _oms.start()
@@ -283,17 +285,17 @@ async def health():
         overall_status = "warn"
 
     # Check reconciliation loop health
-    recon_status = "WARN" if drift_count > 0 else "OK"
+    recon_status = "warn" if drift_count > 0 else "ok"
     if hasattr(oms, '_reconcile_task') and oms._reconcile_task and oms._reconcile_task.done():
         overall_status = "error"
-        recon_status = "DEAD"
+        recon_status = "dead"
 
     # Check persistence health
     if oms.persistence and hasattr(oms.persistence, 'consecutive_failures'):
         if oms.persistence.consecutive_failures >= 5:
             if overall_status == "ok":
                 overall_status = "degraded"
-            recon_status = f"{recon_status},PERSIST_FAIL({oms.persistence.consecutive_failures})"
+            recon_status = f"{recon_status},persist_fail({oms.persistence.consecutive_failures})"
 
     return HealthResponse(
         status=overall_status,
@@ -522,7 +524,7 @@ async def set_safe_mode(enabled: bool = True):
             safe_mode=enabled,
             halt_new_entries=oms.risk.halt_new_entries,
             kis_connected=True,
-            recon_status="WARN" if drift_count > 0 else "OK",
+            recon_status="warn" if drift_count > 0 else "ok",
             drift_count=drift_count,
         )
     return {"status": "ok", "safe_mode": enabled}

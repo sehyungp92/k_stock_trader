@@ -155,6 +155,7 @@ class StateStore:
         self.daily_pnl: float = 0.0
         self.daily_pnl_pct: float = 0.0
         self.daily_realized_pnl: float = 0.0  # Accumulated realized P&L from closed positions
+        self.strategy_realized_pnl: Dict[str, float] = {}  # Per-strategy realized P&L
 
     def get_position(self, symbol: str) -> SymbolPosition:
         """Get or create position for symbol."""
@@ -278,10 +279,14 @@ class StateStore:
                     result[symbol] = alloc
             return result
 
-    def record_realized_pnl(self, pnl: float) -> None:
+    def record_realized_pnl(self, pnl: float, strategy_id: str = "") -> None:
         """Record realized P&L from a closed position."""
         with self._lock:
             self.daily_realized_pnl += pnl
+            if strategy_id:
+                self.strategy_realized_pnl[strategy_id] = (
+                    self.strategy_realized_pnl.get(strategy_id, 0.0) + pnl
+                )
 
     def update_daily_pnl(self, prices: Dict[str, float]) -> None:
         """Compute daily P&L from positions using live prices + realized P&L."""

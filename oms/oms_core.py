@@ -4,7 +4,7 @@ OMS Core: Main orchestrator that ties everything together.
 
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional
 import asyncio
 import time
@@ -411,12 +411,13 @@ class OMSCore:
         qty_delta = fill_qty if wo.side == "BUY" else -fill_qty
 
         # Record realized P&L for sell fills
+        fill_realized_pnl = 0.0
         if wo.side == "SELL":
             pos = self.state.get_position(wo.symbol)
             alloc = pos.allocations.get(wo.strategy_id)
             if alloc and alloc.cost_basis > 0:
-                realized_pnl = (wo.price - alloc.cost_basis) * fill_qty
-                self.state.record_realized_pnl(realized_pnl)
+                fill_realized_pnl = (wo.price - alloc.cost_basis) * fill_qty
+                self.state.record_realized_pnl(fill_realized_pnl, strategy_id=wo.strategy_id)
 
         self.state.update_allocation(
             wo.symbol, wo.strategy_id, qty_delta,
@@ -484,6 +485,7 @@ class OMSCore:
                         exit_ts=fill_ts,
                         exit_intent_id=resolved_intent_id,
                         exit_reason=exit_reason,
+                        realized_pnl=fill_realized_pnl,
                     )
 
     def _remaining_qty(self, wo: WorkingOrder) -> int:
@@ -876,13 +878,20 @@ class OMSCore:
 
         # 7. Update daily risk metrics
         if self.persistence:
-            from datetime import date
             today = date.today()
+            all_positions = self.state.get_all_positions()
 
             # Compute gross exposure
             gross_exposure = sum(
                 pos.real_qty * prices.get(sym, pos.avg_price)
-                for sym, pos in self.state.get_all_positions().items()
+                for sym, pos in all_positions.items()
+            )
+
+            # Compute unrealized PnL from live marks
+            unrealized_pnl = sum(
+                (prices.get(sym, pos.avg_price) - pos.avg_price) * pos.real_qty
+                for sym, pos in all_positions.items()
+                if pos.real_qty > 0
             )
 
             # Update portfolio-level daily risk
@@ -890,37 +899,40 @@ class OMSCore:
                 trade_date=today,
                 equity_krw=self.state.equity,
                 buyable_cash_krw=self.state.buyable_cash,
-                realized_pnl_krw=self.state.daily_pnl,  # Approximate
-                unrealized_pnl_krw=0,  # TODO: compute unrealized separately if needed
+                realized_pnl_krw=self.state.daily_realized_pnl,
+                unrealized_pnl_krw=unrealized_pnl,
                 gross_exposure_krw=gross_exposure,
-                positions_count=len(self.state.get_all_positions()),
+                positions_count=len(all_positions),
                 halted=getattr(self.risk, 'halt_new_entries', False),
                 safe_mode=getattr(self.risk, 'safe_mode', False),
                 regime=getattr(self.risk, '_regime', None),
             )
 
-            # Update per-strategy daily risk (aggregate by strategy)
-            strategy_stats = {}
-            for pos in self.state.get_all_positions().values():
+            # Compute per-strategy unrealized PnL from allocations + live prices
+            strategy_unrealized = {}
+            for sym, pos in all_positions.items():
+                px = prices.get(sym, pos.avg_price)
                 for strat_id, alloc in pos.allocations.items():
-                    if strat_id not in strategy_stats:
-                        strategy_stats[strat_id] = {
-                            'realized_pnl': 0, 'unrealized_pnl': 0,
-                            'trades': 0, 'wins': 0, 'losses': 0
-                        }
-                    # Count open positions per strategy
-                    if alloc.qty > 0:
-                        strategy_stats[strat_id]['trades'] += 1
+                    if alloc.qty > 0 and alloc.cost_basis > 0:
+                        pnl = (px - alloc.cost_basis) * alloc.qty
+                        strategy_unrealized[strat_id] = strategy_unrealized.get(strat_id, 0.0) + pnl
 
-            for strat_id, stats in strategy_stats.items():
+            # Get today's trade stats from DB (wins/losses from correct trade data)
+            trade_stats = await self.persistence.get_strategy_trade_stats(today)
+
+            # Merge all strategy IDs that appear in any source
+            all_strat_ids = set(self.state.strategy_realized_pnl) | set(strategy_unrealized) | set(trade_stats)
+
+            for strat_id in all_strat_ids:
+                ts = trade_stats.get(strat_id, {})
                 await self.persistence.update_daily_risk_strategy(
                     trade_date=today,
                     strategy_id=strat_id,
-                    realized_pnl_krw=stats['realized_pnl'],
-                    unrealized_pnl_krw=stats['unrealized_pnl'],
-                    trades_count=stats['trades'],
-                    wins=stats['wins'],
-                    losses=stats['losses'],
+                    realized_pnl_krw=self.state.strategy_realized_pnl.get(strat_id, 0.0),
+                    unrealized_pnl_krw=strategy_unrealized.get(strat_id, 0.0),
+                    trades_count=ts.get('trades', 0),
+                    wins=ts.get('wins', 0),
+                    losses=ts.get('losses', 0),
                     halted=strat_id in getattr(self.risk, '_paused_strategies', set()),
                 )
 
@@ -938,7 +950,7 @@ class OMSCore:
                 safe_mode=getattr(self.risk, 'safe_mode', False),
                 halt_new_entries=getattr(self.risk, 'halt_new_entries', False),
                 kis_connected=True,
-                recon_status="WARN" if drift_count > 0 else "OK",
+                recon_status="warn" if drift_count > 0 else "ok",
                 drift_count=drift_count,
             )
 
@@ -1283,6 +1295,7 @@ class OMSCore:
         self.state.daily_pnl = 0.0
         self.state.daily_pnl_pct = 0.0
         self.state.daily_realized_pnl = 0.0
+        self.state.strategy_realized_pnl = {}
         self.risk.halt_new_entries = False
         self.risk.flatten_in_progress = False
         self._rejection_counts.clear()
@@ -1343,6 +1356,13 @@ class OMSCore:
                 self.risk.safe_mode = True
             if oms_state.get("halt_new_entries"):
                 self.risk.halt_new_entries = True
+
+        # Restore per-strategy realized PnL from today's closed trades (mid-day restart resilience)
+        realized = await self.persistence.load_daily_realized_pnl(date.today())
+        if realized:
+            self.state.strategy_realized_pnl = realized
+            self.state.daily_realized_pnl = sum(realized.values())
+            logger.info(f"Restored realized PnL for {len(realized)} strategies from DB")
 
         logger.info("Persisted state loaded")
 

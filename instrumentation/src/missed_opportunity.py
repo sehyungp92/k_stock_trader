@@ -64,6 +64,7 @@ class MissedOpportunityEvent:
     market_snapshot: dict                  # snapshot at signal time
 
     bot_id: str = ""
+    strategy_id: str = ""
     pair: str = ""                         # KRX stock code, e.g. "005930"
     side: str = "LONG"                     # always LONG for Korean retail
     signal: str = ""                       # human-readable signal description
@@ -75,7 +76,7 @@ class MissedOpportunityEvent:
     blocking_positions: Optional[List[Dict[str, Any]]] = None  # positions that caused rejection
     resource_conflict_type: str = ""       # max_positions, gross_exposure, etc.
 
-    hypothetical_entry_price: float = 0.0  # price used for simulation
+    hypothetical_entry: float = 0.0  # price used for simulation
 
     # Backfilled outcomes (None until computed)
     outcome_1h: Optional[float] = None     # price 1h after signal
@@ -323,6 +324,7 @@ class MissedOpportunityLogger:
                 event_metadata=metadata.to_dict(),
                 market_snapshot=snapshot.to_dict(),
                 bot_id=self.bot_id,
+                strategy_id=strategy_type.upper() if strategy_type else "",
                 pair=pair,
                 side=side,
                 signal=signal,
@@ -333,7 +335,7 @@ class MissedOpportunityLogger:
                 block_reason=block_reason,
                 blocking_positions=blocking_positions,
                 resource_conflict_type=resource_conflict_type,
-                hypothetical_entry_price=hyp_entry,
+                hypothetical_entry=hyp_entry,
                 simulation_policy=policy.to_dict(),
                 assumption_tags=assumption_tags,
                 strategy_params_at_signal=strategy_params,

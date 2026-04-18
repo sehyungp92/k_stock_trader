@@ -1168,6 +1168,7 @@ class TestOMSCoreStart:
         mock_persistence.load_allocations = AsyncMock(return_value={})
         mock_persistence.load_working_orders = AsyncMock(return_value=[])
         mock_persistence.load_oms_state = AsyncMock(return_value=None)
+        mock_persistence.load_daily_realized_pnl = AsyncMock(return_value={})
         mock_persistence.close = AsyncMock()
 
         oms = OMSCore(mock_api, persistence=mock_persistence)

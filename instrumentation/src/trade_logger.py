@@ -35,6 +35,10 @@ class TradeEvent:
     entry_snapshot: Dict[str, Any]
     exit_snapshot: Optional[Dict[str, Any]] = None
 
+    # --- Bot/Strategy identity (for assistant schema) ---
+    bot_id: str = ""
+    strategy_id: str = ""
+
     # --- Core trade fields ---
     pair: str = ""
     side: str = "LONG"
@@ -122,7 +126,15 @@ class TradeEvent:
     stage: str = "entry"
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        # Coerce None → 0.0/\"\" for fields the assistant schema types as non-Optional
+        for key in ("atr_at_entry", "fees_paid", "entry_slippage_bps",
+                     "exit_slippage_bps", "entry_latency_ms", "drawdown_pct"):
+            if d.get(key) is None:
+                d[key] = 0.0
+        if d.get("session_type") is None:
+            d["session_type"] = ""
+        return d
 
 
 class TradeLogger:
@@ -173,6 +185,8 @@ class TradeLogger:
         experiment_variant: Optional[str] = None,
         param_set_id: Optional[str] = None,
         execution_timeline: Optional[Dict[str, Any]] = None,
+        bot_id: str = "",
+        strategy_id: str = "",
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -220,6 +234,8 @@ class TradeLogger:
             trade = TradeEvent(
                 trade_id=trade_id,
                 event_metadata=metadata,
+                bot_id=bot_id,
+                strategy_id=strategy_id,
                 entry_snapshot=entry_snapshot_dict,
                 pair=pair,
                 side=side,

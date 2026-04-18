@@ -727,7 +727,7 @@ async def run_pcim():
                         logger.warning(f"INTRADAY HALT: KOSPI DD {dd:.2%}")
                         intraday_halted = True
                         await asyncio.sleep(5)
-                    continue
+                        continue
 
             # First, check pending orders for fills
             all_positions = await oms.get_all_positions()

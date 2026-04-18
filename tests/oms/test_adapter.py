@@ -742,3 +742,36 @@ class TestKISExecutionAdapterGetBuyableCash:
 
         result = await adapter.get_buyable_cash()
         assert result is None
+
+
+class TestMarketClosedGuard:
+    """Tests for market closed (weekend/holiday) order rejection."""
+
+    @pytest.mark.asyncio
+    async def test_rejects_on_non_trading_day(self, mock_trading_calendar_for_adapter):
+        """Test orders are rejected when market is closed."""
+        mock_trading_calendar_for_adapter.return_value.is_trading_day.return_value = False
+        mock_api = MagicMock()
+        adapter = KISExecutionAdapter(mock_api)
+
+        result = await adapter.submit_order("005930", "BUY", 100, "MARKET")
+
+        assert result.success is False
+        assert result.error == AdapterError.REJECTED_INVALID
+        assert "Market closed" in result.message
+
+    @pytest.mark.asyncio
+    async def test_allows_on_trading_day(self, mock_trading_calendar_for_adapter):
+        """Test orders proceed when market is open."""
+        mock_trading_calendar_for_adapter.return_value.is_trading_day.return_value = True
+        mock_api = MagicMock()
+        mock_api.place_market_buy.return_value = OrderResult(
+            success=True, order_id="ORD001"
+        )
+        adapter = KISExecutionAdapter(mock_api)
+
+        result = await adapter.submit_order("005930", "BUY", 100, "MARKET")
+
+        assert result.success is True
+        assert result.order_id == "ORD001"
+        mock_api.place_market_buy.assert_called_once_with("005930", 100)

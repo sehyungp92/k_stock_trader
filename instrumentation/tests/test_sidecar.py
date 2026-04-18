@@ -72,7 +72,7 @@ class TestSidecar:
     def test_read_unsent_events(self):
         filepath, _ = _write_trade_events(self.tmpdir)
         events = self.sidecar._read_unsent_events(filepath, "trade")
-        assert len(events) == 2
+        assert len(events) == 1  # entry-stage skipped, only exit forwarded
         # Verify relay envelope format
         for e in events:
             assert "event_id" in e
@@ -86,9 +86,9 @@ class TestSidecar:
     def test_watermark_tracking(self):
         filepath, _ = _write_trade_events(self.tmpdir)
 
-        # Read all events
+        # Read all events (entry-stage skipped)
         events = self.sidecar._read_unsent_events(filepath, "trade")
-        assert len(events) == 2
+        assert len(events) == 1
 
         # Simulate watermark update after sending
         key = str(filepath)

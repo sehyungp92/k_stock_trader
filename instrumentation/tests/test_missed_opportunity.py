@@ -71,7 +71,7 @@ class TestMissedOpportunityLogger:
         assert event.blocked_by == "volume_gate"
         assert event.side == "LONG"
 
-    def test_hypothetical_entry_price_computed(self):
+    def test_hypothetical_entry_computed(self):
         event = self.mol.log_missed(
             pair="005930",
             side="LONG",
@@ -83,7 +83,7 @@ class TestMissedOpportunityLogger:
         )
         # Mid price is 50000, slippage of 5bps = 50000 * 5/10000 = 25
         # LONG: base_price + slippage = 50000 + 25 = 50025
-        assert event.hypothetical_entry_price > 0
+        assert event.hypothetical_entry > 0
 
     def test_assumption_tags_populated(self):
         event = self.mol.log_missed(

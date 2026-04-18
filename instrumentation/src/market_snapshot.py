@@ -59,7 +59,12 @@ class MarketSnapshot:
     mark_price: Optional[float] = None    # always None (equity market)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        for key in ("bid", "ask", "mid", "spread_bps", "volume_1m", "volume_5m",
+                     "volume_24h", "atr_14", "funding_rate", "open_interest", "mark_price"):
+            if d.get(key) is None:
+                d[key] = 0.0
+        return d
 
 
 class MarketSnapshotService:

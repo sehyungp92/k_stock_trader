@@ -21,8 +21,9 @@ from .state import WorkingOrder, SymbolPosition, StrategyAllocation, OrderStatus
 class OMSPersistence:
     """Async persistence layer for OMS state."""
 
-    def __init__(self, dsn: Optional[str] = None):
+    def __init__(self, dsn: Optional[str] = None, oms_id: Optional[str] = None):
         self.dsn = dsn or os.environ.get("DATABASE_URL")
+        self.oms_id = oms_id or os.environ.get("OMS_ID", "primary")
         if not self.dsn:
             logger.critical(
                 "DATABASE_URL not set and no dsn provided — "
@@ -86,11 +87,11 @@ class OMSPersistence:
                 """
                 SELECT oms_order_id
                 FROM orders
-                WHERE kis_order_id = $1
+                WHERE kis_order_id = $1 AND oms_id = $2
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                order_id,
+                order_id, self.oms_id,
             )
             return str(resolved) if resolved else None
         except Exception as e:
@@ -113,11 +114,12 @@ class OMSPersistence:
                     intent_type, desired_qty, target_qty, urgency, time_horizon,
                     max_slippage_bps, max_spread_bps, limit_price, stop_price, expiry_ts,
                     entry_px, stop_px, hard_stop_px, rationale_code, confidence, signal_hash,
-                    status, result_message, modified_qty, order_id, cooldown_until, processed_at
+                    status, result_message, modified_qty, order_id, cooldown_until, processed_at,
+                    oms_id
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
                     to_timestamp($14), $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-                    to_timestamp($25), NOW()
+                    to_timestamp($25), NOW(), $26
                 )
                 ON CONFLICT (idempotency_key) DO UPDATE SET
                     status = EXCLUDED.status,
@@ -152,6 +154,7 @@ class OMSPersistence:
                 result.modified_qty,
                 result.order_id,
                 result.cooldown_until,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -223,10 +226,10 @@ class OMSPersistence:
                     strategy_id, symbol, side, order_type,
                     qty, filled_qty, limit_price, stop_price, status,
                     kis_order_id, kis_order_date, intent_id, cancel_after_sec,
-                    submitted_at
+                    submitted_at, oms_id
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9,
-                    $10, $11, $12::uuid, $13, NOW()
+                    $10, $11, $12::uuid, $13, NOW(), $14
                 )
                 RETURNING oms_order_id
                 """,
@@ -243,6 +246,7 @@ class OMSPersistence:
                 kis_order_date,
                 intent_uuid,
                 int(order.cancel_after_sec) if order.cancel_after_sec else None,
+                self.oms_id,
             )
             order.oms_order_id = str(oms_order_id) if oms_order_id else None
             self._record_success()
@@ -308,8 +312,9 @@ class OMSPersistence:
                 """
                 INSERT INTO order_events (
                     oms_order_id, intent_id, strategy_id, symbol,
-                    event_type, payload, status_before, status_after
-                ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
+                    event_type, payload, status_before, status_after,
+                    oms_id
+                ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 oms_order_id,
                 intent_uuid,
@@ -319,6 +324,7 @@ class OMSPersistence:
                 json.dumps(payload) if payload else None,
                 status_before,
                 status_after,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -351,12 +357,14 @@ class OMSPersistence:
                 """
                 INSERT INTO fills (
                     kis_exec_id, oms_order_id, strategy_id, symbol,
-                    side, qty, price, commission, tax, fill_ts
-                ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10)
+                    side, qty, price, commission, tax, fill_ts,
+                    oms_id
+                ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (kis_exec_id) DO NOTHING
                 """,
                 kis_exec_id, oms_order_id, strategy_id, symbol,
                 side, qty, price, commission, tax, fill_ts,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -377,9 +385,10 @@ class OMSPersistence:
                 INSERT INTO positions (
                     symbol, real_qty, avg_price, hard_stop_px,
                     entry_lock_owner, entry_lock_until,
-                    cooldown_until, vi_cooldown_until, frozen
-                ) VALUES ($1, $2, $3, $4, $5, to_timestamp($6), to_timestamp($7), to_timestamp($8), $9)
-                ON CONFLICT (symbol) DO UPDATE SET
+                    cooldown_until, vi_cooldown_until, frozen,
+                    oms_id
+                ) VALUES ($1, $2, $3, $4, $5, to_timestamp($6), to_timestamp($7), to_timestamp($8), $9, $10)
+                ON CONFLICT (oms_id, symbol) DO UPDATE SET
                     real_qty = EXCLUDED.real_qty,
                     avg_price = EXCLUDED.avg_price,
                     hard_stop_px = EXCLUDED.hard_stop_px,
@@ -399,6 +408,7 @@ class OMSPersistence:
                 pos.cooldown_until,
                 pos.vi_cooldown_until,
                 pos.frozen,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -414,9 +424,10 @@ class OMSPersistence:
                 """
                 INSERT INTO allocations (
                     symbol, strategy_id, qty, cost_basis, entry_ts,
-                    soft_stop_px, time_stop_ts
-                ) VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7))
-                ON CONFLICT (symbol, strategy_id) DO UPDATE SET
+                    soft_stop_px, time_stop_ts,
+                    oms_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7), $8)
+                ON CONFLICT (oms_id, symbol, strategy_id) DO UPDATE SET
                     qty = EXCLUDED.qty,
                     cost_basis = EXCLUDED.cost_basis,
                     entry_ts = EXCLUDED.entry_ts,
@@ -431,6 +442,7 @@ class OMSPersistence:
                 alloc.entry_ts,
                 alloc.soft_stop_px,
                 alloc.time_stop_ts,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -466,9 +478,10 @@ class OMSPersistence:
                     trade_date, equity_krw, buyable_cash_krw,
                     realized_pnl_krw, unrealized_pnl_krw, daily_pnl_pct,
                     gross_exposure_krw, gross_exposure_pct, positions_count,
-                    halted, safe_mode, regime
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                ON CONFLICT (trade_date) DO UPDATE SET
+                    halted, safe_mode, regime,
+                    oms_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (oms_id, trade_date) DO UPDATE SET
                     equity_krw = EXCLUDED.equity_krw,
                     buyable_cash_krw = EXCLUDED.buyable_cash_krw,
                     realized_pnl_krw = EXCLUDED.realized_pnl_krw,
@@ -486,6 +499,7 @@ class OMSPersistence:
                 int(realized_pnl_krw), int(unrealized_pnl_krw), daily_pnl_pct,
                 int(gross_exposure_krw), gross_pct, positions_count,
                 halted, safe_mode, regime,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -511,8 +525,9 @@ class OMSPersistence:
                 """
                 INSERT INTO risk_daily_strategy (
                     trade_date, strategy_id, realized_pnl_krw, unrealized_pnl_krw,
-                    trades_count, wins, losses, halted
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    trades_count, wins, losses, halted,
+                    oms_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 ON CONFLICT (trade_date, strategy_id) DO UPDATE SET
                     realized_pnl_krw = EXCLUDED.realized_pnl_krw,
                     unrealized_pnl_krw = EXCLUDED.unrealized_pnl_krw,
@@ -524,6 +539,7 @@ class OMSPersistence:
                 """,
                 trade_date, strategy_id, int(realized_pnl_krw), int(unrealized_pnl_krw),
                 trades_count, wins, losses, halted,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -553,8 +569,9 @@ class OMSPersistence:
                 """
                 INSERT INTO strategy_state (
                     strategy_id, mode, symbols_hot, symbols_warm, symbols_cold,
-                    positions_count, last_error, version, last_heartbeat_ts
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+                    positions_count, last_error, version, last_heartbeat_ts,
+                    oms_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
                 ON CONFLICT (strategy_id) DO UPDATE SET
                     mode = EXCLUDED.mode,
                     symbols_hot = EXCLUDED.symbols_hot,
@@ -568,6 +585,7 @@ class OMSPersistence:
                 """,
                 strategy_id, mode, symbols_hot, symbols_warm, symbols_cold,
                 positions_count, last_error, version,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -597,23 +615,28 @@ class OMSPersistence:
         try:
             await self.pool.execute(
                 """
-                UPDATE oms_state SET
+                INSERT INTO oms_state (
+                    oms_id, last_heartbeat_ts, equity_krw, buyable_cash_krw,
+                    daily_pnl_krw, daily_pnl_pct, safe_mode, halt_new_entries,
+                    kis_connected, last_recon_ts, recon_status,
+                    allocation_drift_count, version, last_update_at
+                ) VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, NOW())
+                ON CONFLICT (oms_id) DO UPDATE SET
                     last_heartbeat_ts = NOW(),
-                    equity_krw = $1,
-                    buyable_cash_krw = $2,
-                    daily_pnl_krw = $3,
-                    daily_pnl_pct = $4,
-                    safe_mode = $5,
-                    halt_new_entries = $6,
-                    kis_connected = $7,
+                    equity_krw = EXCLUDED.equity_krw,
+                    buyable_cash_krw = EXCLUDED.buyable_cash_krw,
+                    daily_pnl_krw = EXCLUDED.daily_pnl_krw,
+                    daily_pnl_pct = EXCLUDED.daily_pnl_pct,
+                    safe_mode = EXCLUDED.safe_mode,
+                    halt_new_entries = EXCLUDED.halt_new_entries,
+                    kis_connected = EXCLUDED.kis_connected,
                     last_recon_ts = NOW(),
-                    recon_status = $8,
-                    allocation_drift_count = $9,
-                    version = $10,
+                    recon_status = EXCLUDED.recon_status,
+                    allocation_drift_count = EXCLUDED.allocation_drift_count,
+                    version = EXCLUDED.version,
                     last_update_at = NOW()
-                WHERE oms_id = 'primary'
                 """,
-                int(equity_krw), int(buyable_cash_krw), int(daily_pnl_krw),
+                self.oms_id, int(equity_krw), int(buyable_cash_krw), int(daily_pnl_krw),
                 daily_pnl_pct, safe_mode, halt_new_entries, kis_connected,
                 recon_status, drift_count, version,
             )
@@ -638,10 +661,33 @@ class OMSPersistence:
         setup_type: str = "",
         confidence: str = "",
     ) -> Optional[str]:
-        """Open a new trade. Returns trade_id."""
+        """Open or accumulate into an existing trade. Returns trade_id."""
         if not self._is_connected():
             return None
-        import uuid
+
+        # Check for existing open trade (partial fill of same entry)
+        existing_id = await self.find_open_trade(strategy_id, symbol)
+        if existing_id:
+            try:
+                await self.pool.execute(
+                    """
+                    UPDATE trades SET
+                        entry_price = (entry_price * entry_qty + $2 * $3)
+                                      / (entry_qty + $3),
+                        entry_qty = entry_qty + $3
+                    WHERE trade_id = $1::uuid
+                    """,
+                    existing_id, entry_price, entry_qty,
+                )
+                self._record_success()
+                logger.debug(f"Accumulated fill into trade {existing_id}: +{entry_qty}@{entry_price}")
+                return existing_id
+            except Exception as e:
+                self._record_failure()
+                logger.error(f"Failed to accumulate trade fill: {e}")
+                return None
+
+        # No existing trade — create new row
         trade_id = str(uuid.uuid4())
         try:
             await self.pool.execute(
@@ -649,12 +695,14 @@ class OMSPersistence:
                 INSERT INTO trades (
                     trade_id, strategy_id, symbol, direction,
                     entry_qty, entry_price, entry_ts, entry_intent_id,
-                    setup_type, confidence, status
-                ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::uuid, $9, $10, 'OPEN')
+                    setup_type, confidence, status,
+                    oms_id
+                ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::uuid, $9, $10, 'OPEN', $11)
                 """,
                 trade_id, strategy_id, symbol, direction,
                 entry_qty, entry_price, entry_ts, entry_intent_id,
                 setup_type, confidence,
+                self.oms_id,
             )
             self._record_success()
             logger.debug(f"Opened trade {trade_id}: {symbol} {direction} {entry_qty}@{entry_price}")
@@ -672,32 +720,47 @@ class OMSPersistence:
         exit_ts: datetime,
         exit_intent_id: str,
         exit_reason: str = "",
+        realized_pnl: float = 0.0,
     ) -> None:
-        """Close a trade, computing P&L."""
+        """Record a partial or full exit on a trade.
+
+        Accumulates exit_qty and VWAP exit_price. Sets status=CLOSED
+        when cumulative exit_qty >= entry_qty.
+        """
         if not self._is_connected():
             return
         try:
             await self.pool.execute(
                 """
                 UPDATE trades SET
-                    exit_qty = $2,
-                    exit_price = $3,
+                    exit_price = CASE
+                        WHEN COALESCE(exit_qty, 0) = 0 THEN $3
+                        ELSE (exit_price * exit_qty + $3 * $2)
+                             / (exit_qty + $2)
+                    END,
+                    exit_qty = COALESCE(exit_qty, 0) + $2,
                     exit_ts = $4,
                     exit_intent_id = $5::uuid,
                     exit_reason = $6,
-                    realized_pnl_krw = ($3 - entry_price) * LEAST(entry_qty, $2)
-                        * CASE WHEN direction = 'LONG' THEN 1 ELSE -1 END,
-                    status = 'CLOSED',
-                    closed_at = NOW()
+                    realized_pnl_krw = COALESCE(realized_pnl_krw, 0) + $7,
+                    status = CASE
+                        WHEN COALESCE(exit_qty, 0) + $2 >= entry_qty THEN 'CLOSED'
+                        ELSE status
+                    END,
+                    closed_at = CASE
+                        WHEN COALESCE(exit_qty, 0) + $2 >= entry_qty THEN NOW()
+                        ELSE closed_at
+                    END
                 WHERE trade_id = $1::uuid
                 """,
-                trade_id, exit_qty, exit_price, exit_ts, exit_intent_id, exit_reason,
+                trade_id, exit_qty, exit_price, exit_ts,
+                exit_intent_id, exit_reason, realized_pnl,
             )
             self._record_success()
-            logger.debug(f"Closed trade {trade_id}: {exit_qty}@{exit_price} reason={exit_reason}")
+            logger.debug(f"Exit fill on trade {trade_id}: {exit_qty}@{exit_price} reason={exit_reason}")
         except Exception as e:
             self._record_failure()
-            logger.error(f"Failed to close trade: {e}")
+            logger.error(f"Failed to record exit on trade: {e}")
 
     async def record_trade_marks(
         self,
@@ -741,10 +804,10 @@ class OMSPersistence:
             row = await self.pool.fetchrow(
                 """
                 SELECT trade_id FROM trades
-                WHERE strategy_id = $1 AND symbol = $2 AND status = 'OPEN'
+                WHERE strategy_id = $1 AND symbol = $2 AND oms_id = $3 AND status = 'OPEN'
                 ORDER BY entry_ts DESC LIMIT 1
                 """,
-                strategy_id, symbol,
+                strategy_id, symbol, self.oms_id,
             )
             self._record_success()
             return str(row['trade_id']) if row else None
@@ -752,6 +815,72 @@ class OMSPersistence:
             self._record_failure()
             logger.error(f"Failed to find open trade: {e}")
             return None
+
+    async def get_strategy_trade_stats(
+        self,
+        trade_date: date,
+    ) -> Dict[str, Dict[str, int]]:
+        """Get completed trade counts, wins, and losses by strategy for a date."""
+        if not self._is_connected():
+            return {}
+        try:
+            rows = await self.pool.fetch(
+                """
+                SELECT strategy_id,
+                       COUNT(*) AS trades,
+                       COUNT(*) FILTER (WHERE realized_pnl_krw > 0) AS wins,
+                       COUNT(*) FILTER (WHERE realized_pnl_krw <= 0) AS losses
+                FROM trades
+                WHERE oms_id = $1
+                  AND entry_ts::date = $2
+                  AND status = 'CLOSED'
+                GROUP BY strategy_id
+                """,
+                self.oms_id, trade_date,
+            )
+            self._record_success()
+            return {
+                row['strategy_id']: {
+                    'trades': row['trades'],
+                    'wins': row['wins'],
+                    'losses': row['losses'],
+                }
+                for row in rows
+            }
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to get strategy trade stats: {e}")
+            return {}
+
+    async def load_daily_realized_pnl(
+        self,
+        trade_date: date,
+    ) -> Dict[str, float]:
+        """Load per-strategy realized PnL from today's closed trades.
+
+        Used on startup to restore in-memory state after mid-day restart.
+        """
+        if not self._is_connected():
+            return {}
+        try:
+            rows = await self.pool.fetch(
+                """
+                SELECT strategy_id, SUM(realized_pnl_krw) AS total_pnl
+                FROM trades
+                WHERE oms_id = $1
+                  AND entry_ts::date = $2
+                  AND status = 'CLOSED'
+                  AND realized_pnl_krw IS NOT NULL
+                GROUP BY strategy_id
+                """,
+                self.oms_id, trade_date,
+            )
+            self._record_success()
+            return {row['strategy_id']: float(row['total_pnl']) for row in rows}
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to load daily realized PnL: {e}")
+            return {}
 
     # ------------------------------------------------------------------
     # Recon Log
@@ -775,13 +904,15 @@ class OMSPersistence:
                 """
                 INSERT INTO recon_log (
                     recon_type, symbol, strategy_id,
-                    before_value, after_value, action, details
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    before_value, after_value, action, details,
+                    oms_id
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                 recon_type, symbol, strategy_id,
                 json.dumps(before_value) if before_value else None,
                 json.dumps(after_value) if after_value else None,
                 action, details,
+                self.oms_id,
             )
             self._record_success()
         except Exception as e:
@@ -798,7 +929,8 @@ class OMSPersistence:
             return {}
         try:
             rows = await self.pool.fetch(
-                "SELECT * FROM positions WHERE real_qty != 0 OR frozen = TRUE"
+                "SELECT * FROM positions WHERE oms_id = $1 AND (real_qty != 0 OR frozen = TRUE)",
+                self.oms_id,
             )
             positions = {}
             for row in rows:
@@ -827,7 +959,10 @@ class OMSPersistence:
         if not self._is_connected():
             return {}
         try:
-            rows = await self.pool.fetch("SELECT * FROM allocations WHERE qty > 0")
+            rows = await self.pool.fetch(
+                "SELECT * FROM allocations WHERE oms_id = $1 AND qty > 0",
+                self.oms_id,
+            )
             allocs: Dict[str, Dict[str, StrategyAllocation]] = {}
             for row in rows:
                 symbol = row["symbol"]
@@ -857,8 +992,9 @@ class OMSPersistence:
             rows = await self.pool.fetch(
                 """
                 SELECT * FROM orders
-                WHERE status IN ('WORKING', 'PARTIAL', 'SUBMITTING')
-                """
+                WHERE oms_id = $1 AND status IN ('WORKING', 'PARTIAL', 'SUBMITTING')
+                """,
+                self.oms_id,
             )
             orders = []
             for row in rows:
@@ -892,7 +1028,8 @@ class OMSPersistence:
             return None
         try:
             row = await self.pool.fetchrow(
-                "SELECT * FROM oms_state WHERE oms_id = 'primary'"
+                "SELECT * FROM oms_state WHERE oms_id = $1",
+                self.oms_id,
             )
             self._record_success()
             if row:

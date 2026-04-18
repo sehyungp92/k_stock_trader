@@ -39,6 +39,7 @@ services:
       - rate_budget:/var/run/rate_budget
     environment:
       OMS_PORT: "8000"
+      OMS_ID: vps2
       DATABASE_URL: postgresql://trading_writer:${POSTGRES_WRITER_PASSWORD}@postgres:5432/trading
       KIS_APP_KEY: ${KIS_APP_KEY}
       KIS_APP_SECRET: ${KIS_APP_SECRET}

@@ -24,6 +24,8 @@ class EventMetadata:
     local_timestamp: str             # ISO 8601, from this machine's clock
     clock_skew_ms: int               # exchange_ts - local_ts in milliseconds
     data_source_id: str              # e.g. "kis_rest", "kis_ws"
+    event_type: str = ""             # "trade" | "missed_opportunity" | "snapshot" | "daily"
+    payload_key: str = ""            # unique key within event type (e.g. trade_id)
     bar_id: Optional[str] = None     # candle open time, e.g. "2026-03-01T14:00+09:00_1d"
 
     def to_dict(self) -> dict:
@@ -73,5 +75,7 @@ def create_event_metadata(
         local_timestamp=local_ts_str,
         clock_skew_ms=compute_clock_skew(exchange_timestamp, local_now),
         data_source_id=data_source_id,
+        event_type=event_type,
+        payload_key=payload_key,
         bar_id=bar_id,
     )

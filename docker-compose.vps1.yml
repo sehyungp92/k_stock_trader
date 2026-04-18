@@ -14,6 +14,7 @@ services:
       - rate_budget:/var/run/rate_budget
     environment:
       OMS_PORT: "8000"
+      OMS_ID: vps1
       KIS_APP_KEY: ${KIS_APP_KEY}
       KIS_APP_SECRET: ${KIS_APP_SECRET}
       KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO}

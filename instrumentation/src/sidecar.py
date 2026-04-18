@@ -187,6 +187,9 @@ class Sidecar:
                             continue
                         try:
                             raw = json.loads(line)
+                            # Skip entry-stage trade records — assistant only wants completed trades
+                            if event_type == "trade" and raw.get("stage") == "entry":
+                                continue
                             wrapped = self._wrap_event(raw, event_type)
                             wrapped["_source_file"] = key
                             wrapped["_line_number"] = i

@@ -94,7 +94,12 @@ class DailySnapshot:
     data_gaps: int = 0                 # number of missing snapshot intervals
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        # Coerce None → 0.0 for fields the assistant schema types as non-Optional float
+        for key in ("sharpe_rolling_30d", "sortino_rolling_30d", "calmar_rolling_30d"):
+            if d.get(key) is None:
+                d[key] = 0.0
+        return d
 
 
 class DailySnapshotBuilder:
@@ -265,7 +270,7 @@ class DailySnapshotBuilder:
         # --- PER-STRATEGY SUMMARY ---
         # Mono-strategy: one key matching strategy_type
         snapshot.per_strategy_summary = {
-            self.strategy_type: {
+            self.strategy_type.upper(): {
                 "trades": snapshot.total_trades,
                 "win_count": snapshot.win_count,
                 "loss_count": snapshot.loss_count,
