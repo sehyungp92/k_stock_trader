@@ -41,6 +41,7 @@ class OMSPersistence:
         try:
             self.pool = await asyncpg.create_pool(self.dsn, min_size=2, max_size=10)
             logger.info("Postgres connection pool established")
+            await self._check_schema_compat()
         except Exception as e:
             logger.warning(f"Postgres connection failed (will retry): {e}")
             self.pool = None
@@ -62,6 +63,28 @@ class OMSPersistence:
         """Track persistence failures."""
         self.consecutive_failures += 1
         self.total_failures += 1
+
+    async def _check_schema_compat(self) -> None:
+        """Verify DB has OMS-scoped schema from 005_oms_scoping.sql."""
+        if not self.pool:
+            return
+        try:
+            has_oms_id = await self.pool.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'positions' AND column_name = 'oms_id')"
+            )
+            if not has_oms_id:
+                logger.critical(
+                    "SCHEMA MISMATCH: 'oms_id' column missing from positions table. "
+                    "Apply migration: psql $DATABASE_URL -f infra/postgres/init/005_oms_scoping.sql && "
+                    "psql $DATABASE_URL -f infra/postgres/init/006_views_oms_scoped.sql"
+                )
+                await self.pool.close()
+                self.pool = None
+            else:
+                logger.info("Schema compatibility check passed")
+        except Exception as e:
+            logger.warning(f"Schema compatibility check failed (non-fatal): {e}")
 
     @staticmethod
     def _normalize_uuid(value: Optional[str]) -> Optional[str]:
