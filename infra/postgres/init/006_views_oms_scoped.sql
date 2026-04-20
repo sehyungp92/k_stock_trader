@@ -1,7 +1,22 @@
 -- ============================================================
 -- 006: Recreate views with oms_id exposed
--- Uses CREATE OR REPLACE so safe to re-run
+-- DROP first because adding/reordering columns is incompatible
+-- with CREATE OR REPLACE on existing views from 003.
+-- Safe to re-run (IF EXISTS).
 -- ============================================================
+
+-- Drop all views that gain or reorder columns in this migration.
+-- CASCADE is not needed — none of these views depend on each other.
+DROP VIEW IF EXISTS v_live_positions;
+DROP VIEW IF EXISTS v_live_allocations;
+DROP VIEW IF EXISTS v_working_orders;
+DROP VIEW IF EXISTS v_today_intents;
+DROP VIEW IF EXISTS v_today_risk;
+DROP VIEW IF EXISTS v_active_halts;
+DROP VIEW IF EXISTS v_recent_trades;
+DROP VIEW IF EXISTS v_strategy_performance;
+DROP VIEW IF EXISTS v_fill_quality;
+DROP VIEW IF EXISTS v_service_health;
 
 -- ==================================================
 -- Live Operations Views
