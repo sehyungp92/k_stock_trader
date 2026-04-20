@@ -3,12 +3,28 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from oms.persistence import OMSPersistence
 from oms.state import OrderStatus, WorkingOrder
+
+
+def _schema_fetchval_responder(
+    column_map: dict[tuple[str, str], bool],
+    pk_map: dict[str, list[str]],
+):
+    async def _fetchval(query: str, *args):
+        if "information_schema.columns" in query:
+            return column_map[(args[0], args[1])]
+        if "information_schema.table_constraints" in query:
+            return pk_map[args[0]]
+        raise AssertionError(f"Unexpected schema query: {query}")
+
+    return _fetchval
 
 
 class TestOMSPersistenceOrderKeying:
@@ -62,3 +78,123 @@ class TestOMSPersistenceOrderKeying:
 
         execute_call = persistence.pool.execute.await_args
         assert execute_call.args[1] == resolved_uuid
+
+
+class TestOMSPersistenceSchemaCompat:
+    """Tests for scoped schema compatibility checks."""
+
+    @pytest.mark.asyncio
+    async def test_schema_compat_passes_when_all_scoped_requirements_exist(self):
+        persistence = OMSPersistence(dsn="postgres://test")
+        pool = MagicMock()
+        pool.close = AsyncMock()
+        pool.fetchval = AsyncMock(
+            side_effect=_schema_fetchval_responder(
+                column_map={
+                    ("positions", "oms_id"): True,
+                    ("allocations", "oms_id"): True,
+                    ("risk_daily_strategy", "oms_id"): True,
+                    ("strategy_state", "oms_id"): True,
+                    ("v_live_positions", "oms_id"): True,
+                    ("v_today_risk", "oms_id"): True,
+                    ("v_service_health", "oms_id"): True,
+                    ("v_live_allocations", "oms_id"): True,
+                },
+                pk_map={
+                    "risk_daily_strategy": ["oms_id", "trade_date", "strategy_id"],
+                    "strategy_state": ["oms_id", "strategy_id"],
+                },
+            )
+        )
+        persistence.pool = pool
+
+        await persistence._check_schema_compat()
+
+        assert persistence.pool is pool
+        pool.close.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_schema_compat_disables_persistence_when_scoped_view_missing(self):
+        persistence = OMSPersistence(dsn="postgres://test")
+        pool = MagicMock()
+        pool.close = AsyncMock()
+        pool.fetchval = AsyncMock(
+            side_effect=_schema_fetchval_responder(
+                column_map={
+                    ("positions", "oms_id"): True,
+                    ("allocations", "oms_id"): True,
+                    ("risk_daily_strategy", "oms_id"): True,
+                    ("strategy_state", "oms_id"): True,
+                    ("v_live_positions", "oms_id"): True,
+                    ("v_today_risk", "oms_id"): True,
+                    ("v_service_health", "oms_id"): True,
+                    ("v_live_allocations", "oms_id"): False,
+                },
+                pk_map={
+                    "risk_daily_strategy": ["oms_id", "trade_date", "strategy_id"],
+                    "strategy_state": ["oms_id", "strategy_id"],
+                },
+            )
+        )
+        persistence.pool = pool
+
+        await persistence._check_schema_compat()
+
+        pool.close.assert_awaited_once()
+        assert persistence.pool is None
+
+
+class TestOMSPersistenceScopedUpserts:
+    """Tests for conflict targets that must include oms_id."""
+
+    @pytest.mark.asyncio
+    async def test_update_daily_risk_strategy_uses_scoped_conflict_target(self):
+        persistence = OMSPersistence(dsn="postgres://test", oms_id="vps1")
+        persistence.pool = MagicMock()
+        persistence.pool.execute = AsyncMock()
+
+        await persistence.update_daily_risk_strategy(
+            trade_date=date(2026, 4, 20),
+            strategy_id="KMP",
+            realized_pnl_krw=1000,
+            unrealized_pnl_krw=200,
+            trades_count=3,
+            wins=2,
+            losses=1,
+            halted=False,
+        )
+
+        sql = persistence.pool.execute.await_args.args[0]
+        assert "ON CONFLICT (oms_id, trade_date, strategy_id)" in sql
+
+    @pytest.mark.asyncio
+    async def test_update_strategy_state_uses_scoped_conflict_target(self):
+        persistence = OMSPersistence(dsn="postgres://test", oms_id="vps2")
+        persistence.pool = MagicMock()
+        persistence.pool.execute = AsyncMock()
+
+        await persistence.update_strategy_state(
+            strategy_id="KPR",
+            mode="RUNNING",
+            symbols_hot=1,
+            symbols_warm=2,
+            symbols_cold=3,
+            positions_count=1,
+        )
+
+        sql = persistence.pool.execute.await_args.args[0]
+        assert "ON CONFLICT (oms_id, strategy_id)" in sql
+
+
+def test_finalize_migration_scopes_remaining_primary_keys():
+    migration = (
+        Path(__file__).resolve().parents[2]
+        / "infra"
+        / "postgres"
+        / "init"
+        / "007_oms_scope_finalize.sql"
+    ).read_text(encoding="utf-8")
+
+    assert "ADD PRIMARY KEY (oms_id, trade_date, strategy_id)" in migration
+    assert "ADD PRIMARY KEY (oms_id, strategy_id)" in migration
+    assert "DROP CONSTRAINT %I" in migration

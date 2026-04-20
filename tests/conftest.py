@@ -7,13 +7,19 @@ Provides mock objects, factories, and sample data for all test modules.
 from __future__ import annotations
 import pytest
 from datetime import datetime, time, date
+from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 import sys
-import os
 
 # Add project root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+assistant_root = PROJECT_ROOT / "_references" / "trading_assistant"
+if assistant_root.exists() and str(assistant_root) not in sys.path:
+    sys.path.insert(0, str(assistant_root))
 
 from tests.mocks.mock_kis_api import MockKoreaInvestAPI, MockPosition
 from tests.mocks.mock_oms_client import MockOMSClient, MockIntentResult, MockIntentStatus

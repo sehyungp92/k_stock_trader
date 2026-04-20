@@ -111,7 +111,7 @@ PostgreSQL stores the full trade lifecycle:
 - `intents` / `orders` / `fills` / `trades` - order flow audit trail
 - `positions` / `allocations` - real and virtual position state
 - `risk_daily_strategy` / `risk_daily_portfolio` - daily risk snapshots
-- Dashboard views: `v_live_positions`, `v_today_risk`, `v_strategy_performance`, `v_service_health`
+- Dashboard views: `v_live_positions`, `v_live_allocations`, `v_today_risk`, `v_strategy_performance`, `v_service_health`
 
 ## Setup
 
@@ -207,7 +207,7 @@ pytest tests/kis_core/ -v
 
 ### Dashboard
 
-Available on VPS 2 at port 3000. Lightweight Next.js dashboard (`infra/dashboard/`) that proxies OMS API calls server-side. Shows positions, risk, and strategy performance.
+Available on VPS 2 at port 3000. Lightweight Next.js dashboard (`infra/dashboard/`) that reads shared Postgres views server-side and shows unified multi-OMS positions, risk, and service health.
 
 ### Log Diagnostics
 

@@ -64,24 +64,91 @@ class OMSPersistence:
         self.consecutive_failures += 1
         self.total_failures += 1
 
+    async def _relation_has_column(self, relation: str, column: str) -> bool:
+        """Return True when a table/view exposes the requested column."""
+        if not self.pool:
+            return False
+        return bool(
+            await self.pool.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = $1
+                      AND column_name = $2
+                )
+                """,
+                relation,
+                column,
+            )
+        )
+
+    async def _primary_key_columns(self, table_name: str) -> List[str]:
+        """Return the ordered primary-key column list for a table."""
+        if not self.pool:
+            return []
+        columns = await self.pool.fetchval(
+            """
+            SELECT COALESCE(array_agg(kcu.column_name ORDER BY kcu.ordinal_position), ARRAY[]::text[])
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+             AND tc.table_schema = kcu.table_schema
+            WHERE tc.table_schema = 'public'
+              AND tc.table_name = $1
+              AND tc.constraint_type = 'PRIMARY KEY'
+            """,
+            table_name,
+        )
+        return list(columns or [])
+
     async def _check_schema_compat(self) -> None:
-        """Verify DB has OMS-scoped schema from 005_oms_scoping.sql."""
+        """Verify DB has the scoped schema and required dashboard views."""
         if not self.pool:
             return
         try:
-            has_oms_id = await self.pool.fetchval(
-                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
-                "WHERE table_name = 'positions' AND column_name = 'oms_id')"
-            )
-            if not has_oms_id:
+            checks = [
+                ("positions.oms_id", await self._relation_has_column("positions", "oms_id")),
+                ("allocations.oms_id", await self._relation_has_column("allocations", "oms_id")),
+                (
+                    "risk_daily_strategy.oms_id",
+                    await self._relation_has_column("risk_daily_strategy", "oms_id"),
+                ),
+                ("strategy_state.oms_id", await self._relation_has_column("strategy_state", "oms_id")),
+                ("v_live_positions.oms_id", await self._relation_has_column("v_live_positions", "oms_id")),
+                ("v_today_risk.oms_id", await self._relation_has_column("v_today_risk", "oms_id")),
+                (
+                    "v_service_health.oms_id",
+                    await self._relation_has_column("v_service_health", "oms_id"),
+                ),
+                (
+                    "v_live_allocations.oms_id",
+                    await self._relation_has_column("v_live_allocations", "oms_id"),
+                ),
+                (
+                    "risk_daily_strategy primary key",
+                    await self._primary_key_columns("risk_daily_strategy")
+                    == ["oms_id", "trade_date", "strategy_id"],
+                ),
+                (
+                    "strategy_state primary key",
+                    await self._primary_key_columns("strategy_state") == ["oms_id", "strategy_id"],
+                ),
+            ]
+            missing = [name for name, ok in checks if not ok]
+            if missing:
                 logger.critical(
-                    "SCHEMA MISMATCH: 'oms_id' column missing from positions table. "
-                    "Apply migration: psql $DATABASE_URL -f infra/postgres/init/005_oms_scoping.sql && "
-                    "psql $DATABASE_URL -f infra/postgres/init/006_views_oms_scoped.sql"
+                    "SCHEMA MISMATCH: missing or outdated scoped schema objects: {}. "
+                    "Apply migrations: psql $DATABASE_URL -f infra/postgres/init/005_oms_scoping.sql && "
+                    "psql $DATABASE_URL -f infra/postgres/init/006_views_oms_scoped.sql && "
+                    "psql $DATABASE_URL -f infra/postgres/init/007_oms_scope_finalize.sql",
+                    ", ".join(missing),
                 )
                 await self.pool.close()
                 self.pool = None
             else:
+                self._record_success()
                 logger.info("Schema compatibility check passed")
         except Exception as e:
             logger.warning(f"Schema compatibility check failed (non-fatal): {e}")
@@ -551,7 +618,7 @@ class OMSPersistence:
                     trades_count, wins, losses, halted,
                     oms_id
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                ON CONFLICT (trade_date, strategy_id) DO UPDATE SET
+                ON CONFLICT (oms_id, trade_date, strategy_id) DO UPDATE SET
                     realized_pnl_krw = EXCLUDED.realized_pnl_krw,
                     unrealized_pnl_krw = EXCLUDED.unrealized_pnl_krw,
                     trades_count = EXCLUDED.trades_count,
@@ -595,7 +662,7 @@ class OMSPersistence:
                     positions_count, last_error, version, last_heartbeat_ts,
                     oms_id
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
-                ON CONFLICT (strategy_id) DO UPDATE SET
+                ON CONFLICT (oms_id, strategy_id) DO UPDATE SET
                     mode = EXCLUDED.mode,
                     symbols_hot = EXCLUDED.symbols_hot,
                     symbols_warm = EXCLUDED.symbols_warm,

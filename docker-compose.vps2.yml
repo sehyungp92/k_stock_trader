@@ -167,12 +167,12 @@ services:
       dockerfile: Dockerfile
     container_name: dashboard
     environment:
-      OMS_URL: http://oms:8000
+      DATABASE_URL: postgresql://trading_writer:${POSTGRES_WRITER_PASSWORD}@postgres:5432/trading
       KIS_IS_PAPER: ${KIS_IS_PAPER:-true}
     ports:
       - "3000:3000"
     depends_on:
-      oms:
+      postgres:
         condition: service_healthy
     logging:
       driver: json-file

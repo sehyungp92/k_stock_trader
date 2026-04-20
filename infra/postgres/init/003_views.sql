@@ -4,6 +4,7 @@
 
 CREATE OR REPLACE VIEW v_live_positions AS
 SELECT
+    'primary'::VARCHAR(20) AS oms_id,
     p.symbol,
     p.real_qty,
     p.avg_price,
@@ -31,6 +32,33 @@ LEFT JOIN (
 ) a ON p.symbol = a.symbol
 WHERE p.real_qty != 0 OR p.frozen = TRUE
 ORDER BY p.symbol;
+
+CREATE OR REPLACE VIEW v_live_allocations AS
+SELECT
+    'primary'::VARCHAR(20) AS oms_id,
+    p.symbol,
+    a.strategy_id,
+    a.qty,
+    COALESCE(a.cost_basis, p.avg_price) AS avg_price,
+    a.entry_ts,
+    a.soft_stop_px,
+    p.hard_stop_px,
+    p.frozen,
+    p.real_qty - totals.total_alloc AS drift,
+    p.last_update_at
+FROM allocations a
+JOIN positions p
+  ON p.symbol = a.symbol
+JOIN (
+    SELECT
+        symbol,
+        SUM(qty) AS total_alloc
+    FROM allocations
+    GROUP BY symbol
+) totals
+  ON totals.symbol = p.symbol
+WHERE a.qty > 0
+ORDER BY p.symbol, a.strategy_id;
 
 CREATE OR REPLACE VIEW v_working_orders AS
 SELECT

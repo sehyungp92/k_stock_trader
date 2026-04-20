@@ -28,6 +28,7 @@ from .premarket.regime import compute_regime
 from .premarket.bucketing import apply_bucketing
 from .premarket.tier import apply_tier
 from .premarket.sizing import compute_sizing, build_sizing_context
+from .guards import should_trigger_intraday_halt
 from .execution.bucket_a import check_bucket_a_trigger
 from .execution.bucket_b import check_bucket_b_trigger
 from .execution.vetoes import check_execution_veto
@@ -721,13 +722,16 @@ async def run_pcim():
             # Intraday halt check
             if kospi_prev_close:
                 kospi_now = api.get_index_realtime("KOSPI") or 0.0
-                if kospi_now > 0:
-                    dd = (kospi_now - kospi_prev_close) / kospi_prev_close
-                    if dd <= INTRADAY_HALT_KOSPI_DD_PCT:
-                        logger.warning(f"INTRADAY HALT: KOSPI DD {dd:.2%}")
-                        intraday_halted = True
-                        await asyncio.sleep(5)
-                        continue
+                should_halt, dd = should_trigger_intraday_halt(
+                    kospi_prev_close=kospi_prev_close,
+                    kospi_now=kospi_now,
+                    halt_threshold=INTRADAY_HALT_KOSPI_DD_PCT,
+                )
+                if should_halt:
+                    logger.warning(f"INTRADAY HALT: KOSPI DD {dd:.2%}")
+                    intraday_halted = True
+                    await asyncio.sleep(5)
+                    continue
 
             # First, check pending orders for fills
             all_positions = await oms.get_all_positions()

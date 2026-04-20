@@ -1,44 +1,64 @@
-export interface HealthResponse {
-  status: 'ok' | 'warn' | 'degraded' | 'error'
-  uptime_sec: number
-  positions_count: number
-  kis_circuit_breaker: string
-  recon_status: string
+export type DashboardStatus = 'ok' | 'warn' | 'degraded' | 'error'
+
+export interface DashboardSummary {
+  status: DashboardStatus
+  total_equity: number
+  total_cash: number
+  total_daily_pnl: number
+  total_daily_pnl_pct: number
+  total_open_allocations: number
+  oms_count: number
 }
 
-export interface AccountState {
+export interface DashboardOmsRow {
+  oms_id: string
+  status: DashboardStatus
+  service_health: string
+  recon_status: string | null
+  safe_mode: boolean
+  halt_new_entries: boolean
+  flatten_in_progress: boolean
+  kis_connected: boolean
   equity: number
   buyable_cash: number
   daily_pnl: number
   daily_pnl_pct: number
-  safe_mode: boolean
-  halt_new_entries: boolean
-  flatten_in_progress: boolean
+  tracked_positions: number
+  last_heartbeat_ts: string | null
+  version: string | null
 }
 
-export interface StrategyAllocation {
+export interface DashboardServiceRow {
+  service: string
+  oms_id: string
+  instance: string
+  health: string
+  status: DashboardStatus
+  seconds_since_heartbeat: number | null
+  safe_mode: boolean
+  kis_connected: boolean
+  recon_status: string | null
+  version: string | null
+}
+
+export interface DashboardPositionRow {
+  oms_id: string
+  symbol: string
   strategy_id: string
   qty: number
-  cost_basis: number
+  avg_price: number
   entry_ts: string | null
   soft_stop_px: number | null
-  time_stop_ts: string | null
-}
-
-export interface PositionInfo {
-  real_qty: number
-  avg_price: number
-  allocations: Record<string, StrategyAllocation>
   hard_stop_px: number | null
-  entry_lock_owner: string | null
   frozen: boolean
-  working_order_count: number
+  drift: number
 }
 
 export interface DashboardData {
-  health: HealthResponse | null
-  account: AccountState | null
-  positions: Record<string, PositionInfo> | null
+  summary: DashboardSummary
+  oms: DashboardOmsRow[]
+  services: DashboardServiceRow[]
+  positions: DashboardPositionRow[]
   is_paper: boolean
   fetchedAt: string
 }

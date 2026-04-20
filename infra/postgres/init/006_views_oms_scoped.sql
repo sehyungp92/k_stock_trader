@@ -39,6 +39,36 @@ LEFT JOIN (
 WHERE p.real_qty != 0 OR p.frozen = TRUE
 ORDER BY p.oms_id, p.symbol;
 
+CREATE OR REPLACE VIEW v_live_allocations AS
+SELECT
+    p.oms_id,
+    p.symbol,
+    a.strategy_id,
+    a.qty,
+    COALESCE(a.cost_basis, p.avg_price) AS avg_price,
+    a.entry_ts,
+    a.soft_stop_px,
+    p.hard_stop_px,
+    p.frozen,
+    p.real_qty - totals.total_alloc AS drift,
+    p.last_update_at
+FROM allocations a
+JOIN positions p
+  ON p.oms_id = a.oms_id
+ AND p.symbol = a.symbol
+JOIN (
+    SELECT
+        oms_id,
+        symbol,
+        SUM(qty) AS total_alloc
+    FROM allocations
+    GROUP BY oms_id, symbol
+) totals
+  ON totals.oms_id = p.oms_id
+ AND totals.symbol = p.symbol
+WHERE a.qty > 0
+ORDER BY p.oms_id, p.symbol, a.strategy_id;
+
 CREATE OR REPLACE VIEW v_working_orders AS
 SELECT
     o.oms_id,
