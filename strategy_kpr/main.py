@@ -78,6 +78,83 @@ def in_micro_window(now: datetime) -> bool:
     return False
 
 
+async def _run_drift_check(
+    oms: OMSClient,
+    drift_monitor: DriftMonitor,
+    states: Dict[str, SymbolState],
+    positions: Set[str],
+    sector_exposure: SectorExposure,
+    instr: InstrumentationKit | None = None,
+) -> bool:
+    """Run one drift-check cycle. Returns True when the caller should skip the loop."""
+    try:
+        all_positions = await oms.get_all_positions()
+
+        # Guard: OMS unreachable ??skip drift to avoid wiping local positions
+        if all_positions is None:
+            logger.debug("Drift check skipped: OMS unreachable")
+            drift_monitor.block_on_oms_unavailable()
+            return True
+
+        # OMS reachable ??clear OMS-unavailable block if active
+        drift_monitor.clear_oms_block()
+
+        # Exclude symbols with pending orders from drift detection ??
+        # their state is transitional and handled by fill confirmation loops
+        pending_symbols = {
+            s.code for s in states.values()
+            if s.fsm in (FSMState.PENDING_ENTRY, FSMState.PENDING_EXIT)
+        }
+
+        broker_positions = {
+            sym: pos.get_allocation(STRATEGY_ID)
+            for sym, pos in all_positions.items()
+            if pos.get_allocation(STRATEGY_ID) > 0 and sym not in pending_symbols
+        }
+
+        # Build local view
+        local_positions = {
+            s.code: s.qty for s in states.values()
+            if s.fsm == FSMState.IN_POSITION and s.qty > 0
+        }
+
+        # Check for drift (position-level only; order-level skipped
+        # because OMS has no broker open-orders query endpoint)
+        events = drift_monitor.compute_drift(local_positions, broker_positions)
+        if drift_monitor.handle_drift(events):
+            # Reconcile: overwrite local with broker truth
+            for sym, qty in broker_positions.items():
+                s = states.get(sym)
+                if s:
+                    s.qty = qty
+                    if qty > 0 and s.fsm != FSMState.IN_POSITION:
+                        s.fsm = FSMState.IN_POSITION
+                        positions.add(sym)
+            # Reverse: zero out local positions missing from broker
+            for sym in list(local_positions.keys()):
+                if sym not in broker_positions:
+                    s = states.get(sym)
+                    if s and s.fsm == FSMState.IN_POSITION:
+                        s.qty = 0
+                        s.fsm = FSMState.DONE
+                        positions.discard(sym)
+                        sector_exposure.on_close(sym, local_positions[sym], 0)
+                        logger.info(f"{sym}: Removed local phantom position")
+            drift_monitor.clear_after_reconcile()
+        return False
+    except Exception as e:
+        if instr:
+            instr.emit_error(
+                severity="critical",
+                error_type="drift_check_failed",
+                message=str(e),
+                context={"action": "drift_check"},
+            )
+        logger.warning(f"Drift check failed: {e} ??blocking new entries")
+        drift_monitor.block_on_oms_unavailable()
+        return False
+
+
 async def run_kpr():
     logger.add(
         "/app/data/logs/kpr_{time:YYYY-MM-DD}.log",
@@ -208,69 +285,15 @@ async def run_kpr():
         # --- Drift detection and reconciliation ---
         if now_ts - last_drift_check > DRIFT_CHECK_INTERVAL:
             last_drift_check = now_ts
-            try:
-                all_positions = await oms.get_all_positions()
-
-                # Guard: OMS unreachable — skip drift to avoid wiping local positions
-                if all_positions is None:
-                    logger.debug("Drift check skipped: OMS unreachable")
-                    drift_monitor.block_on_oms_unavailable()
-                    continue
-
-                # Exclude symbols with pending orders from drift detection —
-                # their state is transitional and handled by fill confirmation loops
-                pending_symbols = {
-                    s.code for s in states.values()
-                    if s.fsm in (FSMState.PENDING_ENTRY, FSMState.PENDING_EXIT)
-                }
-
-                broker_positions = {
-                    sym: pos.get_allocation(STRATEGY_ID)
-                    for sym, pos in all_positions.items()
-                    if pos.get_allocation(STRATEGY_ID) > 0 and sym not in pending_symbols
-                }
-
-                # Build local view
-                local_positions = {
-                    s.code: s.qty for s in states.values()
-                    if s.fsm == FSMState.IN_POSITION and s.qty > 0
-                }
-
-                # Check for drift (position-level only; order-level skipped
-                # because OMS has no broker open-orders query endpoint)
-                events = drift_monitor.compute_drift(
-                    local_positions, broker_positions
-                )
-                if drift_monitor.handle_drift(events):
-                    # Reconcile: overwrite local with broker truth
-                    for sym, qty in broker_positions.items():
-                        s = states.get(sym)
-                        if s:
-                            s.qty = qty
-                            if qty > 0 and s.fsm != FSMState.IN_POSITION:
-                                s.fsm = FSMState.IN_POSITION
-                                positions.add(sym)
-                    # Reverse: zero out local positions missing from broker
-                    for sym in list(local_positions.keys()):
-                        if sym not in broker_positions:
-                            s = states.get(sym)
-                            if s and s.fsm == FSMState.IN_POSITION:
-                                s.qty = 0
-                                s.fsm = FSMState.DONE
-                                positions.discard(sym)
-                                sector_exposure.on_close(sym, local_positions[sym], 0)
-                                logger.info(f"{sym}: Removed local phantom position")
-                    drift_monitor.clear_after_reconcile()
-            except Exception as e:
-                if instr:
-                    instr.emit_error(
-                        severity="critical",
-                        error_type="drift_check_failed",
-                        message=str(e),
-                        context={"action": "drift_check"},
-                    )
-                logger.warning(f"Drift check failed: {e} — blocking new entries")
-                drift_monitor.block_on_oms_unavailable()
+            if await _run_drift_check(
+                oms,
+                drift_monitor,
+                states,
+                positions,
+                sector_exposure,
+                instr=instr,
+            ):
+                continue
 
         # --- Order timeout detection ---
         for s in states.values():

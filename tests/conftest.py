@@ -385,8 +385,16 @@ def kpr_symbol_state():
 
 @pytest.fixture(autouse=True)
 def mock_trading_calendar_for_adapter():
-    """Ensure adapter always sees a trading day in tests."""
-    with patch('oms.adapter.get_trading_calendar') as mock_cal:
+    """Ensure adapter sees an in-session trading timestamp by default."""
+    from zoneinfo import ZoneInfo
+
+    with (
+        patch('oms.adapter.get_trading_calendar') as mock_cal,
+        patch(
+            'oms.adapter.KISExecutionAdapter._now_kst',
+            return_value=datetime(2026, 4, 24, 10, 0, tzinfo=ZoneInfo("Asia/Seoul")),
+        ),
+    ):
         mock_cal.return_value.is_trading_day.return_value = True
         yield mock_cal
 

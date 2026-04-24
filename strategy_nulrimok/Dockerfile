@@ -4,8 +4,7 @@ WORKDIR /app
 
 # Copy and install dependencies from root
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt && \
-    pip install --no-cache-dir pykrx>=1.0.0
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy shared libs
 COPY kis_core/ /app/kis_core/

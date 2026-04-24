@@ -1,8 +1,10 @@
 """Tests for OMS adapter module."""
 
+from datetime import datetime
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 import asyncio
+from zoneinfo import ZoneInfo
 
 from kis_core.kis_client import OrderResult
 from oms.adapter import (
@@ -262,19 +264,18 @@ class TestKISExecutionAdapterRetry:
 
     @pytest.mark.asyncio
     async def test_retry_on_timeout(self):
-        """Test retry on timeout error."""
+        """Timeouts fail closed to avoid duplicate live orders."""
         mock_api = MagicMock()
         call_count = 0
 
         def mock_buy(symbol, qty):
             nonlocal call_count
             call_count += 1
-            if call_count < 2:
-                raise Exception("timeout error")
-            return "ORD001"
+            raise Exception("timeout error")
 
         mock_api.place_market_buy.side_effect = mock_buy
         adapter = KISExecutionAdapter(mock_api)
+        adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
 
         result = await adapter.submit_order(
             symbol="005930",
@@ -284,8 +285,10 @@ class TestKISExecutionAdapterRetry:
             max_retries=3,
         )
 
-        assert result.success is True
-        assert call_count == 2
+        assert result.success is False
+        assert result.error == AdapterError.TEMP_ERROR
+        assert "ambiguous after timeout" in result.message.lower()
+        assert call_count == 1
 
     @pytest.mark.asyncio
     async def test_max_retries_exhausted(self):
@@ -775,3 +778,20 @@ class TestMarketClosedGuard:
         assert result.success is True
         assert result.order_id == "ORD001"
         mock_api.place_market_buy.assert_called_once_with("005930", 100)
+
+    @pytest.mark.asyncio
+    async def test_rejects_outside_trading_hours(self, mock_trading_calendar_for_adapter):
+        """Test weekday after-hours orders are rejected before hitting KIS."""
+        mock_trading_calendar_for_adapter.return_value.is_trading_day.return_value = True
+        mock_api = MagicMock()
+        adapter = KISExecutionAdapter(mock_api)
+        adapter._now_kst = MagicMock(
+            return_value=datetime(2026, 4, 24, 16, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+        )
+
+        result = await adapter.submit_order("005930", "BUY", 100, "MARKET")
+
+        assert result.success is False
+        assert result.error == AdapterError.REJECTED_INVALID
+        assert "Market closed" in result.message
+        mock_api.place_market_buy.assert_not_called()

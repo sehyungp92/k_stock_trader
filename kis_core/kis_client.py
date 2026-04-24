@@ -18,14 +18,20 @@ import functools
 import json
 import os
 import random
+import re
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
 
 import pandas as pd
 import requests
 from loguru import logger
+
+try:
+    from pykrx import stock as pykrx_stock
+except ImportError:  # pragma: no cover - exercised via runtime dependency
+    pykrx_stock = None
 
 from .kis_decorators import rate_limit
 
@@ -409,6 +415,13 @@ class KoreaInvestAPI:
         self.is_paper_trading: bool = cfg['is_paper_trading']
         self.htsid: str = cfg['htsid']
         self.using_url: str = cfg['using_url']
+        self._symbol_lookup_cache: Dict[str, str] = {}
+        self._symbol_lookup_cache_date: Optional[date] = None
+        self._symbol_lookup_snapshot_date: Optional[date] = None
+        self._symbol_lookup_last_refresh_at = 0.0
+        self._symbol_lookup_lock = threading.Lock()
+        self._symbol_lookup_retry_days = 5
+        self._symbol_lookup_retry_interval_sec = 300.0
 
         logger.info(f"API rate limit: {1/_MIN_INTERVAL:.0f} req/sec ({'paper' if _PAPER_MODE else 'live'})")
 
@@ -2113,14 +2126,148 @@ class KoreaInvestAPI:
         mid = len(volumes) // 2
         return volumes[mid] if volumes else 0.0
 
+    def _normalize_symbol_name(self, name: str) -> str:
+        """Normalize company names deterministically for exact cache lookup."""
+        text = " ".join((name or "").strip().split())
+        if not text:
+            return ""
+        text = text.casefold()
+        text = text.replace("\uc8fc\uc2dd\ud68c\uc0ac", " ")
+        text = text.replace("(\uc8fc)", " ")
+        text = text.replace("\u321c", " ")
+        text = re.sub(r"\b(corporation|corp|co|ltd|inc|limited)\b\.?", " ", text)
+        return re.sub(r"[\W_]+", "", text)
+
+    def _get_symbol_lookup_target_date(self) -> date:
+        """Choose the preferred KRX listing snapshot date."""
+        from .trading_calendar import get_trading_calendar
+
+        calendar = get_trading_calendar()
+        today = datetime.now(tz=_get_kst()).date()
+        if calendar.is_trading_day(today):
+            return today
+        return calendar.previous_trading_day(today)
+
+    def _load_symbol_lookup_cache(self, target_date: date) -> Tuple[Dict[str, str], Optional[date]]:
+        """Load a cached symbol lookup table from pykrx market listings."""
+        if pykrx_stock is None:
+            logger.warning("SYMBOL_LOOKUP_CACHE_FAILED: pykrx unavailable")
+            return {}, None
+
+        from .trading_calendar import get_trading_calendar
+
+        calendar = get_trading_calendar()
+        lookup_date = target_date
+
+        for _ in range(self._symbol_lookup_retry_days):
+            date_str = lookup_date.strftime("%Y%m%d")
+            tickers = self._get_symbol_lookup_tickers(date_str)
+
+            if tickers:
+                cache: Dict[str, str] = {}
+                for ticker in tickers:
+                    code = str(ticker).zfill(6)
+                    cache[code] = code
+                    try:
+                        name = (pykrx_stock.get_market_ticker_name(code) or "").strip()
+                    except Exception:
+                        name = ""
+                    if not name:
+                        continue
+                    cache.setdefault(name, code)
+                    cache.setdefault(name.casefold(), code)
+                    normalized = self._normalize_symbol_name(name)
+                    if normalized:
+                        cache.setdefault(normalized, code)
+                logger.info(
+                    f"SYMBOL_LOOKUP_CACHE_REFRESHED: entries={len(cache)} "
+                    f"requested_date={target_date.isoformat()} snapshot_date={lookup_date.isoformat()}"
+                )
+                return cache, lookup_date
+
+            lookup_date = calendar.previous_trading_day(lookup_date)
+
+        logger.warning(
+            f"SYMBOL_LOOKUP_CACHE_EMPTY: requested_date={target_date.isoformat()} "
+            f"lookback_days={self._symbol_lookup_retry_days}"
+        )
+        return {}, None
+
+    def _get_symbol_lookup_tickers(self, date_str: str) -> List[str]:
+        """Fetch listed tickers, falling back to per-market queries if needed."""
+        assert pykrx_stock is not None
+
+        try:
+            raw_tickers = pykrx_stock.get_market_ticker_list(date=date_str, market="ALL")
+            tickers = list(raw_tickers) if raw_tickers is not None else []
+            if tickers:
+                return tickers
+        except Exception as exc:
+            logger.warning(
+                f"SYMBOL_LOOKUP_CACHE_FAILED: date={date_str} market=ALL error={exc}"
+            )
+
+        tickers: List[str] = []
+        for market in ("KOSPI", "KOSDAQ", "KONEX"):
+            try:
+                raw_tickers = pykrx_stock.get_market_ticker_list(date=date_str, market=market)
+            except Exception as exc:
+                logger.warning(
+                    f"SYMBOL_LOOKUP_CACHE_FAILED: date={date_str} market={market} error={exc}"
+                )
+                continue
+            if raw_tickers:
+                tickers.extend(str(ticker) for ticker in raw_tickers)
+        return sorted(set(tickers))
+
+    def _get_symbol_lookup_cache(self) -> Dict[str, str]:
+        """Return the per-process symbol lookup cache, refreshing lazily."""
+        target_date = self._get_symbol_lookup_target_date()
+        now_ts = time.monotonic()
+        with self._symbol_lookup_lock:
+            should_refresh = self._symbol_lookup_cache_date != target_date
+            if (
+                not should_refresh
+                and not self._symbol_lookup_cache
+                and now_ts - self._symbol_lookup_last_refresh_at >= self._symbol_lookup_retry_interval_sec
+            ):
+                should_refresh = True
+            if not should_refresh:
+                return self._symbol_lookup_cache
+            cache, snapshot_date = self._load_symbol_lookup_cache(target_date)
+            self._symbol_lookup_cache = cache
+            self._symbol_lookup_cache_date = target_date
+            self._symbol_lookup_snapshot_date = snapshot_date
+            self._symbol_lookup_last_refresh_at = now_ts
+            return self._symbol_lookup_cache
+
     def resolve_symbol(self, name_or_code: str) -> Optional[str]:
-        """Resolve ticker name to symbol code. Returns code if valid, else None."""
-        # If already a valid 6-digit code, verify it exists
-        if name_or_code.isdigit() and len(name_or_code) == 6:
-            if self.get_current_price(name_or_code):
-                return name_or_code
-        # TODO: Implement name-to-code lookup via search API
-        # For now, return None if not a valid code
+        """Resolve a 6-digit code or official KRX company name to a symbol."""
+        query = (name_or_code or "").strip()
+        if not query:
+            return None
+        if query.isdigit() and len(query) == 6:
+            cache = self._get_symbol_lookup_cache()
+            if query in cache:
+                return query
+            if self.get_current_price(query):
+                return query
+            return None
+
+        cache = self._get_symbol_lookup_cache()
+        if not cache:
+            return None
+
+        if query in cache:
+            return cache[query]
+
+        query_casefold = query.casefold()
+        if query_casefold in cache:
+            return cache[query_casefold]
+
+        normalized = self._normalize_symbol_name(query)
+        if normalized:
+            return cache.get(normalized)
         return None
 
     def earnings_within_days(self, symbol: str, days: int) -> bool:

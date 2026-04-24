@@ -1,16 +1,35 @@
 """Tests for KIS client methods."""
 
+from datetime import date
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from tests.mocks.mock_kis_api import MockKoreaInvestAPI, MockPosition
 from kis_core.kis_client import (
+    KoreaInvestAPI,
     _get_circuit_breaker,
     _circuit_breaker_quote,
     _circuit_breaker_order,
     _circuit_breaker_investor,
 )
+
+
+class _FakeEnv:
+    def get_full_config(self):
+        return {
+            "custtype": "P",
+            "websocket_approval_key": "",
+            "account_num": "12345678",
+            "is_paper_trading": True,
+            "htsid": "TEST",
+            "using_url": "https://example.test",
+        }
+
+
+def _make_real_api() -> KoreaInvestAPI:
+    return KoreaInvestAPI(_FakeEnv())
 
 
 class TestGetLastPrice:
@@ -300,3 +319,85 @@ class TestCircuitBreakerRouting:
         """Any POST request should use the order breaker."""
         cb = _get_circuit_breaker('/uapi/domestic-stock/v1/quotations/inquire-price', True)
         assert cb is _circuit_breaker_order
+
+
+class TestResolveSymbol:
+    def test_valid_6digit_code_passes_through(self):
+        api = _make_real_api()
+        api.get_current_price = MagicMock(return_value={"stck_prpr": 72000})
+
+        with patch.object(api, "_get_symbol_lookup_cache", return_value={}):
+            assert api.resolve_symbol("005930") == "005930"
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_valid_6digit_code_uses_listing_cache_before_quote(self, mock_pykrx_stock):
+        api = _make_real_api()
+        api.get_current_price = MagicMock(return_value={"stck_prpr": 72000})
+        mock_pykrx_stock.get_market_ticker_list.return_value = ["005930"]
+        mock_pykrx_stock.get_market_ticker_name.return_value = "\uc0bc\uc131\uc804\uc790"
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("005930") == "005930"
+        api.get_current_price.assert_not_called()
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_6digit_code_falls_back_to_listing_cache_when_quote_unavailable(self, mock_pykrx_stock):
+        api = _make_real_api()
+        api.get_current_price = MagicMock(return_value=None)
+        mock_pykrx_stock.get_market_ticker_list.return_value = ["005930"]
+        mock_pykrx_stock.get_market_ticker_name.return_value = "\uc0bc\uc131\uc804\uc790"
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("005930") == "005930"
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_exact_korean_name_resolves(self, mock_pykrx_stock):
+        api = _make_real_api()
+        mock_pykrx_stock.get_market_ticker_list.return_value = ["005930", "000660"]
+        mock_pykrx_stock.get_market_ticker_name.side_effect = lambda code: {
+            "005930": "\uc0bc\uc131\uc804\uc790",
+            "000660": "\uc8fc\uc2dd\ud68c\uc0ac SK\ud558\uc774\ub2c9\uc2a4",
+        }[code]
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("\uc0bc\uc131\uc804\uc790") == "005930"
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_normalized_company_name_variant_resolves(self, mock_pykrx_stock):
+        api = _make_real_api()
+        mock_pykrx_stock.get_market_ticker_list.return_value = ["000660"]
+        mock_pykrx_stock.get_market_ticker_name.return_value = "\uc8fc\uc2dd\ud68c\uc0ac SK\ud558\uc774\ub2c9\uc2a4"
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("(\uc8fc) SK \ud558\uc774\ub2c9\uc2a4 Co., Ltd.") == "000660"
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_market_specific_fallback_is_used_when_all_market_query_is_empty(self, mock_pykrx_stock):
+        api = _make_real_api()
+        mock_pykrx_stock.get_market_ticker_list.side_effect = lambda date, market: {
+            "ALL": [],
+            "KOSPI": ["005930"],
+            "KOSDAQ": [],
+            "KONEX": [],
+        }[market]
+        mock_pykrx_stock.get_market_ticker_name.return_value = "\uc0bc\uc131\uc804\uc790"
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("\uc0bc\uc131\uc804\uc790") == "005930"
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_unknown_name_returns_none(self, mock_pykrx_stock):
+        api = _make_real_api()
+        mock_pykrx_stock.get_market_ticker_list.return_value = ["005930"]
+        mock_pykrx_stock.get_market_ticker_name.return_value = "\uc0bc\uc131\uc804\uc790"
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("\uc5c6\ub294\ud68c\uc0ac") is None
+
+    @patch("kis_core.kis_client.pykrx_stock")
+    def test_empty_listing_cache_fails_safely(self, mock_pykrx_stock):
+        api = _make_real_api()
+        mock_pykrx_stock.get_market_ticker_list.return_value = []
+
+        with patch.object(api, "_get_symbol_lookup_target_date", return_value=date(2026, 4, 24)):
+            assert api.resolve_symbol("\uc0bc\uc131\uc804\uc790") is None

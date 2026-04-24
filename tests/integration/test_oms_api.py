@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import asyncio
 
 from tests.mocks.mock_kis_api import MockKoreaInvestAPI
-from oms.adapter import KISExecutionAdapter, AdapterResult, AdapterError
+from oms.adapter import KISExecutionAdapter, AdapterResult, AdapterError, BrokerQueryResult
 
 
 class TestAdapterRetryBehavior:
@@ -41,19 +41,18 @@ class TestAdapterRetryBehavior:
 
     @pytest.mark.asyncio
     async def test_retry_on_timeout(self):
-        """Test retry on timeout error."""
+        """Timeouts fail closed to avoid duplicate live orders."""
         mock_api = MagicMock()
         call_count = 0
 
         def side_effect(symbol, price, qty):
             nonlocal call_count
             call_count += 1
-            if call_count < 2:
-                raise Exception("timeout")
-            return "ORD001"
+            raise Exception("timeout")
 
         mock_api.place_limit_buy = side_effect
         adapter = KISExecutionAdapter(mock_api)
+        adapter.get_orders = AsyncMock(return_value=BrokerQueryResult(ok=True, data=[]))
 
         result = await adapter.submit_order(
             symbol="005930",
@@ -64,7 +63,10 @@ class TestAdapterRetryBehavior:
             max_retries=3,
         )
 
-        assert result.success is True
+        assert result.success is False
+        assert result.error == AdapterError.TEMP_ERROR
+        assert "ambiguous after timeout" in result.message.lower()
+        assert call_count == 1
 
     @pytest.mark.asyncio
     async def test_no_retry_on_permanent_error(self):

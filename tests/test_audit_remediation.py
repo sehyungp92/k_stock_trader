@@ -366,11 +366,11 @@ class TestIdempotencyEviction:
 
 
 # =====================================================================
-# Change 3: Adapter Retry Identity Tracking
+# Change 3: Adapter Retry Safety
 # =====================================================================
 
 class TestAdapterRetryIdentity:
-    """Test adapter filters retry candidates by known order IDs."""
+    """Test adapter tracks known IDs and fails closed on timeout ambiguity."""
 
     def test_adapter_has_known_order_ids(self):
         """KISExecutionAdapter initializes _known_order_ids set."""
@@ -416,8 +416,8 @@ class TestAdapterRetryIdentity:
         assert "ORD123" in adapter._known_order_ids
 
     @pytest.mark.asyncio
-    async def test_retry_excludes_known_orders(self):
-        """On retry, adapter excludes already-known order IDs from candidates."""
+    async def test_timeout_does_not_bind_unknown_open_order(self):
+        """Timeouts do not bind a retry to an unknown open order."""
         from oms.adapter import KISExecutionAdapter, BrokerOrder, BrokerQueryResult
 
         mock_api = MagicMock()
@@ -426,15 +426,11 @@ class TestAdapterRetryIdentity:
         # Pre-populate known IDs
         adapter._known_order_ids.add("ORD_EXISTING")
 
-        # Simulate: first attempt fails, retry finds 2 orders matching criteria,
-        # but one is already known
         call_count = 0
         def fake_place(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                raise TimeoutError("timeout")
-            raise TimeoutError("timeout")  # Second attempt also fails
+            raise TimeoutError("timeout")
 
         mock_api.place_limit_buy = fake_place
 
@@ -447,17 +443,16 @@ class TestAdapterRetryIdentity:
 
         adapter.get_orders = fake_get_orders
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            result = await adapter.submit_order("005930", "BUY", 100, "LIMIT", limit_price=50000, max_retries=2)
+        result = await adapter.submit_order("005930", "BUY", 100, "LIMIT", limit_price=50000, max_retries=2)
 
-        # Should bind to ORD_NEW (the only unknown candidate)
-        assert result.success
-        assert result.order_id == "ORD_NEW"
-        assert "ORD_NEW" in adapter._known_order_ids
+        assert result.success is False
+        assert "ambiguous after timeout" in result.message.lower()
+        assert "ORD_NEW" not in adapter._known_order_ids
+        assert call_count == 1
 
     @pytest.mark.asyncio
-    async def test_retry_ambiguous_submits_fresh(self):
-        """When multiple unknown candidates match, adapter submits fresh order."""
+    async def test_timeout_with_multiple_matches_fails_closed(self):
+        """Timeouts with multiple possible matches also fail closed."""
         from oms.adapter import KISExecutionAdapter, BrokerOrder, BrokerQueryResult
 
         mock_api = MagicMock()
@@ -465,19 +460,10 @@ class TestAdapterRetryIdentity:
 
         call_count = 0
 
-        @dataclass
-        class FakeResult:
-            success: bool = True
-            order_id: str = "ORD_FRESH"
-            error_code: str = ""
-            error_message: str = ""
-
         def fake_place(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                raise TimeoutError("timeout")
-            return FakeResult()
+            raise TimeoutError("timeout")
 
         mock_api.place_limit_buy = fake_place
 
@@ -490,12 +476,11 @@ class TestAdapterRetryIdentity:
 
         adapter.get_orders = fake_get_orders
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            result = await adapter.submit_order("005930", "BUY", 100, "LIMIT", limit_price=50000, max_retries=2)
+        result = await adapter.submit_order("005930", "BUY", 100, "LIMIT", limit_price=50000, max_retries=2)
 
-        # Should submit fresh (not bind to ambiguous match)
-        assert result.success
-        assert result.order_id == "ORD_FRESH"
+        assert result.success is False
+        assert "ambiguous after timeout" in result.message.lower()
+        assert call_count == 1
 
 
 # =====================================================================

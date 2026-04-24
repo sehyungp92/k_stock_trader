@@ -8,7 +8,7 @@ from ..config.switches import pcim_switches
 
 
 def check_execution_veto(
-    quote: dict,
+    quote: Optional[dict],
     upper_limit_price: float,
     tick_size: float,
     is_in_vi: bool,
@@ -33,6 +33,9 @@ def check_execution_veto(
 
     if is_in_vi:
         return "IN_VI"
+
+    if quote is None:
+        return "NO_QUOTE"
 
     bid = float(quote.get('bid', 0))
     ask = float(quote.get('ask', 0))

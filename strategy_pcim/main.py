@@ -80,6 +80,38 @@ def _log_entry_decision(c: Candidate, trigger_type: str, quote: dict, vol_ratio:
     )
 
 
+def _resolve_candidate_symbol(
+    api: KoreaInvestAPI,
+    company_name: str,
+    raw_ticker: Optional[str],
+) -> Optional[str]:
+    """Resolve extracted ticker/name to a 6-digit KRX symbol."""
+    company_name = (company_name or "").strip()
+    raw_ticker = (raw_ticker or "").strip() or None
+    if raw_ticker:
+        symbol = api.resolve_symbol(raw_ticker)
+        if symbol:
+            return symbol
+        logger.warning(
+            f"TICKER_INVALID: '{raw_ticker}' for '{company_name}' not on KRX, falling back to name resolve"
+        )
+        symbol = api.resolve_symbol(company_name)
+        if symbol:
+            logger.info(
+                f"SYMBOL_RESOLUTION_FALLBACK_OK: company='{company_name}' raw_ticker='{raw_ticker}' symbol='{symbol}'"
+            )
+            return symbol
+    else:
+        symbol = api.resolve_symbol(company_name)
+        if symbol:
+            return symbol
+
+    logger.warning(
+        f"SYMBOL_RESOLUTION_MISS: company='{company_name}' raw_ticker='{raw_ticker or ''}'"
+    )
+    return None
+
+
 def _build_pcim_hard_filter_decisions(c: Candidate, has_earnings: bool, reject: str) -> list:
     """Build filter_decisions list from PCIM hard filter results."""
     decisions = [
@@ -386,18 +418,8 @@ async def run_pcim():
                     continue
 
                 for signal in result.signals:
-                    # Always validate ticker through KRX lookup
-                    raw_ticker = signal.ticker
-                    if raw_ticker:
-                        symbol = api.resolve_symbol(raw_ticker)
-                        if not symbol:
-                            logger.warning(f"TICKER_INVALID: '{raw_ticker}' for '{signal.company_name}' not on KRX, falling back to name resolve")
-                            symbol = api.resolve_symbol(signal.company_name)
-                    else:
-                        symbol = api.resolve_symbol(signal.company_name)
-
+                    symbol = _resolve_candidate_symbol(api, signal.company_name, signal.ticker)
                     if not symbol:
-                        logger.warning(f"Could not resolve symbol for {signal.company_name}")
                         continue
 
                     candidates.append(Candidate(
@@ -851,6 +873,9 @@ async def run_pcim():
                 if not rate_budget.try_consume("QUOTE"):
                     continue  # Skip this tick, retry next loop
                 quote = api.get_quote(c.symbol)
+                if not quote:
+                    logger.debug(f"{c.symbol}: Quote unavailable, skipping entry tick")
+                    continue
                 upper_limit = api.get_upper_limit_price(c.symbol, today)
                 tick_size = api.get_tick_size(c.symbol)
                 is_vi = api.is_in_vi(c.symbol)

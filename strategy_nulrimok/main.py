@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict, deque
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, Optional
 from loguru import logger
@@ -84,17 +84,48 @@ async def fetch_30m_bar(api, ticker: str, rate_budget: Optional[SharedRateBudget
         logger.debug(f"{ticker}: 30m bar skipped — CHART rate budget exhausted")
         return None
     try:
-        bars_1m = api.get_minute_bars(ticker, minutes=30)
+        bars_1m = api.get_minute_bars(ticker, minutes=60)
         if bars_1m is None or bars_1m.empty:
             logger.debug(f"{ticker}: 30m bar empty from KIS API")
             return None
-        aggregated = aggregate_bars(bars_1m.to_dict('records'), 30)
-        if aggregated:
-            bar = aggregated[-1]
-            return {'timestamp': bar.timestamp, 'open': bar.open, 'high': bar.high,
-                    'low': bar.low, 'close': bar.close, 'volume': bar.volume}
-        logger.debug(f"{ticker}: 30m bar aggregation returned empty")
-        return None
+        records = bars_1m.to_dict('records')
+        aggregated = aggregate_bars(records, 30)
+        if not aggregated:
+            logger.debug(f"{ticker}: 30m bar aggregation returned empty")
+            return None
+        # Only accept buckets with full timestamp coverage and 30 contributing 1m bars.
+        latest_ts = records[-1].get('timestamp')
+        if isinstance(latest_ts, str):
+            latest_ts = datetime.fromisoformat(latest_ts)
+        if latest_ts is None:
+            logger.debug(f"{ticker}: 30m bar latest timestamp missing")
+            return None
+        bucket_counts = {}
+        for record in records:
+            ts = record.get('timestamp')
+            if isinstance(ts, str):
+                ts = datetime.fromisoformat(ts)
+            if ts is None:
+                continue
+            bucket_start = ts.replace(
+                minute=(ts.minute // 30) * 30,
+                second=0,
+                microsecond=0,
+            )
+            bucket_counts[bucket_start] = bucket_counts.get(bucket_start, 0) + 1
+        completed = [
+            bar for bar in aggregated
+            if (
+                bar.timestamp + timedelta(minutes=29) <= latest_ts
+                and bucket_counts.get(bar.timestamp, 0) >= 30
+            )
+        ]
+        if not completed:
+            logger.debug(f"{ticker}: Only incomplete 30m bar available, skipping")
+            return None
+        bar = completed[-1]
+        return {'timestamp': bar.timestamp, 'open': bar.open, 'high': bar.high,
+                'low': bar.low, 'close': bar.close, 'volume': bar.volume}
     except Exception as e:
         logger.debug(f"{ticker}: 30m bar fetch error: {e}")
         return None
@@ -787,8 +818,7 @@ async def run_nulrimok():
                         ref_price = _last_prices.get(ticker)
                         if ref_price is None:
                             try:
-                                quote = api.get_current_price(ticker)
-                                bid = float(quote.get('bid', 0))
+                                bid = float(api.get_best_bid(ticker) or 0)
                                 if bid > 0:
                                     ref_price = bid
                             except Exception:

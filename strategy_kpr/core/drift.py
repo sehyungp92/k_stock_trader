@@ -130,3 +130,10 @@ class DriftMonitor:
         """Block trading when OMS is unavailable."""
         self.global_trade_block = True
         logger.warning("Trade block activated: OMS unavailable")
+
+    def clear_oms_block(self) -> None:
+        """Clear trade block caused by OMS unavailability.
+        Does NOT clear blocks from real drift (reconcile_needed guards this)."""
+        if self.global_trade_block and not self.reconcile_needed:
+            self.global_trade_block = False
+            logger.info("OMS-unavailable trade block cleared — positions read succeeded")

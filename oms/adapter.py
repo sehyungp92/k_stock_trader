@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
@@ -94,6 +94,68 @@ class KISExecutionAdapter:
         self.api = kis_api
         self._known_order_ids: set = set()
 
+    _ORDER_OPEN = time(9, 0)
+    _ORDER_CLOSE = time(15, 30)
+
+    def _now_kst(self) -> datetime:
+        """Return the current Korea time for market-session checks."""
+        return datetime.now(_KST)
+
+    def _is_order_session_open(self, now: Optional[datetime] = None) -> bool:
+        """Return True only during the regular KRX cash session."""
+        now = now or self._now_kst()
+        if not get_trading_calendar().is_trading_day(now.date()):
+            return False
+        return self._ORDER_OPEN <= now.time() <= self._ORDER_CLOSE
+
+    async def _timeout_ambiguity_result(
+        self,
+        symbol: str,
+        side: str,
+        qty: int,
+        submit_ref: str,
+    ) -> AdapterResult:
+        """Fail closed after a timeout to avoid duplicate live orders."""
+        matching_open_order_ids: Optional[list[str]] = None
+        try:
+            result = await self.get_orders()
+            if result.ok:
+                matching_open_order_ids = [
+                    bo.order_id
+                    for bo in result.data
+                    if bo.symbol == symbol
+                    and bo.side == side
+                    and bo.qty == qty
+                    and bo.order_id not in self._known_order_ids
+                ]
+        except Exception:
+            matching_open_order_ids = None
+
+        if matching_open_order_ids is None:
+            logger.error(
+                f"Order timeout is ambiguous: {symbol} {side} x{qty} "
+                f"(ref={submit_ref}, broker inspection unavailable)"
+            )
+        elif matching_open_order_ids:
+            logger.error(
+                f"Order timeout is ambiguous: {symbol} {side} x{qty} "
+                f"(ref={submit_ref}, possible open orders={matching_open_order_ids})"
+            )
+        else:
+            logger.error(
+                f"Order timeout is ambiguous: {symbol} {side} x{qty} "
+                f"(ref={submit_ref}, no matching open order visible)"
+            )
+
+        return AdapterResult(
+            False,
+            error=AdapterError.TEMP_ERROR,
+            message=(
+                f"Order status ambiguous after timeout: {symbol} {side} x{qty}. "
+                f"Reconcile broker state before retrying."
+            ),
+        )
+
     async def submit_order(
         self,
         symbol: str,
@@ -119,20 +181,20 @@ class KISExecutionAdapter:
         Returns:
             AdapterResult with order_id if successful
         """
-        # Market closed guard: reject orders on weekends and KRX holidays
-        if not get_trading_calendar().is_trading_day(datetime.now(_KST).date()):
+        now_kst = self._now_kst()
+
+        # Market closed guard: reject orders outside the regular KRX session.
+        if not self._is_order_session_open(now_kst):
             logger.warning(f"Order rejected: market closed {symbol} {side} x{qty}")
             return AdapterResult(False, error=AdapterError.REJECTED_INVALID, message="Market closed")
 
-        # Client-side order reference for deduplication across retries.
-        # If first attempt succeeds but response times out, the retry
-        # would create a duplicate order. This ref lets us detect that
-        # by checking existing orders before retrying.
-        client_ref = f"OMS-{uuid.uuid4().hex[:12]}"
+        # Local correlation ID for logs. KIS does not expose a broker-native
+        # client order ID here, so timeout recovery must fail closed.
+        submit_ref = f"OMS-{uuid.uuid4().hex[:12]}"
 
         for attempt in range(max_retries):
-            # On retry, check if the previous attempt actually succeeded
-            if attempt > 0:
+            # Automatic retry-to-open-order binding is intentionally disabled.
+            if False and attempt > 0:
                 try:
                     result = await self.get_orders()
                     if result.ok:
@@ -147,7 +209,7 @@ class KISExecutionAdapter:
                             self._known_order_ids.add(bo.order_id)
                             logger.warning(
                                 f"Detected likely duplicate order on retry: {bo.order_id} "
-                                f"(ref={client_ref})"
+                                f"(ref={submit_ref})"
                             )
                             return AdapterResult(True, order_id=bo.order_id)
                         elif len(unknown_matches) > 1:
@@ -210,7 +272,10 @@ class KISExecutionAdapter:
 
             except Exception as e:
                 err_str = str(e).lower()
-                if attempt < max_retries - 1 and ("rate" in err_str or "timeout" in err_str or "temporary" in err_str):
+                is_timeout = isinstance(e, TimeoutError) or "timeout" in err_str or "timed out" in err_str
+                if is_timeout:
+                    return await self._timeout_ambiguity_result(symbol, side, qty, submit_ref)
+                if attempt < max_retries - 1 and ("rate" in err_str or "temporary" in err_str):
                     logger.warning(f"Transient error (attempt {attempt + 1}/{max_retries}): {e}")
                     await asyncio.sleep(2 ** attempt)
                     continue

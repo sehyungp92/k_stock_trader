@@ -1,9 +1,11 @@
 """Tests for PCIM execution modules: bucket_a trigger, vetoes, gap_reversal, trend_gate."""
 
 import pytest
+from unittest.mock import MagicMock
 
 from strategy_pcim.execution.bucket_a import check_bucket_a_trigger
 from strategy_pcim.execution.vetoes import check_execution_veto
+from strategy_pcim.main import _resolve_candidate_symbol
 from strategy_pcim.pipeline.gap_reversal import compute_gap_reversal_rate
 from strategy_pcim.pipeline.trend_gate import check_trend_gate
 from strategy_pcim.config.switches import PCIMSwitches
@@ -162,6 +164,30 @@ class TestExecutionVeto:
             switches=switches,
         )
         assert result is None
+
+    def test_none_quote_returns_no_quote(self):
+        """None quote -> NO_QUOTE veto (defense-in-depth)."""
+        result = check_execution_veto(None, 100000, 100, False)
+        assert result == "NO_QUOTE"
+
+    def test_none_quote_vi_takes_priority(self):
+        """VI check comes before None quote check."""
+        result = check_execution_veto(None, 100000, 100, True)
+        assert result == "IN_VI"
+
+
+class TestSymbolResolutionFlow:
+    def test_invalid_ticker_falls_back_to_company_name(self):
+        api = type("API", (), {})()
+        api.resolve_symbol = MagicMock(side_effect=[None, "005930"])
+
+        assert _resolve_candidate_symbol(api, "\uc0bc\uc131\uc804\uc790", "INVALID") == "005930"
+
+    def test_missing_ticker_resolves_from_company_name(self):
+        api = type("API", (), {})()
+        api.resolve_symbol = MagicMock(return_value="000660")
+
+        assert _resolve_candidate_symbol(api, "SK\ud558\uc774\ub2c9\uc2a4", None) == "000660"
 
 
 # ===========================================================================

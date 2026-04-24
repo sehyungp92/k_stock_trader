@@ -611,7 +611,9 @@ async def run_kmp():
         # Get account state
         acct = await oms.get_account_state()
         if acct is None:
-            acct = AccountState()
+            logger.debug("Account state unavailable — skipping cycle")
+            await asyncio.sleep(1)
+            continue
         equity = acct.equity or 100_000_000
 
         # Periodic heartbeat

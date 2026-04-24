@@ -69,6 +69,11 @@ class SignalExtractor:
             conviction_threshold = SIGNAL_EXTRACTION["CONVICTION_THRESHOLD"]
 
         prompt = SIGNAL_EXTRACTION_PROMPT.format(transcript=transcript)
+        prompt += (
+            "\n\nAdditional requirements:\n"
+            "- Use the official KRX-listed Korean company name when known.\n"
+            "- Use the 6-digit KRX ticker when known; otherwise return null.\n"
+        )
 
         try:
             response = self.client.generate(

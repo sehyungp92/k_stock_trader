@@ -254,8 +254,7 @@ async def handle_flow_reversal_exits(artifacts: list, oms, kis_api=None, instr=N
         limit_px = None
         if kis_api:
             try:
-                quote = kis_api.get_current_price(artifact.ticker)
-                bid = float(quote.get('bid', 0))
+                bid = float(kis_api.get_best_bid(artifact.ticker) or 0)
                 if bid > 0:
                     limit_px = bid * 0.995
             except Exception:

@@ -478,38 +478,47 @@ async def alpha_step(
                 )
             logger.info(f"{s.code}: Armed entry at {entry_trigger:.0f}, qty={qty}")
             return intent.intent_id
-        else:
-            # Release reservation on rejection
-            if exposure is not None:
-                exposure.unreserve(s.code, qty, entry_trigger)
-            if instr:
-                fd = build_filter_decisions({
-                    "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
-                    "surge_decay": (True, surge_thresh, s.surge),
-                    "entry_rejected": (False, 0, 0),
-                })
-                instr.on_signal_blocked(
-                    symbol=s.code, signal="or_break", signal_id="kmp_breakout",
-                    blocked_by="entry_rejected",
-                    block_reason=f"maturity=late, msg={result.message}",
-                    signal_strength=s.surge,
-                    filter_decisions=fd,
-                    blocking_positions=result.blocking_positions,
-                    resource_conflict_type=result.resource_conflict_type or "",
-                    experiment_id=experiment_id, experiment_variant=experiment_variant,
-                )
-                instr.on_order_event(
-                    order_id=result.order_id or intent.intent_id,
-                    pair=s.code,
-                    order_type="LIMIT",
-                    status="REJECTED",
-                    requested_qty=qty,
-                    requested_price=entry_trigger,
-                    reject_reason=result.message or "",
-                    related_trade_id=intent.intent_id,
-                )
-            logger.warning(f"{s.code}: Entry rejected - {result.message}")
-            s.fsm = State.DONE
+
+        # All non-success paths: release reservation
+        if exposure is not None:
+            exposure.unreserve(s.code, qty, entry_trigger)
+
+        if result.status.name == "DEFERRED":
+            logger.info(f"{s.code}: Entry DEFERRED ({result.message}) — will retry")
+            return None
+        if result.status.name == "REJECTED" and result.message and "OMS unreachable" in result.message:
+            logger.warning(f"{s.code}: OMS unreachable on submit — will retry")
+            return None
+
+        # True rejection — terminal
+        if instr:
+            fd = build_filter_decisions({
+                "spread_gate": (True, SPREAD_MAX_PCT, s.spread_pct),
+                "surge_decay": (True, surge_thresh, s.surge),
+                "entry_rejected": (False, 0, 0),
+            })
+            instr.on_signal_blocked(
+                symbol=s.code, signal="or_break", signal_id="kmp_breakout",
+                blocked_by="entry_rejected",
+                block_reason=f"maturity=late, msg={result.message}",
+                signal_strength=s.surge,
+                filter_decisions=fd,
+                blocking_positions=result.blocking_positions,
+                resource_conflict_type=result.resource_conflict_type or "",
+                experiment_id=experiment_id, experiment_variant=experiment_variant,
+            )
+            instr.on_order_event(
+                order_id=result.order_id or intent.intent_id,
+                pair=s.code,
+                order_type="LIMIT",
+                status="REJECTED",
+                requested_qty=qty,
+                requested_price=entry_trigger,
+                reject_reason=result.message or "",
+                related_trade_id=intent.intent_id,
+            )
+        logger.warning(f"{s.code}: Entry rejected - {result.message}")
+        s.fsm = State.DONE
 
         return None
 
