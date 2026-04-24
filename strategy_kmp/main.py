@@ -226,6 +226,8 @@ async def _sync_positions(
                 s.fsm = State.IN_POSITION
                 # Update exposure: move from working → open
                 exposure.on_fill(ticker, alloc_qty, s.entry_px)
+                if instr:
+                    instr.pulse.count("signal.hit")
                 logger.info(f"{ticker}: Fill detected, IN_POSITION @ {s.entry_px:.0f} qty={s.qty}")
                 if instr:
                     now_kst = get_kst_now()
@@ -512,9 +514,12 @@ async def run_kmp():
     ws_slots_released = False  # Track if non-position WS slots released after entry cutoff
     last_regime_log_ts = 0.0
     prev_regime_ok = True  # Track regime flips for _gate_logged clearing
+    pulse = instr.pulse
+    pulse.set_phase("MAIN_LOOP")
 
     while market_open():
         now = get_kst_now()
+        pulse.count("cycle")
 
         # Flatten time check
         if (now.hour, now.minute) >= FLATTEN_TIME:
@@ -567,10 +572,16 @@ async def run_kmp():
         # Fetch KOSPI real-time price (shared by risk_off and chop detector)
         kospi_price = 0.0
         if rate_budget.try_consume("INDEX"):
+            pulse.count("md.attempt")
             try:
                 kospi_price = api.get_index_realtime("KOSPI") or 0.0
-            except Exception:
-                pass
+                if kospi_price > 0:
+                    pulse.count("md.ok")
+                else:
+                    pulse.count("md.fail")
+            except Exception as e:
+                logger.warning(f"KOSPI index fetch failed: {e}")
+                pulse.count("md.fail")
         if kospi_price > 0:
             chop_detector.update_kospi(kospi_price)
 
@@ -609,23 +620,29 @@ async def run_kmp():
         prev_regime_ok = regime_ok
 
         # Get account state
+        pulse.count("oms.call")
         acct = await oms.get_account_state()
         if acct is None:
-            logger.debug("Account state unavailable — skipping cycle")
+            logger.warning("OMS account state unavailable — skipping cycle")
+            pulse.count("oms.fail")
+            pulse.count("oms.skip")
             await asyncio.sleep(1)
             continue
+        pulse.count("oms.ok")
         equity = acct.equity or 100_000_000
 
         # Periodic heartbeat
         if _time.time() - last_heartbeat_ts > heartbeat_interval:
             hot_count = sum(1 for t in candidates if states.get(t) and states[t].fsm in (State.WATCH_BREAK, State.ARMED, State.WAIT_ACCEPTANCE))
             positions_count = sum(1 for s in states.values() if s.fsm == State.IN_POSITION)
+            instr.emit_pulse_if_due()
             await oms.report_heartbeat(
                 mode="RUNNING",
                 symbols_hot=hot_count,
                 symbols_warm=len(candidates) - hot_count,
                 positions_count=positions_count,
                 version="2.3.4",
+                pulse_snapshot=pulse.snapshot(),
             )
             hb_positions = []
             for ticker, s in states.items():
@@ -683,6 +700,7 @@ async def run_kmp():
                 if "no_price" not in s._gate_logged:
                     logger.warning(f"{ticker}: no price available (WS and REST both failed), skipping")
                     s._gate_logged.add("no_price")
+                pulse.count("md.fail")
                 continue
 
             # Derive ATR and 5m value from bar aggregators (fallback to estimate)
@@ -691,6 +709,7 @@ async def run_kmp():
 
             # FSM step for non-position states (blocked by risk_off)
             if s.fsm != State.IN_POSITION and risk_off:
+                pulse.count("signal.blocked", tag="risk_off")
                 if "risk_off" not in s._gate_logged:
                     if instr and s.fsm in (State.CANDIDATE, State.WATCH_BREAK, State.WAIT_ACCEPTANCE, State.ARMED):
                         instr.on_signal_blocked(
@@ -703,6 +722,7 @@ async def run_kmp():
                     logger.debug(f"{ticker}: blocked by risk_off (fsm={s.fsm.name})")
                     s._gate_logged.add("risk_off")
             if s.fsm != State.IN_POSITION and not risk_off:
+                pulse.count("signal.eval")
                 await alpha_step(
                     s=s,
                     price=price,

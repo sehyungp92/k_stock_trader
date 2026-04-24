@@ -43,6 +43,7 @@ from .src.filter_logger import FilterLogger
 from .src.orderbook_logger import OrderBookLogger
 from .src.config_watcher import ConfigWatcher
 from .src.experiment_registry import ExperimentRegistry
+from .src.operational_pulse import OperationalPulse
 
 
 class InstrumentationKit:
@@ -101,6 +102,9 @@ class InstrumentationKit:
         )
         self._config_watcher = config_watcher
         self._experiment_registry = experiment_registry
+        self._pulse = OperationalPulse(
+            strategy_id=strategy_type.upper(),
+        )
         self._executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="instr_backfill"
         )
@@ -558,6 +562,18 @@ class InstrumentationKit:
     def experiment_registry(self) -> Optional[ExperimentRegistry]:
         """Access experiment registry for variant assignment."""
         return self._experiment_registry
+
+    @property
+    def pulse(self) -> OperationalPulse:
+        """Access operational pulse counter."""
+        return self._pulse
+
+    def emit_pulse_if_due(self) -> bool:
+        """Emit operational pulse summary if interval has elapsed."""
+        try:
+            return self._pulse.maybe_emit()
+        except Exception:
+            return False
 
     def shutdown(self) -> None:
         """Clean up executor and sidecar resources."""

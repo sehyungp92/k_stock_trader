@@ -310,6 +310,7 @@ class OMSClient:
         last_error: Optional[str] = None,
         version: Optional[str] = None,
         strategy_id: Optional[str] = None,
+        pulse_snapshot: Optional[dict] = None,
     ) -> None:
         """Report strategy heartbeat to OMS."""
         strat_id = strategy_id or self.strategy_id
@@ -329,6 +330,10 @@ class OMSClient:
                 payload["last_error"] = last_error
             if version is not None:
                 payload["version"] = version
+            if pulse_snapshot:
+                payload["pulse_verdict"] = pulse_snapshot.get("verdict")
+                payload["pulse_md_ok_pct"] = pulse_snapshot.get("md_ok_pct")
+                payload["pulse_signals_eval"] = pulse_snapshot.get("signals_eval")
             async with session.post(
                 f"{self.base_url}/api/v1/strategies/{strat_id}/heartbeat",
                 json=payload,

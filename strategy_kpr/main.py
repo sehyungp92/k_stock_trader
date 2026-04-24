@@ -266,13 +266,22 @@ async def run_kpr():
     heartbeat_interval = 30.0  # seconds
     equity_warned = False
 
+    pulse = instr.pulse
+    pulse.set_phase("MAIN_LOOP")
+
     while market_open():
         now = get_kst_now()
         now_ts = time_module.time()
+        pulse.count("cycle")
+        pulse.count("oms.call")
         acct = await oms.get_account_state()
         if acct is None:
+            logger.warning("OMS account state unavailable — skipping cycle")
+            pulse.count("oms.fail")
+            pulse.count("oms.skip")
             await asyncio.sleep(1)
             continue
+        pulse.count("oms.ok")
         equity = acct.equity or 100_000_000
         if acct.equity is not None and acct.equity <= 0 and not equity_warned:
             logger.warning(f"KPR: OMS equity=0 — entries will be DEFERRED until reconciliation")
@@ -324,6 +333,7 @@ async def run_kpr():
 
         # Periodic heartbeat
         if now_ts - last_heartbeat_ts > heartbeat_interval:
+            instr.emit_pulse_if_due()
             await oms.report_heartbeat(
                 mode="RUNNING",
                 symbols_hot=len(universe_mgr.hot) if hasattr(universe_mgr, 'hot') else 0,
@@ -331,6 +341,7 @@ async def run_kpr():
                 symbols_cold=len(universe) - len(getattr(universe_mgr, 'hot', set())) - len(getattr(universe_mgr, 'warm', set())),
                 positions_count=len(positions),
                 version="4.3.1",
+                pulse_snapshot=pulse.snapshot(),
             )
             hb_positions = []
             for ticker in positions:
@@ -397,10 +408,15 @@ async def run_kpr():
 
             try:
                 if not rate_budget.try_consume("CHART"):
+                    pulse.count("md.skip_budget")
                     continue  # Skip this tick, retry next loop
+                pulse.count("md.attempt")
                 bars = api.get_minute_bars(ticker, minutes=1)
                 if bars is None or bars.empty:
+                    logger.warning(f"{ticker}: 1m bars unavailable")
+                    pulse.count("md.fail")
                     continue
+                pulse.count("md.ok")
                 bar = bars.iloc[-1].to_dict()
 
                 # --- Deduplicate: only process new bars ---
@@ -663,6 +679,7 @@ async def run_kpr():
                     continue
 
                 # --- Entry FSM ---
+                pulse.count("signal.eval")
                 investor_age = investor_provider.age_sec(ticker, now_ts)
                 regime_ok = not acct.halt_new_entries
                 if not regime_ok and not getattr(alpha_step, '_halt_logged', False):
@@ -688,6 +705,7 @@ async def run_kpr():
                 )
 
                 if intent_id:
+                    pulse.count("signal.hit")
                     working_orders.add(ticker)
                 # positions.add and on_entry_fill now happen in PENDING_ENTRY confirmation
                 if s.fsm not in (FSMState.IN_POSITION, FSMState.PENDING_ENTRY):

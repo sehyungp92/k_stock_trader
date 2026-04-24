@@ -251,7 +251,7 @@ async def _reconcile_positions(oms, position_states: Dict[str, PositionState], i
                 message=str(e),
                 context={"action": "reconciliation"},
             )
-        logger.debug(f"Reconciliation check failed: {e}")
+        logger.warning(f"Reconciliation check failed: {e}")
 
 
 async def run_nulrimok():
@@ -377,20 +377,24 @@ async def run_nulrimok():
         logger.info(f"Startup: recovered {len(position_states)} positions from OMS")
 
     flow_exit_done_today = False
+    pulse = instr.pulse
 
     while True:
         now = get_kst_now()
         today = now.date()
+        pulse.count("cycle")
 
         # Periodic heartbeat
         now_ts = _time.time()
         if now_ts - last_heartbeat_ts > heartbeat_interval:
+            instr.emit_pulse_if_due()
             active_set_count = len(artifact.active_set) if artifact else 0
             await oms.report_heartbeat(
                 mode="RUNNING",
                 symbols_hot=active_set_count,
                 positions_count=len(position_states),
                 version="1.0.1",
+                pulse_snapshot=pulse.snapshot(),
             )
             hb_positions = []
             for ticker, pos in position_states.items():
@@ -428,6 +432,7 @@ async def run_nulrimok():
 
         # DSE Phase
         if time(DSE_START[0], DSE_START[1]) <= now.time() <= time(DSE_END[0], DSE_END[1]) and not dse_ran_today:
+            pulse.set_phase("DSE")
             # Refresh LRS data for today (skips instantly if already fresh)
             populate_lrs(lrs, api, filtered_universe, sector_map_cfg, rate_budget)
 
@@ -488,15 +493,21 @@ async def run_nulrimok():
         tier_c_blocked = artifact is not None and artifact.regime_tier == "C" and not nulrimok_switches.allow_tier_c_reduced
         if (time(IEPE_START[0], IEPE_START[1]) <= now.time() <= time(IEPE_END[0], IEPE_END[1])
                 and artifact and not tier_c_blocked):
+            pulse.set_phase("IEPE")
 
             current_boundary = now.replace(minute=(now.minute // 30) * 30, second=0, microsecond=0)
 
             if last_30m_boundary is None or current_boundary > last_30m_boundary:
                 last_30m_boundary = current_boundary
                 last_reconcile_cycle += 1
+                pulse.count("oms.call")
                 acct = await oms.get_account_state()
                 if acct is None:
+                    logger.warning("OMS account state unavailable — skipping cycle")
+                    pulse.count("oms.fail")
+                    pulse.count("oms.skip")
                     continue  # Skip this 30m boundary, retry next cycle
+                pulse.count("oms.ok")
                 equity = acct.equity or 100_000_000
                 gross_exposure_pct = acct.gross_exposure_pct
                 regime_exposure_cap = acct.regime_exposure_cap
@@ -512,10 +523,16 @@ async def run_nulrimok():
                         logger.debug(f"{ticker}: Skipping — not in candidates or not tradable")
                         continue
 
-                    bar = await fetch_30m_bar(api, ticker, rate_budget)
-                    if not bar:
-                        logger.debug(f"{ticker}: Skipping — 30m bar fetch failed")
+                    if rate_budget and not rate_budget.try_consume("CHART"):
+                        pulse.count("md.skip_budget")
                         continue
+                    pulse.count("md.attempt")
+                    bar = await fetch_30m_bar(api, ticker)
+                    if not bar:
+                        logger.warning(f"{ticker}: 30m bar fetch failed")
+                        pulse.count("md.fail")
+                        continue
+                    pulse.count("md.ok")
 
                     close = bar['close']
                     _last_prices[ticker] = close
@@ -561,6 +578,7 @@ async def run_nulrimok():
                                 _mfe_prices[ticker] = cost_basis
                                 _mae_prices[ticker] = cost_basis
                                 entry_state.state = EntryState.TRIGGERED
+                                pulse.count("signal.hit")
                                 # Update sector exposure
                                 if sector_exposure:
                                     sector_exposure.on_fill(ticker, alloc_qty, cost_basis)
@@ -766,6 +784,7 @@ async def run_nulrimok():
                             continue
 
                         # Entry submission: will transition to PENDING_FILL, position created on fill confirm
+                        pulse.count("signal.eval")
                         await process_entry(
                             entry_state, ticker_artifact, bar, sma5 or close,
                             vol_avg, now, equity, oms,

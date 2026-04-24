@@ -348,11 +348,14 @@ async def run_pcim():
     night_pipeline_interval = 3600.0  # seconds (1 hour)
     last_heartbeat_ts = 0.0
     heartbeat_interval = 30.0  # seconds
+    pulse = instr.pulse
+    _time = time_module
 
     while True:
         now = get_kst_now()
         today = now.date()
         now_ts = time_module.time()
+        pulse.count("cycle")
 
         # Clear day_reset_done flag in the morning so reset can fire again at 18:00
         if now.time() < time(18, 0):
@@ -360,12 +363,14 @@ async def run_pcim():
 
         # Periodic heartbeat
         if now_ts - last_heartbeat_ts > heartbeat_interval:
+            instr.emit_pulse_if_due()
             open_positions = position_manager.get_open_positions()
             await oms.report_heartbeat(
                 mode="RUNNING",
                 symbols_hot=len(approved_watchlist),
                 positions_count=len(open_positions),
                 version="1.3.1",
+                pulse_snapshot=pulse.snapshot(),
             )
             hb_positions = []
             for pos in open_positions:
@@ -397,6 +402,7 @@ async def run_pcim():
         # =================================================================
         in_night_window = now.time() >= time(20, 0) or now.time() <= time(6, 0)
         if in_night_window and (now_ts - last_night_pipeline_ts >= night_pipeline_interval):
+            pulse.set_phase("NIGHT_PIPELINE")
             last_night_pipeline_ts = now_ts
             logger.info("Night pipeline: Checking for new videos")
 
@@ -448,11 +454,15 @@ async def run_pcim():
         if now.time() < time(6, 0) and candidates and not stats_done_today:
             logger.info("Refreshing daily stats")
             stats_done_today = True
+            pulse.count("oms.call")
             acct = await oms.get_account_state()
             if acct is None:
+                logger.warning("OMS account state unavailable — retrying stats refresh")
+                pulse.count("oms.fail")
                 stats_done_today = False  # Retry next cycle
                 await asyncio.sleep(5)
                 continue
+            pulse.count("oms.ok")
             equity = acct.equity or 100_000_000
 
             for c in candidates:
@@ -606,13 +616,18 @@ async def run_pcim():
         # PREMARKET CLASSIFICATION (08:40-09:00) - run once per day
         # =================================================================
         if time(8, 40) <= now.time() <= time(9, 0) and regime and not premarket_done_today:
+            pulse.set_phase("PREMARKET")
             logger.info("Premarket classification")
             premarket_done_today = True
+            pulse.count("oms.call")
             acct = await oms.get_account_state()
             if acct is None:
+                logger.warning("OMS account state unavailable — retrying premarket classification")
+                pulse.count("oms.fail")
                 premarket_done_today = False  # Retry next cycle
                 await asyncio.sleep(5)
                 continue
+            pulse.count("oms.ok")
             equity = acct.equity or 100_000_000
 
             for c in approved_watchlist:
@@ -735,11 +750,17 @@ async def run_pcim():
             )
 
         if time(9, 1) <= now.time() <= time(cancel_at[0], cancel_at[1]) and not intraday_halted:
+            pulse.set_phase("EXECUTION")
             # Refresh account state for accurate exposure tracking in fill instrumentation
+            pulse.count("oms.call")
             acct = await oms.get_account_state()
             if acct is None:
+                logger.warning("OMS account state unavailable — skipping execution cycle")
+                pulse.count("oms.fail")
+                pulse.count("oms.skip")
                 await asyncio.sleep(5)
                 continue
+            pulse.count("oms.ok")
 
             # Intraday halt check
             if kospi_prev_close:
@@ -756,10 +777,15 @@ async def run_pcim():
                     continue
 
             # First, check pending orders for fills
+            pulse.count("oms.call")
             all_positions = await oms.get_all_positions()
             if all_positions is None:
+                logger.warning("OMS positions unavailable — skipping execution cycle")
+                pulse.count("oms.fail")
+                pulse.count("oms.skip")
                 await asyncio.sleep(5)
                 continue
+            pulse.count("oms.ok")
             for symbol in list(position_manager.pending_orders.keys()):
                 oms_pos = all_positions.get(symbol)
                 alloc_qty = oms_pos.get_allocation(STRATEGY_ID) if oms_pos else 0
@@ -871,11 +897,15 @@ async def run_pcim():
                     continue  # Idempotency: already submitted today
 
                 if not rate_budget.try_consume("QUOTE"):
+                    pulse.count("md.skip_budget")
                     continue  # Skip this tick, retry next loop
+                pulse.count("md.attempt")
                 quote = api.get_quote(c.symbol)
                 if not quote:
-                    logger.debug(f"{c.symbol}: Quote unavailable, skipping entry tick")
+                    logger.warning(f"{c.symbol}: Quote unavailable, skipping entry")
+                    pulse.count("md.fail")
                     continue
+                pulse.count("md.ok")
                 upper_limit = api.get_upper_limit_price(c.symbol, today)
                 tick_size = api.get_tick_size(c.symbol)
                 is_vi = api.is_in_vi(c.symbol)
@@ -939,8 +969,10 @@ async def run_pcim():
                         baseline = api.get_open_3m_baseline(c.symbol, 20)
                         # Use adaptive threshold based on hit-rate
                         adaptive_threshold = bucket_a_tracker.calibrated_threshold()
+                        pulse.count("signal.eval")
                         signal = check_bucket_a_trigger(bar_3m[-1], baseline, vol_threshold=adaptive_threshold)
                         if signal.triggered:
+                            pulse.count("signal.hit")
                             _log_entry_decision(c, "ORB", quote, signal.vol_ratio)
                             # Bucket A: 30-second fill timeout per spec
                             _trigger_ts = _time.time()
@@ -1011,8 +1043,10 @@ async def run_pcim():
                 if c.bucket == "B" and now.time() >= time(9, 10) and rate_budget.try_consume("CHART"):
                     bars_1m = api.get_intraday_1m(c.symbol, "09:00", now.strftime("%H:%M"))
                     if bars_1m:
+                        pulse.count("signal.eval")
                         signal = check_bucket_b_trigger(bars_1m)
                         if signal.triggered:
+                            pulse.count("signal.hit")
                             _log_entry_decision(c, "VWAP_RECLAIM", quote)
                             _trigger_ts = _time.time()
                             intent = create_entry_intent(c, quote['last'])

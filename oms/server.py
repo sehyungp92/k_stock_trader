@@ -184,6 +184,7 @@ class HealthResponse(BaseModel):
     positions_count: int
     kis_circuit_breaker: Optional[str] = None
     recon_status: Optional[str] = None
+    strategies: Optional[Dict[str, Any]] = None
 
 
 class RegimeRequest(BaseModel):
@@ -203,6 +204,9 @@ class StrategyHeartbeatRequest(BaseModel):
     positions_count: int = 0
     last_error: Optional[str] = None
     version: Optional[str] = None
+    pulse_verdict: Optional[str] = None
+    pulse_md_ok_pct: Optional[float] = None
+    pulse_signals_eval: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +215,7 @@ class StrategyHeartbeatRequest(BaseModel):
 
 _oms: Optional[OMSCore] = None
 _start_time = time.time()
+_strategy_heartbeats: Dict[str, dict] = {}  # strategy_id -> {ts, mode, version, pulse_verdict}
 
 
 def get_oms() -> OMSCore:
@@ -297,12 +302,28 @@ async def health():
                 overall_status = "degraded"
             recon_status = f"{recon_status},persist_fail({oms.persistence.consecutive_failures})"
 
+    # Strategy liveness from in-memory heartbeat tracking
+    strategies = {}
+    for strat_id, info in _strategy_heartbeats.items():
+        age = time.time() - info["ts"]
+        strategies[strat_id] = {
+            "last_heartbeat_sec_ago": round(age, 1),
+            "status": "alive" if age < 300 else "stale",
+            "mode": info["mode"],
+            "version": info.get("version"),
+            "pulse_verdict": info.get("pulse_verdict"),
+        }
+    if any(s["status"] == "stale" for s in strategies.values()):
+        if overall_status == "ok":
+            overall_status = "warn"
+
     return HealthResponse(
         status=overall_status,
         uptime_sec=time.time() - _start_time,
         positions_count=len(oms.state.get_all_positions()),
         kis_circuit_breaker=cb_state,
         recon_status=recon_status,
+        strategies=strategies if strategies else None,
     )
 
 
@@ -420,6 +441,12 @@ async def get_allocations(strategy_id: str):
 @app.post("/api/v1/strategies/{strategy_id}/heartbeat")
 async def strategy_heartbeat(strategy_id: str, req: StrategyHeartbeatRequest):
     """Receive heartbeat from a strategy, updating its state in the database."""
+    _strategy_heartbeats[strategy_id.upper()] = {
+        "ts": time.time(),
+        "mode": req.mode,
+        "version": req.version,
+        "pulse_verdict": req.pulse_verdict,
+    }
     oms = get_oms()
     if oms.persistence:
         await oms.persistence.update_strategy_state(
