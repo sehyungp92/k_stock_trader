@@ -1,0 +1,8 @@
+strategy: nulrimok
+capability_level: synthetic
+initial_equity: 10000000
+available_features:
+  - synthetic
+  - ohlcv
+live_parity_fill_timing: next_bar_after_completed_signal
+
