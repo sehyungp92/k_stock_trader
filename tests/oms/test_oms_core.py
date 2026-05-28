@@ -8,7 +8,7 @@ import time
 from oms.oms_core import OMSCore, InMemoryIdempotencyStore, IdempotencyStore
 from oms.state import StateStore, StrategyAllocation
 from oms.risk import RiskConfig
-from oms.intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, RiskPayload
+from oms.intent import Intent, IntentConstraints, IntentType, IntentStatus, IntentResult, Urgency, RiskPayload
 from oms.adapter import BrokerQueryResult
 
 
@@ -107,14 +107,14 @@ class TestOMSCoreSubmitIntent:
             status=IntentStatus.EXECUTED,
             order_id="ORD001",
         )
-        oms._idem.put("KMP:005930:ENTER:20240115:test", cached_result)
+        oms._idem.put("ALPHA:005930:ENTER:20240115:test", cached_result)
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
-            idempotency_key="KMP:005930:ENTER:20240115:test",
+            idempotency_key="ALPHA:005930:ENTER:20240115:test",
         )
 
         result = await oms.submit_intent(intent)
@@ -127,7 +127,7 @@ class TestOMSCoreSubmitIntent:
         """Test validation failure rejects intent."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="",  # Invalid: empty symbol
             desired_qty=100,
         )
@@ -142,7 +142,7 @@ class TestOMSCoreSubmitIntent:
         """Test expired intent is rejected."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -177,7 +177,7 @@ class TestOMSCoreProcessIntent:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -193,11 +193,11 @@ class TestOMSCoreProcessIntent:
         """Test arbitration deferral."""
         # Set up entry lock by another strategy
         now = time.time()
-        oms.state.set_entry_lock("005930", "KPR", now + 60)
+        oms.state.set_entry_lock("005930", "BETA", now + 60)
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -213,7 +213,7 @@ class TestOMSCoreProcessIntent:
         """Test CANCEL_ORDERS intent processing."""
         intent = Intent(
             intent_type=IntentType.CANCEL_ORDERS,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -244,7 +244,7 @@ class TestOMSCorePlanAndExecute:
         """Test ENTER intent creates working order."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -260,11 +260,29 @@ class TestOMSCorePlanAndExecute:
         assert pos.has_working_orders()
 
     @pytest.mark.asyncio
+    async def test_synthetic_stop_entry_is_accepted_without_immediate_broker_order(self, oms):
+        """Synthetic stops are trigger intents, not immediate KIS stop-limit submissions."""
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="DELTA",
+            symbol="005930",
+            desired_qty=100,
+            constraints=IntentConstraints(stop_price=72100, execution_style="SYNTHETIC_STOP"),
+            risk_payload=RiskPayload(entry_px=72100, stop_px=71000),
+        )
+
+        result = await oms.submit_intent(intent)
+
+        assert result.status == IntentStatus.ACCEPTED
+        assert result.order_id is None
+        assert not oms.state.get_position("005930").has_working_orders()
+
+    @pytest.mark.asyncio
     async def test_exit_without_allocation_rejected(self, oms):
         """Test EXIT without allocation is rejected."""
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -277,12 +295,12 @@ class TestOMSCorePlanAndExecute:
     async def test_exit_with_allocation_succeeds(self, oms):
         """Test EXIT with allocation succeeds."""
         # Set up allocation and real broker position
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
         oms.state.update_position("005930", real_qty=100)
 
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(rationale_code="stop_hit"),
         )
@@ -295,12 +313,12 @@ class TestOMSCorePlanAndExecute:
     async def test_reduce_creates_sell_order(self, oms):
         """Test REDUCE creates sell order."""
         # Set up allocation and real broker position
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
         oms.state.update_position("005930", real_qty=100)
 
         intent = Intent(
             intent_type=IntentType.REDUCE,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=50,
         )
@@ -336,13 +354,13 @@ class TestOMSCoreApplyFill:
             side="BUY",
             qty=100,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
         )
 
         await oms._apply_fill(wo, 100)
 
         pos = oms.state.get_position("005930")
-        alloc = pos.allocations.get("KMP")
+        alloc = pos.allocations.get("ALPHA")
         assert alloc is not None
         assert alloc.qty == 100
 
@@ -352,7 +370,7 @@ class TestOMSCoreApplyFill:
         from oms.state import WorkingOrder
 
         # Set up initial allocation and real broker position
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
         oms.state.update_position("005930", real_qty=100)
 
         wo = WorkingOrder(
@@ -361,13 +379,13 @@ class TestOMSCoreApplyFill:
             side="SELL",
             qty=50,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
         )
 
         await oms._apply_fill(wo, 50)
 
         pos = oms.state.get_position("005930")
-        assert pos.allocations["KMP"].qty == 50
+        assert pos.allocations["ALPHA"].qty == 50
 
 
 class TestOMSCoreReconciliation:
@@ -390,7 +408,7 @@ class TestOMSCoreReconciliation:
         """Test allocation drift is detected and assigned to UNKNOWN."""
         # Set up position with drift
         oms.state.update_position("005930", real_qty=150)
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
         # Drift = 150 - 100 = 50
 
         await oms._check_allocation_drift()
@@ -407,7 +425,7 @@ class TestOMSCoreReconciliation:
 
         # Set up position with apparent drift
         oms.state.update_position("005930", real_qty=150)
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
 
         # But order is in flight
         wo = WorkingOrder(
@@ -415,7 +433,7 @@ class TestOMSCoreReconciliation:
             symbol="005930",
             side="BUY",
             qty=50,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
         )
         oms.state.add_working_order("005930", wo)
 
@@ -450,15 +468,15 @@ class TestOMSCoreHelpers:
 
     def test_get_allocation(self, oms):
         """Test get_allocation returns allocation."""
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
 
-        alloc = oms.get_allocation("005930", "KMP")
+        alloc = oms.get_allocation("005930", "ALPHA")
 
         assert alloc == 100
 
     def test_get_allocation_missing(self, oms):
         """Test get_allocation returns 0 for missing."""
-        alloc = oms.get_allocation("005930", "KMP")
+        alloc = oms.get_allocation("005930", "ALPHA")
         assert alloc == 0
 
 
@@ -543,7 +561,7 @@ class TestSyncWorkingOrders:
             qty=100,
             filled_qty=0,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
         )
         oms.state.add_working_order("005930", wo)
@@ -566,7 +584,7 @@ class TestSyncWorkingOrders:
 
         # Fill should have been applied, creating an allocation
         pos = oms.state.get_position("005930")
-        alloc = pos.allocations.get("KMP")
+        alloc = pos.allocations.get("ALPHA")
         assert alloc is not None
         assert alloc.qty == 100
         assert wo.filled_qty == 100
@@ -584,7 +602,7 @@ class TestSyncWorkingOrders:
             qty=100,
             filled_qty=0,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
         )
         oms.state.add_working_order("005930", wo)
@@ -613,7 +631,7 @@ class TestSyncWorkingOrders:
             qty=100,
             filled_qty=0,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
             branch="",  # No branch initially
         )
@@ -665,7 +683,7 @@ class TestEnforceOrderTimeouts:
             qty=100,
             filled_qty=0,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
             cancel_after_sec=10,
             submit_ts=time.time() - 20,  # Submitted 20s ago, timeout 10s
@@ -705,7 +723,7 @@ class TestEnforceOrderTimeouts:
             qty=100,
             filled_qty=0,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
             cancel_after_sec=60,
             submit_ts=time.time() - 5,  # Submitted 5s ago, timeout 60s
@@ -734,7 +752,7 @@ class TestEnforceOrderTimeouts:
             qty=100,
             filled_qty=0,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
             cancel_after_sec=10,
             submit_ts=time.time() - 20,  # Past timeout
@@ -759,7 +777,7 @@ class TestEnforceOrderTimeouts:
 
         # Fill should have been applied before cancel
         pos = oms.state.get_position("005930")
-        alloc = pos.allocations.get("KMP")
+        alloc = pos.allocations.get("ALPHA")
         assert alloc is not None
         assert alloc.qty == 50
         # Cancel was called for remaining 50
@@ -839,7 +857,7 @@ class TestReconcile:
         # Set initial buyable_cash
         oms.state.buyable_cash = 50_000_000
 
-        # Cycle 1 (not multiple of 6) — should NOT call get_buyable_cash
+        # Cycle 1 (not multiple of 6) ??should NOT call get_buyable_cash
         await oms._reconcile(cycle_count=1)
 
         oms.adapter.get_buyable_cash.assert_not_called()
@@ -872,7 +890,7 @@ class TestReconcile:
             side="BUY",
             qty=100,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
         )
         oms.state.add_working_order("005930", wo)
@@ -895,7 +913,7 @@ class TestReconcile:
 
         pos = oms.state.get_position("005930")
         assert pos.real_qty == 100
-        assert pos.allocations["KMP"].qty == 100
+        assert pos.allocations["ALPHA"].qty == 100
         assert not pos.has_working_orders()
         assert pos.frozen is False
         assert wo.status == OrderStatus.FILLED
@@ -929,7 +947,7 @@ class TestReconcile:
             side="BUY",
             qty=100,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
         )
         oms.state.add_working_order("005930", wo)
@@ -971,11 +989,11 @@ class TestHandleModifyRisk:
     async def test_updates_soft_stop_px(self, oms):
         """Test MODIFY_RISK updates soft_stop_px on allocation."""
         # Set up existing allocation
-        oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
 
         intent = Intent(
             intent_type=IntentType.MODIFY_RISK,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(stop_px=71000),
         )
@@ -984,18 +1002,18 @@ class TestHandleModifyRisk:
 
         assert result.status == IntentStatus.EXECUTED
         pos = oms.state.get_position("005930")
-        alloc = pos.allocations["KMP"]
+        alloc = pos.allocations["ALPHA"]
         assert alloc.soft_stop_px == 71000
 
     @pytest.mark.asyncio
     async def test_updates_hard_stop_px(self, oms):
         """Test MODIFY_RISK updates hard_stop_px on position."""
         # Set up existing allocation
-        oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
 
         intent = Intent(
             intent_type=IntentType.MODIFY_RISK,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(hard_stop_px=70000),
         )
@@ -1011,7 +1029,7 @@ class TestHandleModifyRisk:
         """Test MODIFY_RISK with no allocation is rejected."""
         intent = Intent(
             intent_type=IntentType.MODIFY_RISK,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(stop_px=71000),
         )
@@ -1043,7 +1061,7 @@ class TestApplyFillSellPath:
         from oms.state import WorkingOrder, OrderStatus
 
         # Set up allocation with known cost basis
-        oms.state.update_allocation("005930", "KMP", 100, cost_basis=70000)
+        oms.state.update_allocation("005930", "ALPHA", 100, cost_basis=70000)
 
         wo = WorkingOrder(
             order_id="ORD020",
@@ -1051,7 +1069,7 @@ class TestApplyFillSellPath:
             side="SELL",
             qty=50,
             price=72000,  # Sell at 72000, cost basis 70000
-            strategy_id="KMP",
+            strategy_id="ALPHA",
         )
 
         await oms._apply_fill(wo, 50)
@@ -1061,7 +1079,7 @@ class TestApplyFillSellPath:
 
         # Allocation should be reduced
         pos = oms.state.get_position("005930")
-        assert pos.allocations["KMP"].qty == 50
+        assert pos.allocations["ALPHA"].qty == 50
 
 
 class TestPlanAndExecuteSetTarget:
@@ -1086,7 +1104,7 @@ class TestPlanAndExecuteSetTarget:
         # No existing allocation, target 100 -> delta = +100
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -1108,12 +1126,12 @@ class TestPlanAndExecuteSetTarget:
     async def test_negative_delta_creates_sell(self, oms):
         """Test SET_TARGET with delta < 0 creates SELL order."""
         # Existing allocation of 100, target 50 -> delta = -50
-        oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
         oms.state.update_position("005930", real_qty=100)
 
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=50,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -1135,11 +1153,11 @@ class TestPlanAndExecuteSetTarget:
     async def test_zero_delta_returns_already_at_target(self, oms):
         """Test SET_TARGET with delta == 0 returns already at target."""
         # Existing allocation of 100, target 100 -> delta = 0
-        oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
 
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -1314,12 +1332,12 @@ class TestExitQtyCappedAtRealQty:
     @pytest.mark.asyncio
     async def test_reduce_capped_at_real_qty(self, oms):
         """REDUCE with reduce_qty=50, real_qty=30 should sell 30."""
-        oms.state.update_allocation("005930", "KMP", 100)
+        oms.state.update_allocation("005930", "ALPHA", 100)
         oms.state.update_position("005930", real_qty=30)
 
         intent = Intent(
             intent_type=IntentType.REDUCE,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=50,
         )
@@ -1336,12 +1354,12 @@ class TestExitQtyCappedAtRealQty:
     @pytest.mark.asyncio
     async def test_set_target_sell_capped_at_real_qty(self, oms):
         """SET_TARGET sell with delta=50, real_qty=20 should sell 20."""
-        oms.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        oms.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
         oms.state.update_position("005930", real_qty=20)
 
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=50,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -1381,13 +1399,13 @@ class TestNegativeDriftHandling:
 
         pos = oms.state.get_position("005930")
         assert pos.allocations["PCIM"].qty == 9  # auto-corrected
-        assert pos.frozen is False  # NOT frozen — drift resolved
+        assert pos.frozen is False  # NOT frozen ??drift resolved
 
     @pytest.mark.asyncio
     async def test_negative_drift_multi_strategy_freezes(self, oms):
         """Multi-strategy negative drift should freeze but not correct."""
         oms.state.update_position("005930", real_qty=20)
-        oms.state.update_allocation("005930", "KMP", 15)
+        oms.state.update_allocation("005930", "ALPHA", 15)
         oms.state.update_allocation("005930", "PCIM", 10)
         # Drift = 20 - 25 = -5
 
@@ -1396,14 +1414,14 @@ class TestNegativeDriftHandling:
         pos = oms.state.get_position("005930")
         assert pos.frozen is True
         # Neither allocation was modified
-        assert pos.allocations["KMP"].qty == 15
+        assert pos.allocations["ALPHA"].qty == 15
         assert pos.allocations["PCIM"].qty == 10
 
     @pytest.mark.asyncio
     async def test_frozen_symbol_not_re_logged(self, oms):
         """Frozen symbol should not be re-processed on subsequent cycles."""
         oms.state.update_position("005930", real_qty=20)
-        oms.state.update_allocation("005930", "KMP", 15)
+        oms.state.update_allocation("005930", "ALPHA", 15)
         oms.state.update_allocation("005930", "PCIM", 10)
 
         # First cycle: freezes
@@ -1443,7 +1461,7 @@ class TestNegativeDriftHandling:
         pos = oms.state.get_position("005930")
         pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=5)
         # Drift = 5 - 15 = -10; non_unknown = {PCIM: 10} (single)
-        # Auto-corrects PCIM to 5, but _UNKNOWN_=5 remains → drift = 5 - 10 = -5
+        # Auto-corrects PCIM to 5, but _UNKNOWN_=5 remains ??drift = 5 - 10 = -5
 
         await oms._check_allocation_drift()
 
@@ -1462,14 +1480,14 @@ class TestNegativeDriftHandling:
     async def test_frozen_single_strategy_negative_drift_self_heals_when_unknown_cleared(self, oms):
         """Frozen stale drift should self-heal once only one strategy remains and _UNKNOWN_ is cleared."""
         oms.state.update_position("068270", real_qty=7)
-        oms.state.update_allocation("068270", "NULRIMOK", 31)
+        oms.state.update_allocation("068270", "GAMMA", 31)
         pos = oms.state.get_position("068270")
         pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=0)
         pos.frozen = True
 
         await oms._check_allocation_drift()
 
-        assert pos.allocations["NULRIMOK"].qty == 7
+        assert pos.allocations["GAMMA"].qty == 7
         assert pos.frozen is False
         assert "_UNKNOWN_" not in pos.allocations
 
@@ -1516,7 +1534,7 @@ class TestZeroPositionCleanup:
     async def test_zero_position_mixed_allocs_auto_clears(self, oms):
         """real_qty=0 with mixed _UNKNOWN_ + strategy allocations should clear all."""
         oms.state.update_position("068270", real_qty=0)
-        oms.state.update_allocation("068270", "KPR", 10)
+        oms.state.update_allocation("068270", "BETA", 10)
         pos = oms.state.get_position("068270")
         pos.allocations["_UNKNOWN_"] = StrategyAllocation(strategy_id="_UNKNOWN_", qty=5)
         pos.frozen = True
@@ -1548,7 +1566,7 @@ class TestZeroPositionCleanup:
 
         await oms._check_allocation_drift()
 
-        # Should be skipped — working orders guard runs first
+        # Should be skipped ??working orders guard runs first
         assert pos.allocations["_UNKNOWN_"].qty == 2
         assert pos.frozen is True
 
@@ -1587,11 +1605,11 @@ class TestAdminCorrectAllocation:
         """Admin correction that doesn't fully resolve drift keeps symbol frozen."""
         oms.state.update_position("005930", real_qty=9)
         oms.state.update_allocation("005930", "PCIM", 19)
-        oms.state.update_allocation("005930", "KMP", 5)
+        oms.state.update_allocation("005930", "ALPHA", 5)
         pos = oms.state.get_position("005930")
         pos.frozen = True
 
-        # Correct PCIM to 9, but KMP still has 5 → total=14, real=9 → drift=-5
+        # Correct PCIM to 9, but ALPHA still has 5 ??total=14, real=9 ??drift=-5
         result = await oms.correct_allocation("005930", "PCIM", 9)
 
-        assert result["frozen"] is True  # still frozen — drift remains
+        assert result["frozen"] is True  # still frozen ??drift remains

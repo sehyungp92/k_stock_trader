@@ -5,7 +5,7 @@
 
 bot_id: "k_stock_trader"
 bot_name: "K Stock Trader (Multi-Strategy)"
-strategy_type: "multi_strategy"    # KMP, KPR, PCIM, NULRIMOK
+strategy_type: "multi_strategy"
 
 data_dir: "instrumentation/data"
 rotation:

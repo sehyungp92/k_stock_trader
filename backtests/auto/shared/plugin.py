@@ -37,6 +37,11 @@ class PhaseSpec:
     max_rounds: int | None = None
     prune_threshold: float | None = None
     reject_streak_limit: int | None = None
+    phase_metric_basis: str = ""
+    primary_promotion_metric: str = ""
+    proxy_metric_keys: tuple[str, ...] = field(default_factory=tuple)
+    official_metric_keys: tuple[str, ...] = field(default_factory=tuple)
+    promotion_requires_audit_pass: bool = False
 
     @property
     def redesign_scoring_weights_fn(self) -> RedesignWeightsFn | None:

@@ -4,7 +4,7 @@ Covers:
 - Change 1: OMS client None semantics + strategy guards
 - Change 2: Exit idempotency eviction
 - Change 3: Adapter retry identity tracking
-- Change 4: Nulrimok reconciliation + mutation deferral
+- Change 4: Gamma reconciliation + mutation deferral
 - Change 5: PCIM partial/dust exit handling
 """
 
@@ -76,7 +76,7 @@ class TestOMSClientNoneSemantics:
 
         client._get_session = fake_get_session
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            result = await client.get_allocation("005930", "KMP")
+            result = await client.get_allocation("005930", "ALPHA")
         assert result is None
 
     @pytest.mark.asyncio
@@ -112,7 +112,7 @@ class TestOMSClientNoneSemantics:
 
         client._get_session = fake_get_session
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            result = await client.get_strategy_allocations("KMP")
+            result = await client.get_strategy_allocations("ALPHA")
         assert result is None
 
     @pytest.mark.asyncio
@@ -132,7 +132,7 @@ class TestOMSClientNoneSemantics:
         mock_session.closed = False
         client._session = mock_session
 
-        result = await client.get_strategy_allocations("KMP")
+        result = await client.get_strategy_allocations("ALPHA")
         assert result == {}
         await client.close()
 
@@ -157,94 +157,6 @@ class TestOMSClientNoneSemantics:
         # Cache should be preserved
         assert proxy._cached_account.equity == 50_000_000
         assert "005930" in proxy._cached_positions
-
-
-# =====================================================================
-# Change 1B: Strategy Guards
-# =====================================================================
-
-class TestKMPNoneGuards:
-    """KMP strategy guards when OMS returns None."""
-
-    @pytest.mark.asyncio
-    async def test_sync_positions_returns_early_on_none(self):
-        """_sync_positions returns immediately when OMS returns None."""
-        from strategy_kmp.main import _sync_positions
-        from strategy_kmp.core.state import SymbolState, State
-        from kis_core import SectorExposure, SectorExposureConfig
-
-        mock_oms = AsyncMock()
-        mock_oms.get_all_positions = AsyncMock(return_value=None)
-
-        states = {"005930": SymbolState(code="005930")}
-        states["005930"].fsm = State.IN_POSITION
-        states["005930"].qty = 100
-
-        exposure = SectorExposure({}, SectorExposureConfig(mode="count"))
-
-        await _sync_positions(mock_oms, states, ["005930"], {}, exposure)
-
-        # State must NOT be wiped
-        assert states["005930"].fsm == State.IN_POSITION
-        assert states["005930"].qty == 100
-
-    @pytest.mark.asyncio
-    async def test_reconcile_exposure_skips_on_none(self):
-        """reconcile_exposure returns early when OMS returns None."""
-        from strategy_kmp.core.reconcile import reconcile_exposure
-        from strategy_kmp.core.state import SymbolState, State
-        from kis_core import SectorExposure, SectorExposureConfig
-
-        mock_oms = AsyncMock()
-        mock_oms.get_all_positions = AsyncMock(return_value=None)
-
-        states = {"005930": SymbolState(code="005930")}
-        states["005930"].fsm = State.IN_POSITION
-
-        exposure = SectorExposure({}, SectorExposureConfig(mode="count"))
-        # Seed exposure with position
-        exposure.on_fill("005930", 100, 50000)
-
-        await reconcile_exposure(mock_oms, states, exposure, {})
-
-        # Exposure must NOT be wiped
-        assert states["005930"].fsm == State.IN_POSITION
-
-
-class TestNulrimokNoneGuards:
-    """Nulrimok strategy guards when OMS returns None."""
-
-    @pytest.mark.asyncio
-    async def test_reconcile_positions_skips_on_none(self):
-        """_reconcile_positions preserves local state when OMS is unreachable."""
-        from strategy_nulrimok.main import _reconcile_positions
-        from strategy_nulrimok.iepe.exits import PositionState
-
-        mock_oms = AsyncMock()
-        mock_oms.get_strategy_allocations = AsyncMock(return_value=None)
-
-        position_states = {
-            "005930": PositionState("005930", datetime.now(), 50000, 100, 49000),
-        }
-
-        await _reconcile_positions(mock_oms, position_states)
-
-        # Position must NOT be deleted
-        assert "005930" in position_states
-        assert position_states["005930"].qty == 100
-
-    @pytest.mark.asyncio
-    async def test_recover_positions_skips_on_none(self):
-        """_recover_positions does nothing when OMS is unreachable."""
-        from strategy_nulrimok.main import _recover_positions
-
-        mock_oms = AsyncMock()
-        mock_oms.get_strategy_allocations = AsyncMock(return_value=None)
-
-        position_states = {}
-        await _recover_positions(mock_oms, position_states)
-
-        assert len(position_states) == 0
 
 
 # =====================================================================
@@ -290,14 +202,14 @@ class TestIdempotencyEviction:
         from oms.intent import IntentResult, IntentStatus
 
         idem = InMemoryIdempotencyStore()
-        idem.put("KMP:005930:EXIT:20260319:stop:100", IntentResult(
+        idem.put("ALPHA:005930:EXIT:20260319:stop:100", IntentResult(
             intent_id="i1", status=IntentStatus.EXECUTED, order_id="ORD1",
         ))
 
         wo = WorkingOrder(
             order_id="ORD1", symbol="005930", side="SELL", qty=100,
-            filled_qty=0, status=OrderStatus.WORKING, strategy_id="KMP",
-            idempotency_key="KMP:005930:EXIT:20260319:stop:100",
+            filled_qty=0, status=OrderStatus.WORKING, strategy_id="ALPHA",
+            idempotency_key="ALPHA:005930:EXIT:20260319:stop:100",
         )
 
         core = MagicMock()
@@ -314,7 +226,7 @@ class TestIdempotencyEviction:
         )
 
         # Key should be evicted
-        assert idem.get("KMP:005930:EXIT:20260319:stop:100") is None
+        assert idem.get("ALPHA:005930:EXIT:20260319:stop:100") is None
 
     @pytest.mark.asyncio
     async def test_sell_filled_retains_idem_key(self):
@@ -324,12 +236,12 @@ class TestIdempotencyEviction:
         from oms.intent import IntentResult, IntentStatus
 
         idem = InMemoryIdempotencyStore()
-        key = "KMP:005930:EXIT:20260319:stop:100"
+        key = "ALPHA:005930:EXIT:20260319:stop:100"
         idem.put(key, IntentResult(intent_id="i1", status=IntentStatus.EXECUTED, order_id="ORD1"))
 
         wo = WorkingOrder(
             order_id="ORD1", symbol="005930", side="SELL", qty=100,
-            filled_qty=100, status=OrderStatus.FILLED, strategy_id="KMP",
+            filled_qty=100, status=OrderStatus.FILLED, strategy_id="ALPHA",
             idempotency_key=key,
         )
 
@@ -467,7 +379,7 @@ class TestAdapterRetryIdentity:
 
         mock_api.place_limit_buy = fake_place
 
-        # Two unknown matching orders — ambiguous
+        # Two unknown matching orders ??ambiguous
         async def fake_get_orders():
             return BrokerQueryResult(ok=True, data=[
                 BrokerOrder("ORD_A", "005930", "BUY", 100, 0, 50000, "WORKING", "09:01"),
@@ -484,7 +396,7 @@ class TestAdapterRetryIdentity:
 
 
 # =====================================================================
-# Change 4: Nulrimok Reconciliation + Mutation Deferral
+# Change 4: Gamma Reconciliation + Mutation Deferral
 # =====================================================================
 
 class TestSoftStopPxPersistence:
@@ -499,10 +411,10 @@ class TestSoftStopPxPersistence:
 
         state = StateStore()
         # Pre-create allocation (simulating update_allocation was just called)
-        state.update_allocation("005930", "NULRIMOK", 100, cost_basis=50000)
+        state.update_allocation("005930", "GAMMA", 100, cost_basis=50000)
 
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="NULRIMOK",
+            intent_type=IntentType.ENTER, strategy_id="GAMMA",
             symbol="005930", desired_qty=100,
             urgency=Urgency.LOW, time_horizon=TimeHorizon.SWING,
             risk_payload=RiskPayload(entry_px=50000, stop_px=48500),
@@ -510,7 +422,7 @@ class TestSoftStopPxPersistence:
 
         wo = WorkingOrder(
             order_id="ORD1", symbol="005930", side="BUY", qty=100,
-            price=50000, strategy_id="NULRIMOK",
+            price=50000, strategy_id="GAMMA",
         )
 
         core = MagicMock()
@@ -520,7 +432,7 @@ class TestSoftStopPxPersistence:
 
         await OMSCore._apply_fill(core, wo, 100, intent=intent)
 
-        alloc = state.get_position("005930").allocations["NULRIMOK"]
+        alloc = state.get_position("005930").allocations["GAMMA"]
         assert alloc.soft_stop_px == 48500
 
     @pytest.mark.asyncio
@@ -531,10 +443,10 @@ class TestSoftStopPxPersistence:
         from oms.intent import Intent, IntentType, Urgency, TimeHorizon, RiskPayload
 
         state = StateStore()
-        state.update_allocation("005930", "KMP", 50, cost_basis=60000)
+        state.update_allocation("005930", "ALPHA", 50, cost_basis=60000)
 
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="KMP",
+            intent_type=IntentType.ENTER, strategy_id="ALPHA",
             symbol="005930", desired_qty=50,
             urgency=Urgency.HIGH, time_horizon=TimeHorizon.INTRADAY,
             risk_payload=RiskPayload(entry_px=60000, stop_px=None),
@@ -542,7 +454,7 @@ class TestSoftStopPxPersistence:
 
         wo = WorkingOrder(
             order_id="ORD2", symbol="005930", side="BUY", qty=50,
-            price=60000, strategy_id="KMP",
+            price=60000, strategy_id="ALPHA",
         )
 
         core = MagicMock()
@@ -552,158 +464,8 @@ class TestSoftStopPxPersistence:
 
         await OMSCore._apply_fill(core, wo, 50, intent=intent)
 
-        alloc = state.get_position("005930").allocations["KMP"]
+        alloc = state.get_position("005930").allocations["ALPHA"]
         assert alloc.soft_stop_px is None
-
-
-class TestNulrimokMutationDeferral:
-    """Test exits.py defers partial_taken + remaining_qty mutation until after submit."""
-
-    @pytest.mark.asyncio
-    async def test_partial_taken_unchanged_on_rejection(self):
-        """pos.partial_taken stays False when submit_intent returns REJECTED."""
-        from strategy_nulrimok.iepe.exits import PositionState, SetupType, manage_nulrimok_position
-        from tests.mocks.mock_oms_client import MockOMSClient
-
-        pos = PositionState("005930", datetime.now(), 50000, 100, 49000)
-        pos.setup = SetupType.MEAN_REVERSION
-        pos.bars_since_entry = 5
-        pos.atr30m = 200
-        pos.max_price = 50400  # trigger condition: close-entry >= 1.5*atr
-        pos.partial_taken = False
-
-        oms = MockOMSClient(fail_intents=True)
-
-        bar = {'close': 50350, 'high': 50400, 'low': 50000, 'volume': 1000}
-        avwap = 50200
-
-        result = await manage_nulrimok_position(pos, bar, avwap, 500, False, oms)
-
-        assert result is None  # Exit rejected
-        assert pos.partial_taken is False  # NOT mutated
-        assert pos.remaining_qty == 100  # NOT decremented
-
-    @pytest.mark.asyncio
-    async def test_partial_taken_set_on_success(self):
-        """On OMS acceptance, pos enters pending_exit state (qty deferred to fill confirmation)."""
-        from strategy_nulrimok.iepe.exits import PositionState, SetupType, manage_nulrimok_position
-        from tests.mocks.mock_oms_client import MockOMSClient
-
-        pos = PositionState("005930", datetime.now(), 50000, 100, 49000)
-        pos.setup = SetupType.MEAN_REVERSION
-        pos.bars_since_entry = 5
-        pos.atr30m = 200
-        pos.max_price = 50400
-        pos.partial_taken = False
-
-        oms = MockOMSClient(default_status="EXECUTED")
-
-        bar = {'close': 50350, 'high': 50400, 'low': 50000, 'volume': 1000}
-        avwap = 50200
-
-        result = await manage_nulrimok_position(pos, bar, avwap, 500, False, oms)
-
-        assert result is not None  # Exit accepted
-        # Fix 2: partial_taken is now deferred until fill confirmation
-        assert pos.pending_exit is True
-        assert pos.pending_exit_reason == "mean_rev_partial"
-        assert pos.pending_exit_qty == 70  # 70% of 100
-        assert pos.remaining_qty == 100  # Unchanged until fill confirmed
-        assert pos.partial_taken is False  # Deferred until fill confirmed
-
-
-class TestNulrimokTwoWayReconciliation:
-    """Test two-way reconciliation recreates missing positions from OMS."""
-
-    @pytest.mark.asyncio
-    async def test_recreates_position_from_oms(self):
-        """_reconcile_positions creates local position from OMS allocation."""
-        from strategy_nulrimok.main import _reconcile_positions
-        from oms_client.client import AllocationInfo
-
-        mock_oms = AsyncMock()
-        mock_oms.get_strategy_allocations = AsyncMock(return_value={
-            "005930": AllocationInfo(
-                strategy_id="NULRIMOK", qty=100, cost_basis=50000,
-                soft_stop_px=48500,
-            ),
-        })
-
-        position_states = {}  # Empty — position is missing locally
-
-        await _reconcile_positions(mock_oms, position_states)
-
-        assert "005930" in position_states
-        pos = position_states["005930"]
-        assert pos.qty == 100
-        assert pos.remaining_qty == 100
-        assert pos.entry_price == 50000
-        assert pos.stop == 48500
-
-    @pytest.mark.asyncio
-    async def test_does_not_recreate_existing_position(self):
-        """_reconcile_positions does not overwrite existing local positions."""
-        from strategy_nulrimok.main import _reconcile_positions
-        from strategy_nulrimok.iepe.exits import PositionState
-        from oms_client.client import AllocationInfo
-
-        mock_oms = AsyncMock()
-        mock_oms.get_strategy_allocations = AsyncMock(return_value={
-            "005930": AllocationInfo(
-                strategy_id="NULRIMOK", qty=100, cost_basis=50000,
-                soft_stop_px=48500,
-            ),
-        })
-
-        existing_pos = PositionState("005930", datetime.now(), 50000, 100, 49000)
-        existing_pos.sessions_held = 3  # Important local state
-        position_states = {"005930": existing_pos}
-
-        await _reconcile_positions(mock_oms, position_states)
-
-        # Should keep the existing position (with sessions_held=3)
-        assert position_states["005930"].sessions_held == 3
-
-    @pytest.mark.asyncio
-    async def test_recreated_position_estimates_sessions_held(self):
-        """Recreated positions estimate sessions_held from entry date."""
-        from strategy_nulrimok.main import _reconcile_positions
-        from oms_client.client import AllocationInfo
-
-        mock_oms = AsyncMock()
-        # Entry was 3 days ago
-        entry_ts = (datetime.now() - timedelta(days=3)).isoformat()
-        mock_oms.get_strategy_allocations = AsyncMock(return_value={
-            "005930": AllocationInfo(
-                strategy_id="NULRIMOK", qty=100, cost_basis=50000,
-                soft_stop_px=48500, entry_ts=entry_ts,
-            ),
-        })
-
-        position_states = {}
-        await _reconcile_positions(mock_oms, position_states)
-
-        assert "005930" in position_states
-        assert position_states["005930"].sessions_held >= 2  # At least 2 days
-
-    @pytest.mark.asyncio
-    async def test_recreated_position_has_zero_stop_when_no_soft_stop(self):
-        """Missing soft_stop_px defaults to 0.0 for recreated positions."""
-        from strategy_nulrimok.main import _reconcile_positions
-        from oms_client.client import AllocationInfo
-
-        mock_oms = AsyncMock()
-        mock_oms.get_strategy_allocations = AsyncMock(return_value={
-            "035720": AllocationInfo(
-                strategy_id="NULRIMOK", qty=50, cost_basis=30000,
-                soft_stop_px=None,
-            ),
-        })
-
-        position_states = {}
-        await _reconcile_positions(mock_oms, position_states)
-
-        assert position_states["035720"].stop == 0.0
 
 
 # =====================================================================

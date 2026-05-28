@@ -8,8 +8,8 @@ from instrumentation.src.heartbeat import HeartbeatEmitter
 def test_emit_heartbeat_writes_jsonl():
     with tempfile.TemporaryDirectory() as tmpdir:
         emitter = HeartbeatEmitter(
-            bot_id="k_stock_trader_kmp",
-            strategy_type="kmp",
+            bot_id="k_stock_trader_alpha",
+            strategy_type="alpha",
             data_dir=tmpdir,
         )
         emitter.emit(active_positions=3, open_orders=1, uptime_s=3600)
@@ -21,8 +21,8 @@ def test_emit_heartbeat_writes_jsonl():
         with open(files[0]) as f:
             record = json.loads(f.readline())
 
-        assert record["bot_id"] == "k_stock_trader_kmp"
-        assert record["strategy_type"] == "kmp"
+        assert record["bot_id"] == "k_stock_trader_alpha"
+        assert record["strategy_type"] == "alpha"
         assert record["active_positions"] == 3
         assert record["open_orders"] == 1
         assert record["status"] == "alive"
@@ -32,8 +32,8 @@ def test_emit_heartbeat_writes_jsonl():
 def test_emit_heartbeat_with_extra():
     with tempfile.TemporaryDirectory() as tmpdir:
         emitter = HeartbeatEmitter(
-            bot_id="k_stock_trader_kpr",
-            strategy_type="kpr",
+            bot_id="k_stock_trader_beta",
+            strategy_type="beta",
             data_dir=tmpdir,
         )
         emitter.emit(active_positions=0, extra={"ws_connected": True})
@@ -68,8 +68,8 @@ def test_heartbeat_defaults():
 def test_heartbeat_with_positions():
     with tempfile.TemporaryDirectory() as tmpdir:
         emitter = HeartbeatEmitter(
-            bot_id="k_stock_trader_kmp",
-            strategy_type="kmp",
+            bot_id="k_stock_trader_alpha",
+            strategy_type="alpha",
             data_dir=tmpdir,
         )
         positions = [
@@ -82,7 +82,7 @@ def test_heartbeat_with_positions():
                 "unrealized_pnl": 6000.0,
                 "unrealized_pnl_pct": 0.83,
                 "duration_minutes": 45,
-                "strategy_type": "kmp",
+                "strategy_type": "alpha",
             },
         ]
         exposure = {

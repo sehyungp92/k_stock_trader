@@ -12,13 +12,13 @@ class TestIndicatorSnapshot:
         """Same inputs produce same event_id."""
         s1 = IndicatorSnapshot(
             bot_id="bot1", pair="005930", timestamp="2026-03-15T09:17:00",
-            indicators={"sma_20": 72500.0}, signal_name="kmp_value_surge",
-            signal_strength=0.78, decision="enter", strategy_type="kmp",
+            indicators={"sma_20": 72500.0}, signal_name="alpha_value_surge",
+            signal_strength=0.78, decision="enter", strategy_type="alpha",
         )
         s2 = IndicatorSnapshot(
             bot_id="bot1", pair="005930", timestamp="2026-03-15T09:17:00",
-            indicators={"sma_20": 72500.0}, signal_name="kmp_value_surge",
-            signal_strength=0.78, decision="enter", strategy_type="kmp",
+            indicators={"sma_20": 72500.0}, signal_name="alpha_value_surge",
+            signal_strength=0.78, decision="enter", strategy_type="alpha",
         )
         assert s1.event_id == s2.event_id
         assert len(s1.event_id) == 16
@@ -27,13 +27,13 @@ class TestIndicatorSnapshot:
         """Different inputs produce different event_ids."""
         s1 = IndicatorSnapshot(
             bot_id="bot1", pair="005930", timestamp="2026-03-15T09:17:00",
-            indicators={}, signal_name="kmp_value_surge",
-            signal_strength=0.78, decision="enter", strategy_type="kmp",
+            indicators={}, signal_name="alpha_value_surge",
+            signal_strength=0.78, decision="enter", strategy_type="alpha",
         )
         s2 = IndicatorSnapshot(
             bot_id="bot1", pair="005931", timestamp="2026-03-15T09:17:00",
-            indicators={}, signal_name="kmp_value_surge",
-            signal_strength=0.78, decision="enter", strategy_type="kmp",
+            indicators={}, signal_name="alpha_value_surge",
+            signal_strength=0.78, decision="enter", strategy_type="alpha",
         )
         assert s1.event_id != s2.event_id
 
@@ -42,13 +42,13 @@ class TestIndicatorSnapshot:
         indicators = {"sma_20": 72500.0, "atr_14": 1850.0, "rvol": 3.2}
         s = IndicatorSnapshot(
             bot_id="bot1", pair="005930", timestamp="2026-03-15T09:17:00",
-            indicators=indicators, signal_name="kmp_value_surge",
-            signal_strength=0.78, decision="enter", strategy_type="kmp",
+            indicators=indicators, signal_name="alpha_value_surge",
+            signal_strength=0.78, decision="enter", strategy_type="alpha",
             bar_id="bar1", context={"extra": "value"},
         )
         d = s.to_dict()
         assert d["indicators"] == indicators
-        assert d["signal_name"] == "kmp_value_surge"
+        assert d["signal_name"] == "alpha_value_surge"
         assert d["bar_id"] == "bar1"
         assert d["context"] == {"extra": "value"}
 
@@ -58,7 +58,7 @@ class TestIndicatorSnapshot:
             s = IndicatorSnapshot(
                 bot_id="b", pair="p", timestamp="t",
                 indicators={}, signal_name="s",
-                signal_strength=0.0, decision=decision, strategy_type="kmp",
+                signal_strength=0.0, decision=decision, strategy_type="alpha",
             )
             assert s.decision == decision
 
@@ -73,10 +73,10 @@ class TestIndicatorLogger:
         snap = lg.log_snapshot(
             pair="005930",
             indicators={"sma_20": 72500.0, "atr_14": 1850.0},
-            signal_name="kmp_value_surge",
+            signal_name="alpha_value_surge",
             signal_strength=0.78,
             decision="enter",
-            strategy_type="kmp",
+            strategy_type="alpha",
         )
         assert snap.bot_id == "test_bot"
 
@@ -92,27 +92,27 @@ class TestIndicatorLogger:
         ts = datetime(2026, 3, 15, 9, 17, 0, tzinfo=timezone.utc)
         snap = lg.log_snapshot(
             pair="005930", indicators={}, signal_name="s",
-            signal_strength=0.0, decision="skip", strategy_type="kmp",
+            signal_strength=0.0, decision="skip", strategy_type="alpha",
             exchange_timestamp=ts,
         )
         assert "2026-03-15T09:17:00" in snap.timestamp
 
     def test_strategy_specific_indicators(self):
-        """KMP snapshot has SMA/ATR/RVol, KPR has VWAP fields."""
+        """ALPHA snapshot has SMA/ATR/RVol, BETA has VWAP fields."""
         lg = IndicatorLogger(data_dir=self.tmpdir, bot_id="test_bot")
 
-        kmp = lg.log_snapshot(
+        alpha = lg.log_snapshot(
             pair="005930",
             indicators={"sma_20": 72500.0, "atr_14": 1850.0, "rvol": 3.2},
-            signal_name="kmp_value_surge", signal_strength=0.8,
-            decision="enter", strategy_type="kmp",
+            signal_name="alpha_value_surge", signal_strength=0.8,
+            decision="enter", strategy_type="alpha",
         )
-        assert "sma_20" in kmp.indicators
+        assert "sma_20" in alpha.indicators
 
-        kpr = lg.log_snapshot(
+        beta = lg.log_snapshot(
             pair="005930",
             indicators={"vwap": 71000.0, "vwap_depth_pct": 0.03},
-            signal_name="kpr_vwap_pullback", signal_strength=0.6,
-            decision="enter", strategy_type="kpr",
+            signal_name="beta_vwap_pullback", signal_strength=0.6,
+            decision="enter", strategy_type="beta",
         )
-        assert "vwap" in kpr.indicators
+        assert "vwap" in beta.indicators

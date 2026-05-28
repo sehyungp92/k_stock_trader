@@ -1,5 +1,3 @@
-version: "3.8"
-
 x-common-env: &common-env
   KIS_APP_KEY: ${KIS_APP_KEY}
   KIS_APP_SECRET: ${KIS_APP_SECRET}
@@ -11,6 +9,7 @@ x-common-env: &common-env
   KIS_PAPER_APP_KEY: ${KIS_PAPER_APP_KEY:-}
   KIS_PAPER_APP_SECRET: ${KIS_PAPER_APP_SECRET:-}
   KIS_PAPER_ACCOUNT_NO: ${KIS_PAPER_ACCOUNT_NO:-}
+  RATE_BUDGET_STATE_FILE: /var/run/rate_budget/state.json
 
 x-common: &common
   restart: unless-stopped
@@ -54,6 +53,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data/oms:/app/data
+      - rate_budget:/var/run/rate_budget
     environment:
       <<: *common-env
       OMS_PORT: "8000"
@@ -69,76 +69,6 @@ services:
       start_period: 10s
 
   # ===========================================
-  # Strategy: KMP
-  # ===========================================
-  kmp:
-    <<: *strategy-base
-    build:
-      context: .
-      dockerfile: strategy_kmp/Dockerfile
-    container_name: kmp
-    volumes:
-      - ./config:/app/config:ro
-      - ./data/kmp:/app/data
-      - ./data/kmp/instrumentation:/app/instrumentation/data
-    environment:
-      <<: *common-env
-      OMS_URL: http://oms:8000
-      KMP_CONFIG: /app/config/kmp.yaml
-      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
-      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
-    profiles:
-      - kmp
-      - all
-
-  # ===========================================
-  # Strategy: KPR
-  # ===========================================
-  kpr:
-    <<: *strategy-base
-    build:
-      context: .
-      dockerfile: strategy_kpr/Dockerfile
-    container_name: kpr
-    volumes:
-      - ./config:/app/config:ro
-      - ./data/kpr:/app/data
-      - ./data/kpr/instrumentation:/app/instrumentation/data
-    environment:
-      <<: *common-env
-      OMS_URL: http://oms:8000
-      KPR_CONFIG: /app/config/kpr.yaml
-      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
-      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
-    profiles:
-      - kpr
-      - all
-
-  # ===========================================
-  # Strategy: Nulrimok
-  # ===========================================
-  nulrimok:
-    <<: *strategy-base
-    build:
-      context: .
-      dockerfile: strategy_nulrimok/Dockerfile
-    container_name: nulrimok
-    volumes:
-      - ./config:/app/config:ro
-      - ./data/nulrimok:/app/data
-      - ./data/nulrimok/lrs.db:/app/lrs.db
-      - ./data/nulrimok/instrumentation:/app/instrumentation/data
-    environment:
-      <<: *common-env
-      OMS_URL: http://oms:8000
-      NULRIMOK_CONFIG: /app/config/nulrimok.yaml
-      INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
-      SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
-    profiles:
-      - nulrimok
-      - all
-
-  # ===========================================
   # Strategy: PCIM
   # ===========================================
   pcim:
@@ -151,15 +81,87 @@ services:
       - ./config:/app/config:ro
       - ./data/pcim:/app/data
       - ./data/pcim/instrumentation:/app/instrumentation/data
+      - rate_budget:/var/run/rate_budget
     environment:
       <<: *common-env
       OMS_URL: http://oms:8000
       PCIM_CONFIG: /app/config/pcim.yaml
+      CONSERVATIVE_MODE: ${CONSERVATIVE_MODE:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       INSTRUMENTATION_HMAC_SECRET: ${INSTRUMENTATION_HMAC_SECRET:-}
       SIDECAR_RELAY_URL: ${SIDECAR_RELAY_URL:-}
     profiles:
       - pcim
+      - all
+
+  # ===========================================
+  # OLR/KALCB Runtime: one-shot artifact, preflight, dry-run and paper jobs
+  # ===========================================
+  runtime:
+    build:
+      context: .
+      dockerfile: deployment/olr_kalcb/Dockerfile
+    env_file:
+      - .env
+    networks:
+      - kstock
+    volumes:
+      - ./config:/app/config:ro
+      - ./data/strategy:/app/data/strategy
+      - ./data/backtests:/app/data/backtests:ro
+      - ./data/paper_live:/app/data/paper_live
+      - ./data/live_readiness:/app/data/live_readiness:ro
+      - ./data/krx_daily_parquet:/app/data/krx_daily_parquet:ro
+      - ./data/kis_intraday_parquet:/app/data/kis_intraday_parquet:ro
+      - ./data/oms:/app/data/oms:ro
+      - rate_budget:/var/run/rate_budget
+    environment:
+      <<: *common-env
+      OMS_URL: http://oms:8000
+      OLR_KALCB_BASELINE_MANIFEST: /app/data/live_readiness/olr_kalcb/2026-05-27/baseline_manifest.json
+      OLR_KALCB_DAILY_UNIVERSE_FILE: ${OLR_KALCB_DAILY_UNIVERSE_FILE:-config/olr_kalcb/olr_deployment_universe_103.yaml}
+      OLR_KALCB_PORTFOLIO_POLICY: /app/config/olr_kalcb/portfolio_policy.conservative.json
+      OLR_KALCB_SECTOR_MAP: /app/config/olr/sector_map.yaml
+      OLR_KALCB_RUNTIME_MODE: ${OLR_KALCB_RUNTIME_MODE:-dry_run}
+      OLR_KALCB_TRADE_DATE: ${OLR_KALCB_TRADE_DATE:-}
+      OLR_KALCB_BARS_PARQUET: ${OLR_KALCB_BARS_PARQUET:-}
+      OLR_KALCB_SESSION_ROOT: ${OLR_KALCB_SESSION_ROOT:-}
+      OLR_KALCB_HEALTH_CHECKS_JSON: ${OLR_KALCB_HEALTH_CHECKS_JSON:-}
+      OLR_KALCB_ACCOUNT_STATE_JSON: ${OLR_KALCB_ACCOUNT_STATE_JSON:-}
+      OLR_KALCB_POSITIONS_JSON: ${OLR_KALCB_POSITIONS_JSON:-}
+      OLR_KALCB_POLL_SECONDS: ${OLR_KALCB_POLL_SECONDS:-15}
+    depends_on:
+      oms:
+        condition: service_healthy
+    profiles:
+      - olr-kalcb
+      - all
+    command: ["sh", "/app/deployment/olr_kalcb/runtime_service_entrypoint.sh"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ===========================================
+  # Dashboard: optional Postgres-backed monitoring UI
+  # ===========================================
+  dashboard:
+    <<: *common
+    build:
+      context: ./infra/dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://trading_writer:${POSTGRES_WRITER_PASSWORD:-changeme}@postgres:5432/trading
+      KIS_IS_PAPER: ${KIS_IS_PAPER:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - dashboard
       - all
 
   # ===========================================
@@ -191,3 +193,4 @@ networks:
 
 volumes:
   postgres_data:
+  rate_budget:

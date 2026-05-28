@@ -12,10 +12,10 @@ class TestExperimentId:
             trade_id="exp_001",
             event_metadata={"event_id": "e1"},
             entry_snapshot={},
-            experiment_id="kmp_v2_relaxed",
+            experiment_id="alpha_v2_relaxed",
         )
-        assert event.experiment_id == "kmp_v2_relaxed"
-        assert event.to_dict()["experiment_id"] == "kmp_v2_relaxed"
+        assert event.experiment_id == "alpha_v2_relaxed"
+        assert event.to_dict()["experiment_id"] == "alpha_v2_relaxed"
 
     def test_defaults_none(self):
         event = TradeEvent(

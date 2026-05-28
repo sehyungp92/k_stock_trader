@@ -63,7 +63,7 @@ class OMSClient:
     Async HTTP client for OMS service.
 
     Usage:
-        oms = OMSClient("http://localhost:8000", strategy_id="KMP")
+        oms = OMSClient("http://localhost:8000", strategy_id="PCIM")
         await oms.wait_ready()
         result = await oms.submit_intent(intent)
         await oms.close()
@@ -148,6 +148,7 @@ class OMSClient:
                 "limit_price": intent.constraints.limit_price,
                 "stop_price": intent.constraints.stop_price,
                 "expiry_ts": intent.constraints.expiry_ts,
+                "execution_style": intent.constraints.execution_style,
             },
             "risk_payload": {
                 "entry_px": intent.risk_payload.entry_px,
@@ -157,6 +158,7 @@ class OMSClient:
                 "confidence": intent.risk_payload.confidence,
             },
             "signal_hash": intent.signal_hash,
+            "metadata": dict(intent.metadata or {}),
         }
 
         last_err = None

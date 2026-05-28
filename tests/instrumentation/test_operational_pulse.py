@@ -19,7 +19,7 @@ from instrumentation.src.operational_pulse import (
 
 class TestCounterBasics:
     def test_count_increments(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle")
         p.count("cycle")
         p.count("md.ok", 5)
@@ -27,7 +27,7 @@ class TestCounterBasics:
         assert p._counters["md.ok"] == 5
 
     def test_count_with_tag(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("signal.blocked", tag="risk_off")
         p.count("signal.blocked", tag="risk_off")
         p.count("signal.blocked", tag="regime")
@@ -48,7 +48,7 @@ class TestVerdicts:
         assert p._compute_verdict() == VERDICT_IDLE
 
     def test_healthy(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 100)
         p.count("md.attempt", 100)
         p.count("md.ok", 98)
@@ -59,7 +59,7 @@ class TestVerdicts:
         assert p._compute_verdict() == VERDICT_HEALTHY
 
     def test_no_signals(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 100)
         p.count("md.attempt", 100)
         p.count("md.ok", 100)
@@ -70,7 +70,7 @@ class TestVerdicts:
         assert p._compute_verdict() == VERDICT_NO_SIGNALS
 
     def test_oms_down(self):
-        p = OperationalPulse("KPR")
+        p = OperationalPulse("BETA")
         p.count("cycle", 10)
         p.count("oms.call", 10)
         p.count("oms.fail", 10)
@@ -78,7 +78,7 @@ class TestVerdicts:
         assert p._compute_verdict() == VERDICT_OMS_DOWN
 
     def test_data_blackout(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 100)
         p.count("md.attempt", 100)
         p.count("md.ok", 40)  # 40% < 50%
@@ -87,16 +87,16 @@ class TestVerdicts:
         assert p._compute_verdict() == VERDICT_DATA_BLACKOUT
 
     def test_degraded_md(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 100)
         p.count("md.attempt", 100)
-        p.count("md.ok", 80)  # 80% — between 50% and 95%
+        p.count("md.ok", 80)  # 80% ??between 50% and 95%
         p.count("oms.call", 5)
         p.count("oms.ok", 5)
         assert p._compute_verdict() == VERDICT_DEGRADED
 
     def test_degraded_oms_fail_rate(self):
-        p = OperationalPulse("KPR")
+        p = OperationalPulse("BETA")
         p.count("cycle", 100)
         p.count("md.attempt", 100)
         p.count("md.ok", 100)
@@ -106,8 +106,8 @@ class TestVerdicts:
         assert p._compute_verdict() == VERDICT_DEGRADED
 
     def test_healthy_no_md_attempts(self):
-        """When no md.attempt, rate defaults to 100% — should be HEALTHY."""
-        p = OperationalPulse("NULRIMOK")
+        """When no md.attempt, rate defaults to 100% ??should be HEALTHY."""
+        p = OperationalPulse("GAMMA")
         p.count("cycle", 10)
         p.count("oms.call", 2)
         p.count("oms.ok", 2)
@@ -116,7 +116,7 @@ class TestVerdicts:
 
 class TestSnapshot:
     def test_snapshot_returns_dict(self):
-        p = OperationalPulse("KMP", version="2.3.4")
+        p = OperationalPulse("ALPHA", version="2.3.4")
         p.count("cycle", 5)
         p.count("md.attempt", 100)
         p.count("md.ok", 95)
@@ -129,7 +129,7 @@ class TestSnapshot:
         assert "counters" in snap
 
     def test_snapshot_does_not_reset(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 5)
         p.snapshot()
         assert p._counters["cycle"] == 5
@@ -137,12 +137,12 @@ class TestSnapshot:
 
 class TestEmission:
     def test_maybe_emit_before_interval(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle")
         assert p.maybe_emit() is False
 
     def test_maybe_emit_after_interval(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 100)
         p.count("md.attempt", 50)
         p.count("md.ok", 50)
@@ -153,7 +153,7 @@ class TestEmission:
         assert p._counters.get("cycle", 0) == 0
 
     def test_reset_clears_all(self):
-        p = OperationalPulse("KMP")
+        p = OperationalPulse("ALPHA")
         p.count("cycle", 10)
         p.count("signal.blocked", tag="risk_off")
         p._reset()
@@ -168,7 +168,7 @@ class TestEmission:
 
     def test_emit_logs_pulse_format(self, caplog):
         """Verify PULSE log line contains expected prefix and structure."""
-        p = OperationalPulse("KMP", version="2.3.4")
+        p = OperationalPulse("ALPHA", version="2.3.4")
         p.set_phase("MAIN_LOOP")
         p.count("cycle", 100)
         p.count("md.attempt", 50)
@@ -184,6 +184,6 @@ class TestEmission:
             p.maybe_emit()
             call_args = mock_logger.info.call_args[0][0]
             assert "PULSE" in call_args
-            assert "KMP" in call_args
+            assert "ALPHA" in call_args
             assert "MAIN_LOOP" in call_args
             assert "HEALTHY" in call_args

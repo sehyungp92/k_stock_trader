@@ -15,6 +15,7 @@ class TestOrderType:
         assert OrderType.LIMIT
         assert OrderType.STOP_LIMIT
         assert OrderType.MARKETABLE_LIMIT
+        assert OrderType.CLOSE_AUCTION
 
 
 class TestOrderPlan:
@@ -48,7 +49,7 @@ class TestOrderPlan:
             stop_price=72100,
             cancel_after=30.0,
             intent_ids=["intent-1"],
-            strategy_id="KMP",
+            strategy_id="ALPHA",
         )
 
         assert plan.symbol == "005930"
@@ -69,7 +70,7 @@ class TestOrderPlannerCreatePlan:
         """Test stop-limit order for breakout entry."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             constraints=IntentConstraints(
@@ -95,7 +96,7 @@ class TestOrderPlannerCreatePlan:
         """Test stop-limit with default limit price calculation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             constraints=IntentConstraints(
@@ -116,11 +117,36 @@ class TestOrderPlannerCreatePlan:
         # Default limit = stop * 1.003 = 72100 * 1.003 = 72316.3
         assert plan.limit_price == pytest.approx(72316.3, abs=1)
 
+    def test_synthetic_stop_plan_is_marked_for_trigger_routing(self, planner):
+        """Synthetic stops must not be mistaken for immediate live limit orders."""
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="DELTA",
+            symbol="005930",
+            desired_qty=100,
+            constraints=IntentConstraints(
+                stop_price=72100,
+                execution_style="SYNTHETIC_STOP",
+            ),
+        )
+
+        plan = planner.create_plan(
+            symbol="005930",
+            side="BUY",
+            qty=100,
+            intent=intent,
+            current_price=72000,
+        )
+
+        assert plan.order_type == OrderType.STOP_LIMIT
+        assert plan.execution_style == "SYNTHETIC_STOP"
+        assert plan.stop_price == 72100
+
     def test_marketable_limit_for_high_urgency(self, planner):
         """Test marketable limit for high urgency."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             urgency=Urgency.HIGH,
@@ -143,7 +169,7 @@ class TestOrderPlannerCreatePlan:
         """Test marketable limit for sell side."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             urgency=Urgency.HIGH,
@@ -165,7 +191,7 @@ class TestOrderPlannerCreatePlan:
         """Test standard limit for normal urgency."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             urgency=Urgency.NORMAL,
@@ -187,7 +213,7 @@ class TestOrderPlannerCreatePlan:
         """Test limit uses constraint price when available."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             urgency=Urgency.NORMAL,
@@ -205,11 +231,34 @@ class TestOrderPlannerCreatePlan:
         assert plan.order_type == OrderType.LIMIT
         assert plan.limit_price == 71500
 
+    def test_close_auction_entry_plan(self, planner):
+        """CLOSE_AUCTION intent creates an explicit close-auction plan."""
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="OLR",
+            symbol="005930",
+            desired_qty=100,
+            constraints=IntentConstraints(limit_price=71500, expiry_ts=1234.0, execution_style="CLOSE_AUCTION"),
+        )
+
+        plan = planner.create_plan(
+            symbol="005930",
+            side="BUY",
+            qty=100,
+            intent=intent,
+            current_price=72000,
+        )
+
+        assert plan.order_type == OrderType.CLOSE_AUCTION
+        assert plan.execution_style == "CLOSE_AUCTION"
+        assert plan.limit_price == 71500
+        assert plan.submit_by == 1234.0
+
     def test_plan_attribution(self, planner):
         """Test plan attribution fields."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -223,7 +272,7 @@ class TestOrderPlannerCreatePlan:
         )
 
         assert intent.intent_id in plan.intent_ids
-        assert plan.strategy_id == "KMP"
+        assert plan.strategy_id == "ALPHA"
 
 
 class TestOrderPlannerCreateExitPlan:
@@ -239,7 +288,7 @@ class TestOrderPlannerCreateExitPlan:
         plan = planner.create_exit_plan(
             symbol="005930",
             qty=100,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             intent_id="intent-1",
             urgency=Urgency.NORMAL,
         )
@@ -251,19 +300,43 @@ class TestOrderPlannerCreateExitPlan:
         plan = planner.create_exit_plan(
             symbol="005930",
             qty=100,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             intent_id="intent-1",
             urgency=Urgency.NORMAL,
         )
 
         assert plan.side == "SELL"
 
+    def test_close_auction_exit_plan(self, planner):
+        """Exit intents preserve close-auction execution style."""
+        intent = Intent(
+            intent_type=IntentType.EXIT,
+            strategy_id="OLR",
+            symbol="005930",
+            desired_qty=100,
+            constraints=IntentConstraints(limit_price=71500, expiry_ts=5678.0, execution_style="CLOSE_AUCTION"),
+        )
+
+        plan = planner.create_exit_plan(
+            symbol="005930",
+            qty=100,
+            strategy_id="OLR",
+            intent_id=intent.intent_id,
+            urgency=Urgency.LOW,
+            intent=intent,
+        )
+
+        assert plan.order_type == OrderType.CLOSE_AUCTION
+        assert plan.execution_style == "CLOSE_AUCTION"
+        assert plan.limit_price == 71500
+        assert plan.submit_by == 5678.0
+
     def test_exit_plan_short_timeout(self, planner):
         """Test exit plan has short cancel timeout."""
         plan = planner.create_exit_plan(
             symbol="005930",
             qty=100,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             intent_id="intent-1",
             urgency=Urgency.NORMAL,
         )
@@ -275,12 +348,12 @@ class TestOrderPlannerCreateExitPlan:
         plan = planner.create_exit_plan(
             symbol="005930",
             qty=100,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             intent_id="intent-1",
             urgency=Urgency.HIGH,
         )
 
         assert plan.symbol == "005930"
         assert plan.qty == 100
-        assert plan.strategy_id == "KMP"
+        assert plan.strategy_id == "ALPHA"
         assert "intent-1" in plan.intent_ids

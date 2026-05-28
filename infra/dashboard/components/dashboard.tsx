@@ -20,20 +20,14 @@ import type {
 } from '@/lib/types'
 import { cn, formatKRW } from '@/lib/utils'
 
-const STRATEGIES = ['KMP', 'NULRIMOK', 'KPR', 'PCIM'] as const
+const STRATEGIES = ['PCIM'] as const
 type Strategy = (typeof STRATEGIES)[number]
 
 const STRATEGY_BORDER: Record<Strategy, string> = {
-  KMP: 'border-blue-500/30',
-  NULRIMOK: 'border-purple-500/30',
-  KPR: 'border-orange-500/30',
   PCIM: 'border-emerald-500/30',
 }
 
 const STRATEGY_TEXT: Record<Strategy, string> = {
-  KMP: 'text-blue-400',
-  NULRIMOK: 'text-purple-400',
-  KPR: 'text-orange-400',
   PCIM: 'text-emerald-400',
 }
 

@@ -1,60 +1,43 @@
 # k_stock_trader
 
-Multi-strategy algorithmic trading system for the Korean stock market (KRX), built on the Korea Investment & Securities (KIS) API.
+Algorithmic trading system for the Korean stock market (KRX), built on the Korea Investment & Securities (KIS) API.
 
-Four independent strategies share a centralised Order Management System (OMS) with pre-trade risk checks, deployed across Docker containers on two VPS instances.
+PCIM runs through the centralised Order Management System (OMS) with pre-trade risk checks. KALCB and OLR remain available for research, backtests, artifact generation, and deployment readiness workflows.
 
 ## Architecture
 
 ```
-VPS 1 (Account 1)                    VPS 2 (Account 2)
-+-----------------------+            +-----------------------+
-|  KMP Strategy         |            |  KPR Strategy         |
-|  (intraday momentum)  |            |  (flow mean-reversion)|
-+-----------------------+            +-----------------------+
-|  Nulrimok Strategy    |            |  PCIM Strategy        |
-|  (swing / multi-day)  |            |  (AI premarket)       |
-+-----------------------+            +-----------------------+
-|  OMS Instance 1       |--- TCP --->|  OMS Instance 2       |
-|  (PostgreSQL remote)  |   :5432    |  (PostgreSQL local)   |
-+-----------------------+            +-----------------------+
-                                     |  PostgreSQL + Dashboard|
-                                     +-----------------------+
-            |                                   |
-            +----------------+------------------+
-                             |
-                  +----------v----------+
-                  |    KIS Paper API    |
-                  |  40 WS + REST each  |
-                  +---------------------+
+Single-VPS Docker runtime
++---------------------------+
+|  PCIM Strategy            |
+|  OLR/KALCB Runtime        |
++---------------------------+
+|  OMS                      |
+|  PostgreSQL               |
+|  Dashboard                |
++---------------------------+
+              |
+    +---------v---------+
+    |    KIS API        |
+    |  REST + WebSocket |
+    +-------------------+
 ```
 
 ## Strategies
 
 | Strategy | Style | Trading Hours (KST) | Signal Source |
 |----------|-------|---------------------|---------------|
-| **KMP** | Intraday momentum | 09:15 - 14:30 | Price breakouts + program flow |
-| **KPR** | Intraday mean-reversion | 09:10 - 14:00 | VWAP pullbacks + investor flow |
-| **Nulrimok** | Swing (multi-day) | 09:00 - 15:00 | AVWAP band + smart money flow |
+| **KALCB** | Intraday breakout research | Research/backtest | Completed-bar KRX/KIS replay |
+| **OLR** | Overnight leader rotation | Research/backtest | Daily flow + afternoon execution |
 | **PCIM** | Premarket catalyst | 09:01 - 10:30 | YouTube influencers + Gemini AI |
 
-### KMP - Momentum Breakout
+### KALCB
 
-Scans the universe at 09:15 for trend-aligned breakout candidates. An FSM steps each candidate through gates: trend anchor, relative volume surge (2x+), spread check, regime/breadth gate, acceptance timeout, then entry. Positions flatten by 14:30.
+KALCB research and backtest modules evaluate completed-bar breakout candidates with artifact-backed replay paths and promotion checks.
 
-KMP attempts to capture the continuation move after a genuine breakout by requiring volume confirmation and trend alignment to filter out false breakouts. The multi-gate FSM ensures entries only fire when institutional participation (program flow) validates the move.
+### OLR
 
-### KPR - VWAP Pullback Reversal
-
-Watches for pullbacks to VWAP in a tiered universe (HOT/WARM/COLD). Combines investor flow, program flow, and micro-pressure signals to confirm entries. Drift monitoring detects regime shifts for exits.
-
-KPR exploits the tendency of strongly-trending intraday stocks to find support at VWAP. The three-pillar confirmation (investor flow, program flow, micro-pressure) filters for pullbacks driven by temporary liquidity gaps rather than genuine reversals.
-
-### Nulrimok - Swing Flow Strategy
-
-Pre-market DSE (Daily Selection Engine) ranks the universe by flow score, relative strength, sector weight, and AVWAP proximity. During the day, IEPE (Intraday Entry/Position Engine) watches 30-minute bars for band entry setups. Positions are held across sessions with flow-reversal exits.
-
-Nulrimok looks to capture multi-day mean-reversion to anchored VWAP in names where smart money (institutional/foreign) accumulation is detectable through flow data. Holding across sessions harvests larger moves that intraday strategies must leave on the table.
+OLR research and backtest modules build overnight leader selections from daily/flow data, then evaluate afternoon execution plans with explicit holdout and parity artifacts.
 
 ### PCIM - AI Premarket Intelligence
 
@@ -69,17 +52,15 @@ k_stock_trader/
 |-- kis_core/            # KIS API wrapper: REST, WebSocket, auth, rate limiting
 |-- oms/                 # Order Management System: risk gateway, state, persistence
 |-- oms_client/          # Strategy-side OMS client library
-|-- strategy_kmp/        # KMP strategy
-|-- strategy_kpr/        # KPR strategy
-|-- strategy_nulrimok/   # Nulrimok strategy
+|-- strategy_kalcb/      # KALCB strategy/research support
+|-- strategy_olr/        # OLR strategy/research support
 |-- strategy_pcim/       # PCIM strategy
 |-- config/              # YAML configs per strategy + OMS
-|-- infra/               # PostgreSQL init scripts, dashboard config
-|-- scripts/             # Utility scripts (LRS backfill, health checks)
+|-- deployment/          # Runtime entrypoints and Docker images
+|-- infra/               # PostgreSQL init scripts, dashboard config, cron wrappers
+|-- scripts/             # Utility scripts (artifacts, migrations, backups, health checks)
 |-- tests/               # Unit + integration tests
-|-- docker-compose.yml          # Local development (all services)
-|-- docker-compose.vps1.yml     # Production VPS 1 (KMP + Nulrimok)
-|-- docker-compose.vps2.yml     # Production VPS 2 (KPR + PCIM + DB)
+|-- docker-compose.yml   # Canonical single-VPS compose stack
 ```
 
 ## Core Components
@@ -155,23 +136,39 @@ pip install -r requirements.txt
 # Run tests
 pytest tests/ -v
 
-# Start all services locally
+# Start base services locally (Postgres + OMS)
 docker compose up --build
 
-# Or start specific strategies using profiles
-docker compose --profile kmp up
-docker compose --profile nulrimok up
+# Start optional strategy/dashboard services
+docker compose --profile pcim up --build pcim
+docker compose --profile dashboard up --build dashboard
+
+# Start the OLR/KALCB runtime after artifacts and runtime env are ready
+docker compose --profile olr-kalcb up --build runtime
 ```
 
 ### Production Deployment
 
 ```bash
-# VPS 1: KMP + Nulrimok
-docker compose -f docker-compose.vps1.yml up -d
+# Build the canonical single-VPS stack, including profiled services
+docker compose --profile all build
 
-# VPS 2: KPR + PCIM + Database + Dashboard
-docker compose -f docker-compose.vps2.yml up -d
+# Start shared infrastructure first
+docker compose up -d postgres oms
+
+# Apply existing-database migrations when upgrading an installed VPS
+scripts/apply_db_migrations.sh
+
+# Start optional services for the portfolio
+docker compose --profile dashboard up -d dashboard
+docker compose --profile pcim up -d pcim
+
+# Generate date-sensitive OLR/KALCB artifacts explicitly, then restart runtime
+infra/cron/olr_kalcb_premarket_restart.sh
+infra/cron/olr_kalcb_afternoon_restart.sh
 ```
+
+The premarket wrapper defaults to the approved OLR deployment universe manifest at `config/olr_kalcb/olr_deployment_universe_103.yaml`; replacing it should be a reviewed config change, not an ad hoc runtime fallback.
 
 ### Configuration
 
@@ -179,9 +176,8 @@ Each strategy has a YAML config in `config/`:
 
 | File | Purpose |
 |------|---------|
-| `kmp.yaml` | Universe, OR window, risk parameters |
-| `kpr.yaml` | Universe tiers, signal weights |
-| `nulrimok.yaml` | Universe, sector map, LRS path |
+| `kalcb.yaml` | KALCB runtime/research settings |
+| `olr.yaml` | OLR runtime/research settings |
 | `pcim.yaml` | YouTube channels, AI settings, filters |
 | `oms_config.yaml` | Risk limits, exposure caps, reconciliation |
 | `conservative.yaml` | Tighter thresholds for cautious mode |
@@ -196,10 +192,9 @@ pytest tests/ -v
 
 # By component
 pytest tests/oms/ -v
-pytest tests/strategy_kmp/ -v
-pytest tests/strategy_nulrimok/ -v
+pytest tests/strategy_kalcb/ -v
+pytest tests/strategy_olr/ -v
 pytest tests/strategy_pcim/ -v
-pytest tests/strategy_kpr/ -v
 pytest tests/kis_core/ -v
 ```
 
@@ -207,20 +202,19 @@ pytest tests/kis_core/ -v
 
 ### Dashboard
 
-Available on VPS 2 at port 3000. Lightweight Next.js dashboard (`infra/dashboard/`) that reads shared Postgres views server-side and shows unified multi-OMS positions, risk, and service health.
+Available on the single VPS at port 3000 after starting the `dashboard` profile. Lightweight Next.js dashboard (`infra/dashboard/`) reads shared Postgres views server-side and shows positions, risk, and service health.
 
 ### Log Diagnostics
 
-Each strategy container logs structured diagnostics. Key grep patterns:
+Containers log structured diagnostics. Key grep patterns:
 
 ```bash
 # OMS health
-docker logs oms_vps1 2>&1 | grep "KIS order rejected\|Limit BUY failed"
+docker compose logs oms 2>&1 | grep "KIS order rejected\|Limit BUY failed"
 
 # Strategy status
-docker logs strategy_kmp 2>&1 | grep "Scan complete\|blocked by\|Entry rejected"
-docker logs strategy_nulrimok 2>&1 | grep "DSE:\|Entry conditions not met\|Armed\|OMS returned"
+docker compose logs pcim 2>&1 | grep "Signal\|Entry rejected\|OMS returned"
 
 # Risk events
-docker logs oms_vps1 2>&1 | grep -i "reject\|halt\|breach"
+docker compose logs oms 2>&1 | grep -i "reject\|halt\|breach"
 ```

@@ -1,7 +1,0 @@
-strategy: kpr
-capability_level: synthetic
-initial_equity: 10000000
-workers: 1
-artifact_promotion_policy: research_only_until_investor_program_micro_replay
-live_parity_fill_timing: next_bar_after_completed_signal
-

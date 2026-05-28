@@ -15,6 +15,7 @@ class OrderType(Enum):
     LIMIT = auto()
     STOP_LIMIT = auto()
     MARKETABLE_LIMIT = auto()
+    CLOSE_AUCTION = auto()
 
 
 @dataclass
@@ -39,6 +40,7 @@ class OrderPlan:
 
     # Constraints
     max_chase_bps: float = 30.0
+    execution_style: Optional[str] = None
 
     created_at: datetime = field(default_factory=datetime.now)
 
@@ -76,7 +78,25 @@ class OrderPlanner:
             strategy_id=intent.strategy_id,
         )
 
-        if intent.constraints.stop_price and side == "BUY":
+        if intent.constraints.execution_style == "SYNTHETIC_STOP" and side == "BUY":
+            plan.order_type = OrderType.STOP_LIMIT
+            plan.execution_style = "SYNTHETIC_STOP"
+            plan.stop_price = intent.constraints.stop_price
+            plan.limit_price = intent.constraints.limit_price or (
+                intent.constraints.stop_price * 1.003 if intent.constraints.stop_price else current_price
+            )
+            plan.submit_by = intent.constraints.expiry_ts
+            plan.cancel_after = 30.0
+
+        elif intent.constraints.execution_style == "CLOSE_AUCTION":
+            plan.order_type = OrderType.CLOSE_AUCTION
+            plan.execution_style = "CLOSE_AUCTION"
+            plan.limit_price = intent.constraints.limit_price or current_price
+            plan.stop_price = intent.constraints.stop_price
+            plan.submit_by = intent.constraints.expiry_ts
+            plan.cancel_after = 1800.0
+
+        elif intent.constraints.stop_price and side == "BUY":
             # Stop-limit for breakout entries
             plan.order_type = OrderType.STOP_LIMIT
             plan.stop_price = intent.constraints.stop_price
@@ -109,8 +129,23 @@ class OrderPlanner:
         strategy_id: str,
         intent_id: str,
         urgency: 'Urgency',
+        intent: 'Intent | None' = None,
     ) -> OrderPlan:
         """Create market exit plan."""
+        if intent is not None and intent.constraints.execution_style == "CLOSE_AUCTION":
+            return OrderPlan(
+                symbol=symbol,
+                side="SELL",
+                qty=qty,
+                order_type=OrderType.CLOSE_AUCTION,
+                limit_price=intent.constraints.limit_price,
+                stop_price=intent.constraints.stop_price,
+                submit_by=intent.constraints.expiry_ts,
+                intent_ids=[intent_id],
+                strategy_id=strategy_id,
+                cancel_after=1800.0,
+                execution_style="CLOSE_AUCTION",
+            )
         return OrderPlan(
             symbol=symbol,
             side="SELL",

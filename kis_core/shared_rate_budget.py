@@ -51,10 +51,7 @@ else:
 # Time windows where specific strategies get priority access
 # Format: {strategy_id: [((start_hour, start_min), (end_hour, end_min)), ...]}
 PRIORITY_WINDOWS: Dict[str, List[Tuple[Tuple[int, int], Tuple[int, int]]]] = {
-    "KMP": [((9, 15), (10, 0))],      # KMP gets priority 09:15-10:00 (opening breakdown)
-    "KPR": [],                         # No special priority
-    "NULRIMOK": [((8, 0), (8, 30))],  # DSE priority 08:00-08:30
-    "PCIM": [],                        # No special priority
+    "PCIM": [],
 }
 
 # Priority multipliers
@@ -347,7 +344,7 @@ class SharedRateBudgetClient:
     Client for strategies to connect to shared rate budget.
 
     Usage:
-        budget = SharedRateBudgetClient("KMP", state_file="/var/run/oms/rate_budget.json")
+        budget = SharedRateBudgetClient("PCIM", state_file="/var/run/oms/rate_budget.json")
 
         if budget.try_consume("QUOTE"):
             result = await api.get_quote(symbol)
@@ -366,7 +363,7 @@ class SharedRateBudgetClient:
         Initialize client for a specific strategy.
 
         Args:
-            strategy_id: Strategy identifier (KMP, KPR, NULRIMOK, PCIM)
+            strategy_id: Strategy identifier.
             state_file: Path to shared state file for multi-process coordination
             budgets: Override default budget configs
         """

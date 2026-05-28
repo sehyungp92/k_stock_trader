@@ -69,9 +69,6 @@ class RiskConfig:
         # Set default strategy budgets if not provided
         if self.strategy_budgets is None:
             self.strategy_budgets = {
-                "KMP": {"max_positions": 4, "max_risk_pct": 0.015, "capital_allocation_pct": 1.0},
-                "KPR": {"max_positions": 3, "max_risk_pct": 0.015, "capital_allocation_pct": 1.0},
-                "NULRIMOK": {"max_positions": 5, "max_risk_pct": 0.08, "capital_allocation_pct": 1.0},
                 "PCIM": {"max_positions": 8, "max_risk_pct": 0.10, "capital_allocation_pct": 1.0},
             }
 

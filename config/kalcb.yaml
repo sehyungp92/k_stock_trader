@@ -1,0 +1,87 @@
+strategy: kalcb
+daily_data_root: data/krx_daily_parquet
+market: krx
+timezone: Asia/Seoul
+timeframe: 5m
+execution_timeframe: 5m_next_open
+live_parity_fill_timing: next_5m_open
+auction_mode: non_auction_continuous
+kalcb:
+  session:
+    opening_range_bars: 6
+    entry_window_start: "10:25"
+    entry_window_end: "13:00"
+    flatten_time: "15:15"
+    ws_budget: 8
+  frontier:
+    enabled: true
+    size: 104
+    selection_mode: opportunity
+    active_selection_mode: liquidity
+    rest_safety_fraction: 0.50
+    shadow_enabled: true
+    shadow_max_positions: 128
+    rotation_enabled: true
+    rotation_slots: 2
+    rotation_min_shadow_trades: 2
+    rotation_min_avg_r: 0.05
+    rotation_min_total_r: 0.0
+    rotation_min_frontier_trades: 40
+    rotation_min_frontier_avg_r: 0.05
+    rotation_min_frontier_total_r: 2.0
+    rotation_min_proof_symbols: 2
+  entry:
+    rvol_threshold: 2.0
+    rvol_max: 5.0
+    cpr_threshold: 0.6
+    cpr_relax_threshold: 0.55
+    cpr_relax_min_score: 4
+    or_width_min_pct: 0.0015
+    breakout_distance_cap_r: 1.0
+    orb_entry_range_cap_r: 1.1
+    combined_breakout_score_min: 5
+    combined_breakout_min_rvol: 2.5
+    combined_avwap_cap_pct: 0.003
+    pdh_avwap_cap_pct: 0.005
+    or_caution_window_start: "10:30"
+    or_caution_window_end: "11:30"
+    or_caution_min_rvol: 3.0
+    block_combined_regime_b: true
+    entry_score_blocklist:
+      - KRX_COMBINED_BREAKOUT:5
+  risk:
+    stop_atr_multiple: 0.8
+    risk_per_trade_pct: 0.001
+    max_position_notional_pct: 0.10
+    pdh_size_mult: 0.75
+    regime_mult_b: 0.7
+  exit:
+    use_partial_takes: false
+    partial_r_trigger: 0.6
+    partial_fraction: 0.4
+    partial_stop_to_breakeven: true
+    partial_breakeven_buffer_r: 0.1
+    quick_exit_enabled: true
+    quick_exit_bars: 10
+    quick_exit_min_r: -0.5
+    failure_stop_enabled: false
+    failure_stop_bars: 10
+    failure_stop_mfe_max_r: 0.2
+    failure_stop_current_r_max: 0.0
+    failure_stop_to_r: -0.25
+    mfe_conviction_enabled: true
+    mfe_conviction_check_bars: 16
+    mfe_conviction_min_r: 0.2
+    mfe_conviction_floor_r: -0.15
+    adaptive_trail_start_bars: 30
+    adaptive_trail_tighten_bars: 25
+    adaptive_trail_late_activate_r: 0.3
+    adaptive_trail_late_distance_r: 0.18
+    flow_reversal_enabled: true
+    flow_reversal_min_hold_bars: 12
+    flow_reversal_cpr_threshold: 0.3
+    flow_reversal_mfe_grace_r: 0.2
+  carry:
+    mode: shadow
+    min_cpr: 0.6
+    min_r: 0.5

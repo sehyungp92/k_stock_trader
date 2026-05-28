@@ -68,12 +68,8 @@ def bars_fingerprint(bars: Iterable[MarketBar]) -> str:
 def make_strategy_synthetic_bars(strategy: str, config: dict | None = None) -> list[MarketBar]:
     config = dict(config or {})
     key = strategy.lower()
-    if key == "kmp":
-        return make_intraday_bars(str(config.get("symbol", "000001")), pattern="breakout")
-    if key == "kpr":
-        return make_intraday_bars(str(config.get("symbol", "000002")), pattern="pullback", start_price=20_000.0)
-    if key == "nulrimok":
-        return make_intraday_bars(str(config.get("symbol", "000003")), pattern="dip_confirm", start_price=30_000.0, timeframe="30m")
+    if key == "kalcb":
+        return make_kalcb_synthetic_bars(str(config.get("symbol", "005930")))
     raise ValueError(f"Unsupported synthetic strategy: {strategy}")
 
 
@@ -104,6 +100,47 @@ def _breakout_drift(index: int) -> float:
     if 39 <= index <= 55:
         return -0.001
     return 0.0006
+
+
+def make_kalcb_synthetic_bars(
+    symbol: str,
+    *,
+    trade_date: date = date(2026, 1, 5),
+    start_price: float = 70_300.0,
+) -> list[MarketBar]:
+    bars: list[MarketBar] = []
+    timestamp = datetime.combine(trade_date, datetime.min.time(), tzinfo=KST).replace(hour=9)
+    rows = [
+        (70_300.0, 70_410.0, 70_220.0, 70_330.0, 12_000.0),
+        (70_330.0, 70_460.0, 70_210.0, 70_390.0, 11_600.0),
+        (70_390.0, 70_440.0, 70_200.0, 70_260.0, 10_900.0),
+        (70_260.0, 70_430.0, 70_230.0, 70_360.0, 11_800.0),
+        (70_360.0, 70_470.0, 70_240.0, 70_410.0, 12_100.0),
+        (70_410.0, 70_500.0, 70_200.0, 70_440.0, 12_300.0),
+        (70_450.0, 70_700.0, 70_420.0, 70_660.0, 60_000.0),
+        (70_680.0, 71_000.0, 70_600.0, 70_900.0, 42_000.0),
+        (71_060.0, 71_350.0, 70_950.0, 71_250.0, 38_000.0),
+        (71_250.0, 71_500.0, 71_100.0, 71_420.0, 35_000.0),
+        (71_420.0, 71_700.0, 71_300.0, 71_600.0, 34_000.0),
+        (71_600.0, 71_850.0, 71_480.0, 71_760.0, 33_000.0),
+    ]
+    for index, (open_price, high, low, close, volume) in enumerate(rows):
+        bars.append(
+            MarketBar(
+                symbol=symbol,
+                timestamp=timestamp + timedelta(minutes=5 * index),
+                timeframe="5m",
+                open=open_price,
+                high=high,
+                low=low,
+                close=close,
+                volume=volume,
+                source="synthetic",
+                source_fingerprint=synthetic_fingerprint(symbol, "kalcb_breakout"),
+                metadata={"adx": 24.0} if index >= 6 else {},
+            )
+        )
+    return bars
 
 
 def _pullback_drift(index: int) -> float:

@@ -1,0 +1,15 @@
+{
+  "bar_count": 240,
+  "date_window": {
+    "end": "2026-02-01",
+    "start": "2025-11-14"
+  },
+  "fixture_id": "olr-live-replay-parity-v1",
+  "input_hash": "inline_fixture_rows_v1",
+  "source_fingerprint": "fixture-source",
+  "symbols": [
+    "005930",
+    "000660",
+    "035420"
+  ]
+}

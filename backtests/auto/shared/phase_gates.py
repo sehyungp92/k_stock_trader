@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from .types import GateCriterion, GateResult, GreedyResult
 
-_LOWER_IS_BETTER_TOKENS = ("drawdown", "latency", "false_positive", "same_bar", "net_gross_gap")
+_LOWER_IS_BETTER_TOKENS = (
+    "drawdown",
+    "latency",
+    "false_positive",
+    "hard_stop",
+    "same_bar",
+    "net_gross_gap",
+)
 
 
 def _lower_is_better(name: str) -> bool:
@@ -52,4 +59,3 @@ def _recommend(criteria: list[GateCriterion], category: str) -> list[str]:
     if category == "diagnostic_needed":
         return ["Multiple criteria are close to target; run enhanced diagnostics before changing scoring."]
     return ["Score moved more than gate metrics; rebalance scoring toward failing criteria."]
-

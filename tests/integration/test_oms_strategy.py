@@ -24,7 +24,7 @@ class TestIntentSubmission:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -43,7 +43,7 @@ class TestIntentSubmission:
 
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(rationale_code="stop_hit"),
         )
@@ -61,7 +61,7 @@ class TestIntentSubmission:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -79,7 +79,7 @@ class TestIntentSubmission:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -104,20 +104,20 @@ class TestIdempotency:
 
         intent1 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             signal_hash="break_1",
-            idempotency_key="KMP:005930:ENTER:20240115:break_1",
+            idempotency_key="ALPHA:005930:ENTER:20240115:break_1",
         )
 
         intent2 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             signal_hash="break_1",
-            idempotency_key="KMP:005930:ENTER:20240115:break_1",
+            idempotency_key="ALPHA:005930:ENTER:20240115:break_1",
         )
 
         # Set response for first intent
@@ -141,7 +141,7 @@ class TestIdempotency:
 
         intent1 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             signal_hash="break_1",
@@ -149,7 +149,7 @@ class TestIdempotency:
 
         intent2 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             signal_hash="break_2",  # Different hash
@@ -170,7 +170,7 @@ class TestPositionVisibility:
         """Create mock OMS client with positions."""
         oms = MockOMSClient()
         oms.set_position("005930", 100)
-        oms.set_allocation("005930", "KMP", 100)
+        oms.set_allocation("005930", "ALPHA", 100)
         return oms
 
     def test_get_position(self, mock_oms):
@@ -180,12 +180,12 @@ class TestPositionVisibility:
 
     def test_get_allocation(self, mock_oms):
         """Test getting allocation from OMS."""
-        qty = mock_oms.get_allocation("005930", "KMP")
+        qty = mock_oms.get_allocation("005930", "ALPHA")
         assert qty == 100
 
     def test_get_allocation_missing_strategy(self, mock_oms):
         """Test getting allocation for missing strategy."""
-        qty = mock_oms.get_allocation("005930", "KPR")
+        qty = mock_oms.get_allocation("005930", "BETA")
         assert qty == 0
 
     def test_get_position_missing_symbol(self, mock_oms):
@@ -207,26 +207,26 @@ class TestConcurrentStrategies:
         """Test multiple strategies on same symbol."""
         from oms.intent import Intent, IntentType
 
-        intent_kmp = Intent(
+        intent_alpha = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
 
-        intent_kpr = Intent(
+        intent_beta = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KPR",
+            strategy_id="BETA",
             symbol="005930",
             desired_qty=50,
         )
 
-        result_kmp = await mock_oms.submit_intent(intent_kmp)
-        result_kpr = await mock_oms.submit_intent(intent_kpr)
+        result_alpha = await mock_oms.submit_intent(intent_alpha)
+        result_beta = await mock_oms.submit_intent(intent_beta)
 
         # Both should succeed (in real OMS, one might be deferred)
-        assert result_kmp.status.name == "EXECUTED"
-        assert result_kpr.status.name == "EXECUTED"
+        assert result_alpha.status.name == "EXECUTED"
+        assert result_beta.status.name == "EXECUTED"
         assert len(mock_oms.submitted_intents) == 2
 
     @pytest.mark.asyncio
@@ -236,14 +236,14 @@ class TestConcurrentStrategies:
 
         enter_intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
 
         exit_intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -262,13 +262,13 @@ class TestStrategySpecificBehavior:
         return MockOMSClient(default_status="EXECUTED")
 
     @pytest.mark.asyncio
-    async def test_kmp_high_urgency(self, mock_oms):
-        """Test KMP submits with HIGH urgency."""
+    async def test_alpha_high_urgency(self, mock_oms):
+        """Test ALPHA submits with HIGH urgency."""
         from oms.intent import Intent, IntentType, Urgency
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             urgency=Urgency.HIGH,
@@ -280,13 +280,13 @@ class TestStrategySpecificBehavior:
         assert submitted.urgency.name == "HIGH"
 
     @pytest.mark.asyncio
-    async def test_kpr_normal_urgency(self, mock_oms):
-        """Test KPR submits with NORMAL urgency."""
+    async def test_beta_normal_urgency(self, mock_oms):
+        """Test BETA submits with NORMAL urgency."""
         from oms.intent import Intent, IntentType, Urgency
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KPR",
+            strategy_id="BETA",
             symbol="005930",
             desired_qty=100,
             urgency=Urgency.NORMAL,
@@ -304,7 +304,7 @@ class TestStrategySpecificBehavior:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             time_horizon=TimeHorizon.INTRADAY,

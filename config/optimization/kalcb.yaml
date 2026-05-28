@@ -1,0 +1,116 @@
+strategy: kalcb
+timeframe: 5m
+execution_timeframe: 5m_next_open
+capability_level: real_replay
+data_root: data/kis_intraday_parquet
+daily_data_root: data/krx_daily_parquet
+artifact_root: data/strategy/kalcb
+holdout_days: 42
+initial_equity: 100000000
+live_parity_fill_timing: next_5m_open
+auction_mode: non_auction_continuous
+tick_policy: krx_tick_table
+account_scope: vps1_account1
+output_root: data/backtests/output
+workers: 2
+max_scoring_retries: 2
+max_diagnostic_retries: 1
+artifact_promotion_policy: research_only_until_oos_and_paper_parity
+fixed_trade_plan_phase_auto: true
+validation_gate_enabled: false
+holdout_excluded_from_optimization: true
+baseline_integrity_required: true
+previous_promotion_guard_required: true
+baseline_integrity_tolerance_abs: 0.001
+previous_promotion_tolerance_abs: 0.001
+commission_bps: 2
+slippage_bps: 3
+spread_bps: 0
+universe: universe_103.yaml
+start: "2025-05-12T09:00:00+09:00"
+end: "2026-03-31T15:30:00+09:00"
+baseline:
+  name: kalcb_start1025_trail_end1300_flat1515_train_20250512_20260331_holdout_20260401_20260512
+  data_latest_available: "2026-05-12T15:30:00+09:00"
+  holdout_start: "2026-04-01T09:00:00+09:00"
+  holdout_end: "2026-05-12T15:30:00+09:00"
+  selected_from: data/backtests/output/kalcb/baseline_sweep_flatten1515_targeted/targeted_high_frequency_summary.json
+research_sweep:
+  holdout_days: 42
+  fold_count: 0
+  top_n: 10
+  refine_top_n: 3
+  max_refinement_candidates: 96
+  policy: candidate_opportunity_sweep_then_optional_two_half_confirmation_then_phased_auto
+initial_mutations:
+  kalcb.session.opening_range_bars: 6
+  kalcb.session.flatten_time: "15:15"
+  kalcb.session.entry_window_start: "10:25"
+  kalcb.session.entry_window_end: "13:00"
+  kalcb.session.ws_budget: 8
+  kalcb.frontier.enabled: true
+  kalcb.frontier.size: 103
+  kalcb.frontier.selection_mode: opportunity
+  kalcb.frontier.active_selection_mode: liquidity
+  kalcb.research.min_sector_daily_score_pct: 0.0
+  kalcb.frontier.rest_safety_fraction: 0.50
+  kalcb.frontier.shadow_enabled: true
+  kalcb.frontier.shadow_max_positions: 128
+  kalcb.frontier.rotation_enabled: true
+  kalcb.frontier.rotation_slots: 2
+  kalcb.frontier.rotation_min_shadow_trades: 2
+  kalcb.frontier.rotation_min_avg_r: 0.05
+  kalcb.frontier.rotation_min_total_r: 0.0
+  kalcb.frontier.rotation_min_frontier_trades: 40
+  kalcb.frontier.rotation_min_frontier_avg_r: 0.05
+  kalcb.frontier.rotation_min_frontier_total_r: 2.0
+  kalcb.frontier.rotation_min_proof_symbols: 2
+  kalcb.entry.rvol_threshold: 2.0
+  kalcb.entry.rvol_max: 5.0
+  kalcb.entry.cpr_relax_threshold: 0.55
+  kalcb.entry.cpr_relax_min_score: 4
+  kalcb.entry.or_width_min_pct: 0.0015
+  kalcb.entry.breakout_distance_cap_r: 1.0
+  kalcb.entry.orb_entry_range_cap_r: 1.1
+  kalcb.entry.combined_breakout_score_min: 5
+  kalcb.entry.combined_breakout_min_rvol: 2.5
+  kalcb.entry.combined_avwap_cap_pct: 0.003
+  kalcb.entry.pdh_avwap_cap_pct: 0.005
+  kalcb.entry.or_caution_window_start: "10:30"
+  kalcb.entry.or_caution_window_end: "11:30"
+  kalcb.entry.or_caution_min_rvol: 3.0
+  kalcb.entry.block_combined_regime_b: true
+  kalcb.entry.entry_score_blocklist:
+    - KRX_COMBINED_BREAKOUT:5
+  kalcb.risk.stop_atr_multiple: 0.8
+  kalcb.risk.pdh_size_mult: 0.75
+  kalcb.risk.regime_mult_b: 0.7
+  kalcb.exit.use_partial_takes: false
+  kalcb.exit.partial_r_trigger: 0.6
+  kalcb.exit.partial_fraction: 0.4
+  kalcb.exit.partial_stop_to_breakeven: true
+  kalcb.exit.partial_breakeven_buffer_r: 0.1
+  kalcb.exit.quick_exit_enabled: true
+  kalcb.exit.quick_exit_bars: 10
+  kalcb.exit.quick_exit_min_r: -0.5
+  kalcb.exit.failure_stop_enabled: false
+  kalcb.exit.failure_stop_bars: 10
+  kalcb.exit.failure_stop_mfe_max_r: 0.2
+  kalcb.exit.failure_stop_current_r_max: 0.0
+  kalcb.exit.failure_stop_to_r: -0.25
+  kalcb.exit.mfe_conviction_enabled: true
+  kalcb.exit.mfe_conviction_check_bars: 16
+  kalcb.exit.mfe_conviction_min_r: 0.2
+  kalcb.exit.mfe_conviction_floor_r: -0.15
+  kalcb.exit.adaptive_trail_start_bars: 30
+  kalcb.exit.adaptive_trail_tighten_bars: 25
+  kalcb.exit.adaptive_trail_late_activate_r: 0.3
+  kalcb.exit.adaptive_trail_late_distance_r: 0.18
+  kalcb.exit.flow_reversal_enabled: true
+  kalcb.exit.flow_reversal_min_hold_bars: 12
+  kalcb.exit.flow_reversal_cpr_threshold: 0.3
+  kalcb.exit.flow_reversal_mfe_grace_r: 0.2
+  kalcb.exit.flow_reversal_trailing_activate_r: 0
+  kalcb.carry.mode: shadow
+  kalcb.carry.min_cpr: 0.6
+  kalcb.carry.min_r: 0.5

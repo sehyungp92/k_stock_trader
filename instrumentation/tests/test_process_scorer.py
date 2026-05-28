@@ -18,12 +18,12 @@ def _make_rules():
             "strong_signal_threshold": 0.7,
         },
         "strategies": {
-            "kmp": {
+            "alpha": {
                 "preferred_regimes": ["trending_up"],
                 "adverse_regimes": ["ranging", "trending_down"],
                 "expected_slippage_bps": 5,
             },
-            "kpr": {
+            "beta": {
                 "preferred_regimes": ["volatile", "trending_down"],
                 "adverse_regimes": ["trending_up"],
             },
@@ -50,7 +50,7 @@ class TestProcessScorer:
             "exit_reason": "TAKE_PROFIT",
             "pnl": 500,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert score.process_quality_score >= 80
         assert score.classification == "good_process"
         assert len(score.positive_factors) > 0
@@ -66,7 +66,7 @@ class TestProcessScorer:
             "exit_reason": "STOP_LOSS",
             "pnl": -200,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert score.process_quality_score < 50
         assert "regime_mismatch" in score.root_causes
         assert "weak_signal" in score.root_causes
@@ -80,7 +80,7 @@ class TestProcessScorer:
             "signal_strength": 0.8,
             "pnl": 100,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert "regime_mismatch" in score.root_causes
         # -20 from regime, starts at 100, so <= 80
         assert score.process_quality_score <= 80
@@ -91,7 +91,7 @@ class TestProcessScorer:
             "signal_strength": 0.1,
             "pnl": 0,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert "weak_signal" in score.root_causes
 
     def test_late_entry_penalty(self):
@@ -100,7 +100,7 @@ class TestProcessScorer:
             "entry_latency_ms": 10000,
             "pnl": 0,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert "late_entry" in score.root_causes
 
     def test_high_slippage_penalty(self):
@@ -109,7 +109,7 @@ class TestProcessScorer:
             "entry_slippage_bps": 50.0,
             "pnl": 0,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert "high_entry_slippage" in score.root_causes
 
     def test_manual_exit_penalty(self):
@@ -118,7 +118,7 @@ class TestProcessScorer:
             "exit_reason": "MANUAL",
             "pnl": 0,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert "manual_exit" in score.root_causes
 
     def test_good_process_loss_is_normal_loss(self):
@@ -132,7 +132,7 @@ class TestProcessScorer:
             "exit_reason": "STOP_LOSS",
             "pnl": -100,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert score.process_quality_score >= 70
         assert score.result_tag == "normal_loss"
 
@@ -148,7 +148,7 @@ class TestProcessScorer:
             "exit_reason": "MANUAL",
             "pnl": 500,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert score.process_quality_score < 40
         assert score.result_tag == "exceptional_win"
 
@@ -162,13 +162,13 @@ class TestProcessScorer:
             "exit_reason": "TAKE_PROFIT",
             "pnl": 500,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert score.result_tag == "normal_win"
 
     def test_all_root_causes_from_taxonomy(self):
         """No root cause should exist outside the controlled taxonomy."""
         trade = {"trade_id": "t11", "pnl": 0}
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         for cause in score.root_causes:
             assert cause in ROOT_CAUSES, f"'{cause}' not in ROOT_CAUSES taxonomy"
 
@@ -185,39 +185,39 @@ class TestProcessScorer:
             "exit_reason": "MANUAL",
             "pnl": -500,
         }
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert 0 <= score.process_quality_score <= 100
 
     def test_missing_fields_handled_gracefully(self):
         """Scorer should not crash on minimal input."""
         trade = {"trade_id": "t13"}
-        score = self.scorer.score_trade(trade, "kmp")
+        score = self.scorer.score_trade(trade, "alpha")
         assert isinstance(score, ProcessScore)
         assert 0 <= score.process_quality_score <= 100
 
     def test_scorer_never_crashes(self):
         """Even with garbage input, scorer returns a ProcessScore."""
-        score = self.scorer.score_trade({"trade_id": "bad", "signal_strength": "not_a_number"}, "kmp")
+        score = self.scorer.score_trade({"trade_id": "bad", "signal_strength": "not_a_number"}, "alpha")
         assert isinstance(score, ProcessScore)
 
     def test_strategy_specific_rules(self):
-        """KPR has different preferred/adverse regimes than KMP."""
+        """BETA has different preferred/adverse regimes than ALPHA."""
         trade = {
             "trade_id": "t14",
             "regime": "trending_up",
             "signal_strength": 0.8,
             "pnl": 100,
         }
-        # For KPR, trending_up is adverse
-        score_kpr = self.scorer.score_trade(trade, "kpr")
-        assert "regime_mismatch" in score_kpr.root_causes
+        # For BETA, trending_up is adverse
+        score_beta = self.scorer.score_trade(trade, "beta")
+        assert "regime_mismatch" in score_beta.root_causes
 
-        # For KMP, trending_up is preferred
-        score_kmp = self.scorer.score_trade(trade, "kmp")
-        assert "regime_mismatch" not in score_kmp.root_causes
+        # For ALPHA, trending_up is preferred
+        score_alpha = self.scorer.score_trade(trade, "alpha")
+        assert "regime_mismatch" not in score_alpha.root_causes
 
     def test_default_rules_fallback(self):
         """If rules file doesn't exist, scorer uses defaults."""
         scorer = ProcessScorer("/nonexistent/path.yaml")
-        score = scorer.score_trade({"trade_id": "t15"}, "kmp")
+        score = scorer.score_trade({"trade_id": "t15"}, "alpha")
         assert isinstance(score, ProcessScore)

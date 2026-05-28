@@ -97,7 +97,7 @@ def test_trade_forwarding_skips_entry_stage_and_validates_completed_trade(tmp_pa
         passed_filters=[],
         strategy_params={},
         bot_id="k_stock_trader",
-        strategy_id="KMP",
+        strategy_id="ALPHA",
     )
     logger.log_exit(
         trade_id="trade-1",

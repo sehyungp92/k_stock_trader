@@ -1,0 +1,119 @@
+strategy: olr
+timeframe: 5m
+capability_level: real_replay
+data_root: data/kis_intraday_parquet
+daily_data_root: data/krx_daily_parquet
+artifact_root: data/strategy/olr
+universe: universe_103.yaml
+sector_map_path: olr/sector_map.yaml
+holdout_days: 42
+initial_equity: 10000000.0
+live_parity_fill_timing: research_only_14_30_decision
+artifact_promotion_policy: research_only_until_oos_and_paper_parity
+initial_mutations:
+  olr.universe.complete_size: 103
+  olr.frontier.active_selection_mode: hybrid
+  olr.premarket.frontier_size: 30
+  olr.premarket.min_adv20_krw: 0.0
+  olr.premarket.min_foreign5_z: -9.99
+  olr.research.top_long_count: 30
+  olr.research.min_price_krw: 1000.0
+  olr.research.min_adv20_krw: 2000000000.0
+  olr.research.min_history_days: 60
+  olr.research.max_median_spread_pct: 0.35
+  olr.research.require_spread: false
+  olr.research.weights.relative_strength: 0.20
+  olr.research.weights.daily_trend: 0.16
+  olr.research.weights.compression: 0.10
+  olr.research.weights.accumulation: 0.10
+  olr.research.weights.stock_regime: 0.08
+  olr.research.weights.sector_regime: 0.07
+  olr.research.weights.sector_participation: 0.07
+  olr.research.weights.daily_signal: 0.10
+  olr.research.weights.flow: 0.05
+  olr.research.weights.foreign_flow: 0.03
+  olr.research.weights.institutional_flow: 0.02
+  olr.research.weights.flow_agreement: 0.02
+  olr.research.min_rs_percentile: 0.0
+  olr.research.min_trend_score: 0.0
+  olr.research.min_compression_score: 0.0
+  olr.research.min_accumulation_score: -1.0
+  olr.research.min_sector_participation: 0.0
+  olr.research.min_sector_daily_score_pct: 0.0
+  olr.research.max_box_range_pct: 0.0
+  olr.research.min_flow_5d: -9.99
+  olr.research.min_foreign_flow_5d: -9.99
+  olr.research.min_institutional_flow_5d: -9.99
+  olr.research.min_flow_z: -9.99
+  olr.research.min_flow_agreement: -9.99
+  olr.research.max_flow_divergence: 9.99
+  olr.research.min_sector_flow_5d: -9.99
+  olr.research.min_sector_foreign_flow_5d: -9.99
+  olr.research.min_sector_institutional_flow_5d: -9.99
+  olr.research.min_sector_flow_agreement: -9.99
+  olr.signal.daily_signal_family: discrete_pullback_v2
+  olr.signal.daily_min_score: 0.0
+  olr.signal.daily_rescue_min_score: 0.0
+  olr.signal.daily_max_score: 100.0
+  olr.signal.signal_floor: 0.0
+  olr.signal.flow_policy: soft_penalty_rescue
+  olr.signal.rescue_size_mult: 0.65
+  olr.signal.allow_secular: true
+  olr.signal.secular_sizing_mult: 0.65
+  olr.signal.cdd_max: 99
+  olr.signal.gap_max_pct: 20.0
+  olr.signal.daily_structure_weight: 0.0
+  olr.signal.min_relative_strength_pct: 0.0
+  olr.signal.max_relative_strength_pct: 100.0
+  olr.signal.min_parent_20d_return_pct: -20.0
+  olr.signal.max_parent_20d_return_pct: 999.0
+  olr.signal.min_market_breadth_pct: 0.0
+  olr.signal.min_market_heat_score: 0.0
+  olr.signal.structure_sizing_enabled: false
+  olr.signal.structure_size_mult_min: 0.70
+  olr.signal.structure_size_mult_max: 1.25
+  olr.signal.rsi2_trigger_thresh: 15.0
+  olr.signal.rsi5_trigger_thresh: 30.0
+  olr.signal.cdd_min_for_rsi5: 2
+  olr.signal.depth_atr_trigger: 1.5
+  olr.signal.bb_pctb_trigger: 0.05
+  olr.signal.volume_climax_trigger: 2.0
+  olr.signal.relative_strength_trigger_pct: 70.0
+  olr.signal.roc5_drop_trigger_pct: -3.0
+  olr.signal.gap_down_trigger_pct: -2.0
+  olr.afternoon.score_mode: hybrid
+  olr.afternoon.top_n: 8
+  olr.afternoon.min_ret: 0.0
+  olr.afternoon.min_vwap_ret: -0.02
+  olr.afternoon.min_gap: -0.20
+  olr.afternoon.max_gap: 0.20
+  olr.afternoon.min_rel_volume: 0.0
+  olr.afternoon.min_close_location: 0.0
+  olr.afternoon.max_open_drawdown: 0.20
+  olr.afternoon.max_range_atr: 99.0
+  olr.afternoon.min_high_from_open: -0.20
+  olr.afternoon.min_low_vs_prev_close: -0.20
+  olr.afternoon.min_prior_ret5: -100.0
+  olr.afternoon.min_prior_ret20: -100.0
+  olr.afternoon.max_prior_ret20: 999.0
+  olr.afternoon.min_prior_ret60: -100.0
+  olr.afternoon.min_bar_count: 1
+  olr.afternoon.min_flow_5d: -9.99
+  olr.afternoon.min_foreign_flow_5d: -9.99
+  olr.afternoon.min_institutional_flow_5d: -9.99
+  olr.afternoon.min_flow_z: -9.99
+  olr.afternoon.min_foreign_z: -9.99
+  olr.afternoon.min_institutional_z: -9.99
+  olr.afternoon.min_flow_agreement: -9.99
+  olr.afternoon.max_flow_divergence: 9.99
+  olr.afternoon.min_sector_flow: -9.99
+  olr.afternoon.min_sector_foreign_flow: -9.99
+  olr.afternoon.min_sector_institutional_flow: -9.99
+  olr.afternoon.min_intraday_sector_score_pct: 0.0
+  olr.afternoon.weight_intraday_sector: 0.0
+  olr.afternoon.min_market_score: -9.99
+  olr.afternoon.require_close_above_prev: false
+  olr.afternoon.use_lagged_flow_score: true
+  olr.afternoon.min_lagged_flow_score: -999.0
+  olr.overnight.slot_count: 4
+  olr.execution.auction_fill_time: "15:30"

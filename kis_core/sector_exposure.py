@@ -1,6 +1,5 @@
 """Unified sector exposure tracking.
 
-Consolidates sector cap enforcement from KMP, KPR, and Nulrimok strategies.
 Supports dual-mode (count + percentage), race condition prevention via
 reserve/unreserve, and reconciliation from OMS truth.
 """
@@ -29,11 +28,6 @@ class SectorExposureConfig:
 
 class SectorExposure:
     """Unified sector cap with race condition prevention.
-
-    Combines best features from:
-    - KMP ExposureState: reserve/unreserve for race prevention, reconciliation
-    - KPR SectorLimiter: unknown sector bypass, symbol-to-sector lookup
-    - Nulrimok: percentage-based limits for varying position sizes
 
     Usage:
         exposure = SectorExposure(sym_to_sector, config)
@@ -70,11 +64,11 @@ class SectorExposure:
         self.sym_to_sector = sym_to_sector
         self.config = config or SectorExposureConfig()
 
-        # Count-based tracking (from KMP)
+        # Count-based tracking
         self.sector_open_count: Dict[str, int] = {}
         self.sector_working_count: Dict[str, int] = {}
 
-        # Notional-based tracking (from Nulrimok)
+        # Notional-based tracking
         self.sector_open_notional: Dict[str, float] = {}
         self.sector_working_notional: Dict[str, float] = {}
 

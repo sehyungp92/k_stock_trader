@@ -132,7 +132,7 @@ class MissedOpportunityLogger:
             blocked_by="volume_gate",
             block_reason="Volume ratio 0.8x below threshold 1.5x",
             strategy_params={...},
-            strategy_type="kmp",
+            strategy_type="pcim",
         )
 
         # Periodically (every 5 minutes or so):

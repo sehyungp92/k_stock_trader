@@ -6,19 +6,31 @@ from typing import Iterable
 from strategy_common.clock import KST, ensure_kst
 from strategy_common.market import MarketBar
 
-try:
-    from kis_core.trading_calendar import get_trading_calendar
-except Exception:  # pragma: no cover - defensive import for isolated tooling
-    get_trading_calendar = None
-
 KRX_OPEN = time(9, 0)
 KRX_CLOSE = time(15, 30)
+_TRADING_CALENDAR_LOADED = False
+_TRADING_CALENDAR = None
+
+
+def _get_trading_calendar():
+    global _TRADING_CALENDAR_LOADED, _TRADING_CALENDAR
+    if _TRADING_CALENDAR_LOADED:
+        return _TRADING_CALENDAR
+    _TRADING_CALENDAR_LOADED = True
+    try:
+        from kis_core.trading_calendar import get_trading_calendar
+
+        _TRADING_CALENDAR = get_trading_calendar()
+    except Exception:  # pragma: no cover - defensive import for isolated tooling
+        _TRADING_CALENDAR = None
+    return _TRADING_CALENDAR
 
 
 def is_trading_day(value: date) -> bool:
-    if get_trading_calendar is None:
+    calendar = _get_trading_calendar()
+    if calendar is None:
         return value.weekday() < 5
-    return get_trading_calendar().is_trading_day(value)
+    return calendar.is_trading_day(value)
 
 
 def is_regular_session(value: datetime) -> bool:
@@ -73,4 +85,3 @@ def assert_no_lookahead(lower_time: datetime, higher_bar: MarketBar) -> None:
             "Higher-timeframe bar is not yet available: "
             f"{higher_bar.symbol} {higher_bar.timeframe} {higher_bar.timestamp}"
         )
-

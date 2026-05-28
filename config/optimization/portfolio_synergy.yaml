@@ -1,0 +1,30 @@
+strategy: portfolio_synergy
+capability_level: source_artifact_portfolio_replay
+initial_equity: 100000000.0
+num_phases: 7
+max_rounds_per_phase: 4
+holdout_excluded_from_optimization: true
+artifact_promotion_policy: research_only_until_full_source_replay_and_paper_live_parity
+live_parity_fill_timing: source_strategy_fill_contracts_preserved_completed_trade_replay
+auction_mode: kalcb_next_5m_open_plus_olr_resting_close_auction
+risk_basis: mark_to_market_proxy_from_trade_mae_path
+source_paths:
+  kalcb_optimized_config: data/backtests/output/kalcb/round_3/optimized_config.json
+  kalcb_run_summary: data/backtests/output/kalcb/round_3/run_summary.json
+  olr_optimized_config: data/backtests/output/olr/round_5/optimized_config.json
+  olr_run_summary: data/backtests/output/olr/round_5/run_summary.json
+initial_mutations:
+  portfolio.risk_stance: controlled_aggressive
+  portfolio.reference_risk_pct: 0.0055
+  portfolio.max_daily_gross: 9.99
+  portfolio.max_sector_gross: 9.99
+  portfolio.same_symbol_policy: allow
+  portfolio.capacity_rank_mode: chronological
+  portfolio.olr_close_reserve_gross: 0.0
+  portfolio.olr_close_reserve_priority_floor: 1.15
+  portfolio.frequency.enable_olr_shadow_slot6: false
+  portfolio.frequency.enable_kalcb_secondary: false
+  source.kalcb.round: 3
+  source.olr.round: 5
+  source.holdout_excluded: true
+  blockers.boost_olr_after_kalcb_strong_live_path: 1.0

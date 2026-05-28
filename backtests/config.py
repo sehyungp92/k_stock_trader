@@ -27,7 +27,7 @@ def validate_backtest_config(config: dict[str, Any]) -> None:
         end = raw.get("end")
         if start and end and date.fromisoformat(str(start)) > date.fromisoformat(str(end)):
             raise ValueError("date_range.start must be <= date_range.end")
-    if "strategy" in config and str(config["strategy"]).lower() not in {"kmp", "kpr", "nulrimok"}:
+    if "strategy" in config and str(config["strategy"]).lower() not in {"kalcb", "olr", "portfolio_synergy"}:
         raise ValueError(f"Unsupported strategy in config: {config['strategy']}")
 
 
@@ -37,4 +37,3 @@ def normalize_runtime_config(strategy: str, config: dict[str, Any] | None) -> di
     config.setdefault("capability_level", "synthetic")
     config.setdefault("initial_equity", 10_000_000.0)
     return config
-

@@ -4,15 +4,15 @@ import importlib
 from typing import Any
 
 BACKTEST_RUNNERS = {
-    "kmp": ("backtests.strategies.kmp.runner", "run_kmp_backtest"),
-    "kpr": ("backtests.strategies.kpr.runner", "run_kpr_backtest"),
-    "nulrimok": ("backtests.strategies.nulrimok.runner", "run_nulrimok_backtest"),
+    "kalcb": ("backtests.strategies.kalcb.runner", "run_kalcb_backtest"),
+    "olr": ("backtests.strategies.olr.runner", "run_olr_backtest"),
+    "portfolio_synergy": ("backtests.strategies.portfolio_synergy.runner", "run_portfolio_synergy_backtest"),
 }
 
 OPTIMIZATION_PLUGINS = {
-    "kmp": ("backtests.strategies.kmp.plugin", "KMPOptimizationPlugin"),
-    "kpr": ("backtests.strategies.kpr.plugin", "KPROptimizationPlugin"),
-    "nulrimok": ("backtests.strategies.nulrimok.plugin", "NulrimokOptimizationPlugin"),
+    "kalcb": ("backtests.strategies.kalcb.plugin", "KALCBOptimizationPlugin"),
+    "olr": ("backtests.strategies.olr.plugin", "OLROptimizationPlugin"),
+    "portfolio_synergy": ("backtests.strategies.portfolio_synergy.plugin", "PortfolioSynergyOptimizationPlugin"),
 }
 
 
@@ -28,6 +28,14 @@ def create_plugin(strategy: str, config: dict[str, Any] | None = None, **kwargs)
     key = strategy.lower()
     if key not in OPTIMIZATION_PLUGINS:
         raise ValueError(f"Unsupported strategy: {strategy}")
+    if key == "kalcb":
+        from backtests.strategies.kalcb.fixed_trade_plan_phase import (
+            KALCBFixedTradePlanOptimizationPlugin,
+            should_use_fixed_trade_plan_phase,
+        )
+
+        if should_use_fixed_trade_plan_phase(config, kwargs.get("output_dir")):
+            return KALCBFixedTradePlanOptimizationPlugin(config, **kwargs)
     module_name, attr = OPTIMIZATION_PLUGINS[key]
     plugin_cls = getattr(importlib.import_module(module_name), attr)
     return plugin_cls(config, **kwargs)

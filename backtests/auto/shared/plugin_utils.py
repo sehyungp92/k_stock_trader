@@ -22,6 +22,15 @@ MIN_POOL_PROGRESS_STEP = 5
 _FALLBACK_EXCEPTIONS = (PermissionError, OSError, EOFError, BrokenPipeError, RuntimeError, TimeoutError)
 
 
+def _timeout_like(exc: BaseException) -> bool:
+    if isinstance(exc, TimeoutError):
+        return True
+    if exc.__class__.__name__ == "TimeoutError":
+        return True
+    message = str(exc).lower()
+    return "exceeded timeout" in message or "timed out" in message
+
+
 def deserialize_experiments(raw: list[dict[str, Any]] | None) -> list[Experiment]:
     items: list[Experiment] = []
     for item in raw or []:
@@ -149,12 +158,14 @@ class CachedBatchEvaluator:
         signature_prefix: str = "",
         metrics_cache: dict[str, dict[str, float]] | None = None,
         max_batch_size: int | None = None,
+        reject_on_timeout: bool = False,
     ):
         self._delegate = delegate
         self._cache = cache if cache is not None else {}
         self._signature_prefix = signature_prefix
         self._metrics_cache = metrics_cache
         self._max_batch_size = max_batch_size if max_batch_size and max_batch_size > 0 else None
+        self._reject_on_timeout = bool(reject_on_timeout)
         self._progress_callback = None
         for key, result in (seed_results or {}).items():
             self._cache[self._cache_key(key)] = clone_scored_candidate(result)
@@ -186,7 +197,26 @@ class CachedBatchEvaluator:
                 chunk = pending[start:start + batch_size]
                 chunk_keys = pending_keys[start:start + batch_size]
                 self._emit({"event": "chunk_start", "chunk_size": len(chunk), "chunk_candidate_names": [item.name for item in chunk]})
-                scored = self._delegate(chunk, current_mutations)
+                try:
+                    scored = self._delegate(chunk, current_mutations)
+                except TimeoutError as exc:
+                    if not self._reject_on_timeout:
+                        raise
+                    terminate = getattr(self._delegate, "terminate", None)
+                    if callable(terminate):
+                        terminate()
+                    reason = f"evaluation_timeout: {exc}"
+                    self._emit({"event": "chunk_timeout", "chunk_size": len(chunk), "chunk_candidate_names": [item.name for item in chunk], "reason": reason})
+                    scored = [
+                        ScoredCandidate(
+                            name=item.name,
+                            score=0.0,
+                            rejected=True,
+                            reject_reason=reason,
+                            metrics={"evaluation_timeout": 1.0},
+                        )
+                        for item in chunk
+                    ]
                 if len(scored) != len(chunk):
                     raise RuntimeError("Batch evaluator returned the wrong number of results")
                 for key, prototype, scored_result in zip(chunk_keys, chunk, scored, strict=True):
@@ -228,12 +258,17 @@ class ResilientBatchEvaluator:
         description: str,
         logger: logging.Logger | None = None,
         retryable_exceptions: tuple[type[BaseException], ...] = _FALLBACK_EXCEPTIONS,
+        fallback_on_timeout: bool = True,
     ):
         self._preferred_factory = preferred_factory
         self._fallback_factory = fallback_factory
         self._description = description
         self._logger = logger or logging.getLogger(__name__)
-        self._retryable_exceptions = retryable_exceptions
+        self._fallback_on_timeout = bool(fallback_on_timeout)
+        self._retryable_exceptions = tuple(
+            exc for exc in retryable_exceptions
+            if fallback_on_timeout or exc is not TimeoutError
+        )
         self._using_fallback = False
         self._delegate = self._build_delegate()
 
@@ -241,6 +276,8 @@ class ResilientBatchEvaluator:
         try:
             return self._delegate(candidates, current_mutations)
         except self._retryable_exceptions as exc:
+            if not self._fallback_on_timeout and _timeout_like(exc):
+                raise TimeoutError(str(exc)) from exc
             if self._using_fallback:
                 raise
             self._using_fallback = True
@@ -251,6 +288,11 @@ class ResilientBatchEvaluator:
 
     def close(self) -> None:
         self._close(force=False)
+
+    def terminate(self) -> None:
+        self._close(force=True)
+        self._using_fallback = False
+        self._delegate = self._build_delegate()
 
     def _build_delegate(self):
         try:
@@ -324,4 +366,3 @@ def _default(value: Any) -> Any:
     if callable(isoformat):
         return isoformat()
     return str(value)
-

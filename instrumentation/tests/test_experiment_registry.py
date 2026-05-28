@@ -37,7 +37,7 @@ experiments:
         allocation_pct: 50
     primary_metric: "sharpe"
     start_date: "2026-01-01"
-    strategy_type: "kmp"
+    strategy_type: "alpha"
     status: "active"
 """)
         reg = ExperimentRegistry(p)
@@ -141,7 +141,7 @@ experiments:
       treatment: {allocation_pct: 50}
     primary_metric: "sharpe"
     start_date: "2026-01-01"
-    strategy_type: "kmp"
+    strategy_type: "alpha"
     status: "active"
 """)
         reg = ExperimentRegistry(p)

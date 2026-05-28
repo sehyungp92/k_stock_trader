@@ -47,10 +47,7 @@ class ArbitrationEngine:
 
     # Entry lock durations by strategy (seconds)
     LOCK_DURATIONS = {
-        "KMP": 90,
-        "KPR": 180,
         "PCIM": 300,
-        "NULRIMOK": 60,
     }
 
     def __init__(self, state: StateStore):

@@ -21,11 +21,12 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from loguru import logger
 
-# Default max WebSocket registrations (KIS limit)
-# KIS allows 41 total registrations per session across all real-time data types:
-# H0STCNT0 (tick) + H0STASP0 (bid/ask) + expected execution + execution notification
-# Ref: https://hky035.github.io/web/refact-kis-websocket/
-WS_MAX_REGS_DEFAULT = 40  # Use 40 to leave 1 slot for execution notification
+# Authoritative in-repo WebSocket registration profile.
+# Keep one slot reserved for execution notification; deployment readiness still
+# requires external account-specific KIS limit verification before live capital.
+KIS_WS_TOTAL_REGISTRATION_LIMIT = 41
+KIS_WS_EXECUTION_NOTIFICATION_RESERVE = 1
+WS_MAX_REGS_DEFAULT = KIS_WS_TOTAL_REGISTRATION_LIMIT - KIS_WS_EXECUTION_NOTIFICATION_RESERVE
 
 
 @dataclass
@@ -523,26 +524,17 @@ class BaseSubscriptionManager:
 
     WebSocket Slot Sharing:
     -----------------------
-    KIS enforces a hard limit of 20 concurrent WebSocket registrations
-    (WS_MAX_REGS_DEFAULT). This limit is shared across ALL strategies
+    The deployment profile exposes ``WS_MAX_REGS_DEFAULT`` usable market-data
+    registrations after reserving execution-notification capacity. This budget
+    is shared across ALL strategies
     using the same KISWebSocketClient instance.
 
     When running multiple strategies concurrently:
     1. Use a single shared KISWebSocketClient for all strategies
-    2. Each strategy's SubscriptionManager will compete for the 20 slots
+    2. Each strategy's SubscriptionManager will lease from the shared budget
     3. The eviction logic (_evict_for_tick, _evict_for_askbid) determines
        which subscriptions are dropped when budget is exceeded
-    4. Strategies should set their max_regs to leave room for others:
-       - KMP: 20 slots (runs in exclusive window 09:15-10:00)
-       - KPR: 20 slots (HOT tier only, uses tiering to reduce needs)
-       - NULRIMOK: 20 slots (active set rotation)
-       - PCIM: 0 slots (no WebSocket usage)
-
-    Recommended concurrent configurations:
-    - KMP + PCIM: Safe (PCIM uses no WS slots)
-    - KPR + PCIM: Safe (PCIM uses no WS slots)
-    - KMP + KPR: Requires careful slot management or time-based arbitration
-    - Any strategy alone: Full 20 slots available
+    4. Strategies should set their max_regs to leave room for others.
     """
 
     def __init__(

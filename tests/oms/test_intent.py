@@ -127,12 +127,12 @@ class TestIntent:
         """Test intent with only required fields."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
         assert intent.intent_type == IntentType.ENTER
-        assert intent.strategy_id == "KMP"
+        assert intent.strategy_id == "ALPHA"
         assert intent.symbol == "005930"
         assert intent.desired_qty is None
         assert intent.target_qty is None
@@ -141,27 +141,27 @@ class TestIntent:
         """Test strategy_id is normalized to uppercase."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="kmp",
+            strategy_id="alpha",
             symbol="005930",
         )
 
-        assert intent.strategy_id == "KMP"
+        assert intent.strategy_id == "ALPHA"
 
     def test_strategy_id_stripped(self):
         """Test strategy_id is stripped of whitespace."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="  KMP  ",
+            strategy_id="  ALPHA  ",
             symbol="005930",
         )
 
-        assert intent.strategy_id == "KMP"
+        assert intent.strategy_id == "ALPHA"
 
     def test_default_urgency(self):
         """Test default urgency is NORMAL."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -171,7 +171,7 @@ class TestIntent:
         """Test default time horizon is INTRADAY."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -181,7 +181,7 @@ class TestIntent:
         """Test intent_id is auto-generated."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -193,7 +193,7 @@ class TestIntent:
         before = time.time()
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
         after = time.time()
@@ -212,12 +212,12 @@ class TestIntentIdempotencyKey:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             signal_hash="test_signal_123",
         )
 
-        assert intent.idempotency_key == "KMP:005930:ENTER:20240115:test_signal_123:0"
+        assert intent.idempotency_key == "ALPHA:005930:ENTER:20240115:test_signal_123:0"
 
     @patch('oms.intent._kst_trade_date')
     def test_enter_with_rationale_fallback(self, mock_date):
@@ -226,12 +226,12 @@ class TestIntentIdempotencyKey:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(rationale_code="or_break"),
         )
 
-        assert intent.idempotency_key == "KMP:005930:ENTER:20240115:or_break:0"
+        assert intent.idempotency_key == "ALPHA:005930:ENTER:20240115:or_break:0"
 
     @patch('oms.intent._kst_trade_date')
     def test_enter_default_suffix(self, mock_date):
@@ -240,11 +240,11 @@ class TestIntentIdempotencyKey:
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
-        assert intent.idempotency_key == "KMP:005930:ENTER:20240115:default:0"
+        assert intent.idempotency_key == "ALPHA:005930:ENTER:20240115:default:0"
 
     @patch('oms.intent._kst_trade_date')
     def test_exit_with_rationale(self, mock_date):
@@ -253,12 +253,12 @@ class TestIntentIdempotencyKey:
 
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(rationale_code="stop_hit"),
         )
 
-        assert intent.idempotency_key == "KMP:005930:EXIT:20240115:stop_hit:0"
+        assert intent.idempotency_key == "ALPHA:005930:EXIT:20240115:stop_hit:0"
 
     @patch('oms.intent._kst_trade_date')
     def test_exit_default_rationale(self, mock_date):
@@ -267,11 +267,11 @@ class TestIntentIdempotencyKey:
 
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
-        assert intent.idempotency_key == "KMP:005930:EXIT:20240115:manual:0"
+        assert intent.idempotency_key == "ALPHA:005930:EXIT:20240115:manual:0"
 
     @patch('oms.intent._kst_trade_date')
     def test_operational_intent_unique(self, mock_date):
@@ -280,13 +280,13 @@ class TestIntentIdempotencyKey:
 
         intent1 = Intent(
             intent_type=IntentType.CANCEL_ORDERS,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
         intent2 = Intent(
             intent_type=IntentType.CANCEL_ORDERS,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -297,7 +297,7 @@ class TestIntentIdempotencyKey:
         """Test custom idempotency key is preserved."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             idempotency_key="custom:key:123",
         )
@@ -312,7 +312,7 @@ class TestIntentValidation:
         """Test valid ENTER intent passes validation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -325,7 +325,7 @@ class TestIntentValidation:
         """Test missing symbol fails validation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="",
             desired_qty=100,
         )
@@ -351,7 +351,7 @@ class TestIntentValidation:
         """Test ENTER without qty fails validation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -363,7 +363,7 @@ class TestIntentValidation:
         """Test ENTER with target_qty passes validation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=100,
         )
@@ -375,7 +375,7 @@ class TestIntentValidation:
         """Test REDUCE without qty fails validation."""
         intent = Intent(
             intent_type=IntentType.REDUCE,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -386,7 +386,7 @@ class TestIntentValidation:
         """Test EXIT without qty passes validation."""
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -397,7 +397,7 @@ class TestIntentValidation:
         """Test expired intent fails validation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             constraints=IntentConstraints(expiry_ts=time.time() - 10),
@@ -411,7 +411,7 @@ class TestIntentValidation:
         """Test future expiry passes validation."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             constraints=IntentConstraints(expiry_ts=time.time() + 30),
@@ -464,7 +464,7 @@ class TestIntentIdempotencyExtended:
         mock_date.return_value = "20240115"
         intent = Intent(
             intent_type=IntentType.FLATTEN,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             risk_payload=RiskPayload(rationale_code="emergency"),
         )
@@ -476,7 +476,7 @@ class TestIntentIdempotencyExtended:
         mock_date.return_value = "20240115"
         intent = Intent(
             intent_type=IntentType.REDUCE,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=50,
             risk_payload=RiskPayload(rationale_code="partial_take"),
@@ -489,7 +489,7 @@ class TestIntentIdempotencyExtended:
         mock_date.return_value = "20240115"
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=200,
         )
@@ -503,7 +503,7 @@ class TestIntentIdempotencyExtended:
         mock_date.return_value = "20240115"
         intent = Intent(
             intent_type=IntentType.MODIFY_RISK,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
         assert "MODIFY_RISK" in intent.idempotency_key

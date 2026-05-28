@@ -148,7 +148,7 @@ def sample_enter_intent():
 
     return Intent(
         intent_type=IntentType.ENTER,
-        strategy_id="KMP",
+        strategy_id="ALPHA",
         symbol="005930",
         desired_qty=100,
         urgency=Urgency.HIGH,
@@ -176,7 +176,7 @@ def sample_exit_intent():
 
     return Intent(
         intent_type=IntentType.EXIT,
-        strategy_id="KMP",
+        strategy_id="ALPHA",
         symbol="005930",
         desired_qty=100,
         urgency=Urgency.NORMAL,
@@ -264,8 +264,8 @@ def state_store_with_position():
     pos = store.get_position("005930")
     pos.real_qty = 100
     pos.avg_price = 70000
-    pos.allocations["KMP"] = StrategyAllocation(
-        strategy_id="KMP",
+    pos.allocations["ALPHA"] = StrategyAllocation(
+        strategy_id="ALPHA",
         qty=100,
         cost_basis=70000,
     )
@@ -281,7 +281,14 @@ def state_store_with_position():
 def risk_config():
     """Create default RiskConfig."""
     from oms.risk import RiskConfig
-    return RiskConfig()
+    return RiskConfig(
+        strategy_budgets={
+            "ALPHA": {"max_positions": 4, "max_risk_pct": 0.015, "capital_allocation_pct": 1.0},
+            "BETA": {"max_positions": 3, "max_risk_pct": 0.015, "capital_allocation_pct": 1.0},
+            "GAMMA": {"max_positions": 5, "max_risk_pct": 0.08, "capital_allocation_pct": 1.0},
+            "PCIM": {"max_positions": 8, "max_risk_pct": 0.10, "capital_allocation_pct": 1.0},
+        }
+    )
 
 
 @pytest.fixture
@@ -296,6 +303,12 @@ def risk_config_strict():
         max_position_pct=0.10,
         max_positions_count=5,
         max_sector_pct=0.20,
+        strategy_budgets={
+            "ALPHA": {"max_positions": 4, "max_risk_pct": 0.015, "capital_allocation_pct": 1.0},
+            "BETA": {"max_positions": 3, "max_risk_pct": 0.015, "capital_allocation_pct": 1.0},
+            "GAMMA": {"max_positions": 5, "max_risk_pct": 0.08, "capital_allocation_pct": 1.0},
+            "PCIM": {"max_positions": 8, "max_risk_pct": 0.10, "capital_allocation_pct": 1.0},
+        },
     )
 
 
@@ -325,58 +338,6 @@ def entry_window_time():
 def mock_now_kst():
     """Create mock datetime in KST."""
     return datetime(2024, 1, 15, 9, 30, 0)
-
-
-# ---------------------------------------------------------------------------
-# Strategy State Fixtures
-# ---------------------------------------------------------------------------
-
-@pytest.fixture
-def kmp_symbol_state():
-    """Create KMP SymbolState for testing."""
-    from strategy_kmp.core.state import SymbolState, State
-
-    state = SymbolState(code="005930")
-    state.fsm = State.IDLE
-    state.sector = "IT"
-    state.sma20 = 70000
-    state.sma60 = 68000
-    state.prev_close = 71000
-    state.trend_ok = True
-    state.or_high = 72000
-    state.or_low = 71500
-    state.or_mid = 71750
-    state.or_locked = True
-    state.vwap = 71800
-    state.value15 = 5_000_000_000  # 5B KRW
-    state.surge = 3.0
-    state.avg_1m_vol = 10000
-    state.curr_1m_vol = 25000
-    state.rvol_1m = 2.5
-    state.bid = 71900
-    state.ask = 72000
-    state.spread = 100
-    state.spread_pct = 0.0014
-
-    return state
-
-
-@pytest.fixture
-def kpr_symbol_state():
-    """Create KPR SymbolState for testing."""
-    from strategy_kpr.core.state import SymbolState, FSMState, Tier
-
-    state = SymbolState(code="005930")
-    state.fsm = FSMState.IDLE
-    state.tier = Tier.HOT
-    state.sector = "IT"
-    state.hod = 73000
-    state.lod = 69000
-    state.vwap = 71500
-    state.drop_from_open = 0.04
-    state.in_vwap_band = True
-
-    return state
 
 
 # ---------------------------------------------------------------------------

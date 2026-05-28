@@ -40,9 +40,9 @@ class TestRiskConfig:
         """Test default strategy budgets."""
         config = RiskConfig()
 
-        assert "KMP" in config.strategy_budgets
-        assert config.strategy_budgets["KMP"]["max_positions"] == 4
-        assert config.strategy_budgets["KMP"]["max_risk_pct"] == 0.015
+        assert "PCIM" in config.strategy_budgets
+        assert config.strategy_budgets["PCIM"]["max_positions"] == 8
+        assert config.strategy_budgets["PCIM"]["max_risk_pct"] == 0.10
 
 
 class TestRiskGatewayGlobalBlocks:
@@ -58,7 +58,7 @@ class TestRiskGatewayGlobalBlocks:
         """Create sample ENTER intent."""
         return Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -88,7 +88,7 @@ class TestRiskGatewayGlobalBlocks:
 
         exit_intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -106,7 +106,7 @@ class TestRiskGatewayGlobalBlocks:
 
     def test_paused_strategy_blocks_entries(self, gateway, enter_intent):
         """Test paused strategy blocks entries."""
-        gateway._paused_strategies.add("KMP")
+        gateway._paused_strategies.add("ALPHA")
 
         result = gateway.check(enter_intent)
 
@@ -137,7 +137,7 @@ class TestRiskGatewayDailyLimits:
         """Create sample ENTER intent."""
         return Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -166,7 +166,7 @@ class TestRiskGatewayDailyLimits:
 
         exit_intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -187,7 +187,7 @@ class TestRiskGatewayExposureLimits:
         """Create sample ENTER intent."""
         return Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -221,7 +221,7 @@ class TestRiskGatewayExposureLimits:
         # Intent for 300 shares at 70000 = 21M (exceeds 15M)
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=300,
             risk_payload=RiskPayload(entry_px=70000, stop_px=69000),
@@ -247,14 +247,14 @@ class TestRiskGatewayExposureLimits:
                 side="BUY",
                 qty=100,
                 price=70000,
-                strategy_id="KMP",
+                strategy_id="ALPHA",
                 status=OrderStatus.WORKING,
             )
         )
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=50,
             risk_payload=RiskPayload(entry_px=70000, stop_px=69000),
@@ -290,7 +290,7 @@ class TestRiskGatewaySectorLimits:
         """Create sample ENTER intent for IT sector."""
         return Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="000660",  # SK Hynix - IT sector
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=130000, stop_px=125000),
@@ -319,14 +319,14 @@ class TestRiskGatewayStrategyBudget:
 
     def test_max_strategy_positions_rejects(self, gateway):
         """Test strategy position count limit rejects entry."""
-        # KMP max_positions = 4
+        # ALPHA max_positions = 4
         for i in range(4):
             symbol = f"00{i:04d}"
-            gateway.state.update_allocation(symbol, "KMP", 100)
+            gateway.state.update_allocation(symbol, "ALPHA", 100)
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -339,12 +339,12 @@ class TestRiskGatewayStrategyBudget:
 
     def test_risk_budget_scales_position(self, gateway):
         """Test risk budget scales position size."""
-        # KMP max_risk_pct = 1.5% of 100M = 1.5M
+        # ALPHA max_risk_pct = 1.5% of 100M = 1.5M
         # Risk per share = entry - stop = 72000 - 60000 = 12000
         # Trade risk at 200 shares = 200 * 12000 = 2.4M (exceeds 1.5M)
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=200,
             risk_payload=RiskPayload(entry_px=72000, stop_px=60000),
@@ -371,7 +371,7 @@ class TestRiskGatewayMicrostructure:
         """Create sample ENTER intent."""
         return Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -472,7 +472,7 @@ class TestRiskDecisionIntegration:
         """Test valid entry intent is approved."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -486,7 +486,7 @@ class TestRiskDecisionIntegration:
         """Test exit intent is always approved."""
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -499,7 +499,7 @@ class TestRiskDecisionIntegration:
         # First entry should pass
         intent1 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
@@ -508,12 +508,12 @@ class TestRiskDecisionIntegration:
         assert result1.decision == RiskDecision.APPROVE
 
         # Simulate fill
-        gateway.state.update_allocation("005930", "KMP", 100)
+        gateway.state.update_allocation("005930", "ALPHA", 100)
 
         # Second entry should still pass (under limits)
         intent2 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="000660",
             desired_qty=50,
             risk_payload=RiskPayload(entry_px=130000, stop_px=125000),
@@ -607,7 +607,7 @@ class TestRiskGatewayExposureEntryPxFallback:
         )
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=None, stop_px=71000),
@@ -621,7 +621,7 @@ class TestRiskGatewayExposureEntryPxFallback:
         gw = RiskGateway(state_store_with_equity, risk_config)
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
             risk_payload=RiskPayload(entry_px=None, stop_px=71000),
@@ -641,23 +641,23 @@ class TestBuildBlockingPositions:
     def test_returns_correct_shape(self, gateway):
         """Blocking positions have strategy, symbol, qty, exposure_pct, side."""
         gateway.state.update_position("005930", real_qty=100, avg_price=72000)
-        gateway.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        gateway.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
         positions = gateway.state.get_all_positions()
         result = gateway._build_blocking_positions(positions, gateway.state.equity)
         assert len(result) >= 1
         bp = result[0]
         assert set(bp.keys()) == {"strategy", "symbol", "qty", "exposure_pct", "side"}
         assert bp["side"] == "LONG"
-        assert bp["strategy"] == "KMP"
+        assert bp["strategy"] == "ALPHA"
         assert bp["symbol"] == "005930"
         assert bp["qty"] == 100
 
     def test_sorted_by_exposure_desc(self, gateway):
         """Positions are sorted by exposure_pct descending."""
         gateway.state.update_position("005930", real_qty=100, avg_price=72000)
-        gateway.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        gateway.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
         gateway.state.update_position("000660", real_qty=50, avg_price=130000)
-        gateway.state.update_allocation("000660", "KPR", 50, cost_basis=130000)
+        gateway.state.update_allocation("000660", "BETA", 50, cost_basis=130000)
         positions = gateway.state.get_all_positions()
         result = gateway._build_blocking_positions(positions, gateway.state.equity)
         assert len(result) == 2
@@ -666,9 +666,9 @@ class TestBuildBlockingPositions:
     def test_filter_fn_applied(self, gateway):
         """filter_fn restricts which positions are included."""
         gateway.state.update_position("005930", real_qty=100, avg_price=72000)
-        gateway.state.update_allocation("005930", "KMP", 100, cost_basis=72000)
+        gateway.state.update_allocation("005930", "ALPHA", 100, cost_basis=72000)
         gateway.state.update_position("000660", real_qty=50, avg_price=130000)
-        gateway.state.update_allocation("000660", "KPR", 50, cost_basis=130000)
+        gateway.state.update_allocation("000660", "BETA", 50, cost_basis=130000)
         positions = gateway.state.get_all_positions()
         result = gateway._build_blocking_positions(
             positions, gateway.state.equity,
@@ -697,7 +697,7 @@ class TestRiskResultBlockingPositions:
             symbol = f"00{i:04d}"
             gateway.state.update_position(symbol, real_qty=100)
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            intent_type=IntentType.ENTER, strategy_id="ALPHA", symbol="005930",
             desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
         )
         result = gateway.check(intent)
@@ -709,24 +709,24 @@ class TestRiskResultBlockingPositions:
     def test_gross_exposure_includes_blocking(self, gateway):
         """Gross exposure rejection includes blocking_positions."""
         gateway.state.update_position("000660", real_qty=1000, avg_price=85000)
-        gateway.state.update_allocation("000660", "KPR", 1000, cost_basis=85000)
+        gateway.state.update_allocation("000660", "BETA", 1000, cost_basis=85000)
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            intent_type=IntentType.ENTER, strategy_id="ALPHA", symbol="005930",
             desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
         )
         result = gateway.check(intent)
         assert result.decision == RiskDecision.REJECT
         assert result.resource_conflict_type == "gross_exposure"
         assert result.blocking_positions is not None
-        assert any(bp["strategy"] == "KPR" for bp in result.blocking_positions)
+        assert any(bp["strategy"] == "BETA" for bp in result.blocking_positions)
 
     def test_regime_cap_includes_blocking(self, gateway):
         """Regime cap rejection includes blocking_positions."""
         gateway.config.current_regime = "CRISIS"
         gateway.state.update_position("000660", real_qty=214, avg_price=70000)
-        gateway.state.update_allocation("000660", "KMP", 214, cost_basis=70000)
+        gateway.state.update_allocation("000660", "ALPHA", 214, cost_basis=70000)
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            intent_type=IntentType.ENTER, strategy_id="ALPHA", symbol="005930",
             desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
         )
         result = gateway.check(intent)
@@ -738,9 +738,9 @@ class TestRiskResultBlockingPositions:
         """Strategy budget (positions) rejection includes blocking_positions."""
         for i in range(4):
             symbol = f"00{i:04d}"
-            gateway.state.update_allocation(symbol, "KMP", 100)
+            gateway.state.update_allocation(symbol, "ALPHA", 100)
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            intent_type=IntentType.ENTER, strategy_id="ALPHA", symbol="005930",
             desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
         )
         result = gateway.check(intent)
@@ -751,7 +751,7 @@ class TestRiskResultBlockingPositions:
     def test_approve_has_no_blocking(self, gateway):
         """Approved intents have no blocking_positions."""
         intent = Intent(
-            intent_type=IntentType.ENTER, strategy_id="KMP", symbol="005930",
+            intent_type=IntentType.ENTER, strategy_id="ALPHA", symbol="005930",
             desired_qty=100, risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
         )
         result = gateway.check(intent)

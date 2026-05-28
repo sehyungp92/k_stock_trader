@@ -32,6 +32,7 @@ class GreedyResult:
     total_candidates: int
     accepted_count: int
     elapsed_seconds: float
+    candidate_evaluations: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,4 +92,3 @@ class ScoredCandidate:
     rejected: bool = False
     reject_reason: str = ""
     metrics: dict[str, float] = field(default_factory=dict)
-

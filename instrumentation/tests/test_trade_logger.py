@@ -46,7 +46,7 @@ class TestTradeLogger:
             position_size=10,
             position_size_quote=500000,
             entry_signal="momentum breakout",
-            entry_signal_id="kmp_breakout",
+            entry_signal_id="alpha_breakout",
             entry_signal_strength=0.8,
             active_filters=["volume_gate", "regime_gate"],
             passed_filters=["volume_gate", "regime_gate"],

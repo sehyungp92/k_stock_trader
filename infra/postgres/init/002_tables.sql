@@ -18,6 +18,7 @@ CREATE TABLE intents (
     limit_price NUMERIC(18,4),
     stop_price NUMERIC(18,4),
     expiry_ts TIMESTAMPTZ,
+    execution_style VARCHAR(30),
     entry_px NUMERIC(18,4),
     stop_px NUMERIC(18,4),
     hard_stop_px NUMERIC(18,4),

@@ -6,7 +6,7 @@ from instrumentation.src.exit_backfill import ExitBackfiller
 
 class TestComputeMovement:
     def test_price_went_up_after_exit(self):
-        """Exit was premature — price continued favorably."""
+        """Exit was premature ??price continued favorably."""
         backfiller = ExitBackfiller(data_dir="/tmp/test_instr")
         exit_time = "2026-03-03T11:00:00+09:00"
         result = backfiller._compute_movement(
@@ -50,10 +50,10 @@ class TestQueueExit:
     def test_queue_stores_pending(self):
         backfiller = ExitBackfiller(data_dir="/tmp/test_instr")
         backfiller.queue_exit(
-            trade_id="KMP:005930:20260303",
+            trade_id="ALPHA:005930:20260303",
             symbol="005930", side="LONG",
             exit_price=50000.0,
             exit_time="2026-03-03T11:00:00+09:00",
         )
         assert len(backfiller._pending) == 1
-        assert backfiller._pending[0]["trade_id"] == "KMP:005930:20260303"
+        assert backfiller._pending[0]["trade_id"] == "ALPHA:005930:20260303"

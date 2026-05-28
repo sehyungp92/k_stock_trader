@@ -4,7 +4,7 @@ Process Scorer — deterministic trade quality evaluation.
 Scores each trade 0-100 based on how well the process was followed,
 independent of PnL outcome. This separates luck from skill.
 
-Designed for Korean equity strategies (KMP, KPR, PCIM, NULRIMOK).
+Designed for Korean equity strategies.
 Funding rate checks are skipped entirely (equity market, no funding rates).
 """
 
@@ -83,7 +83,7 @@ class ProcessScorer:
     Usage::
 
         scorer = ProcessScorer()
-        score = scorer.score_trade(trade_dict, strategy_type="kmp")
+    score = scorer.score_trade(trade_dict, strategy_type="pcim")
         print(score.process_quality_score, score.classification)
 
     The scorer never crashes — on bad input it returns a degraded score
@@ -135,7 +135,7 @@ class ProcessScorer:
             ``entry_slippage_bps``, ``exit_slippage_bps``, ``exit_reason``,
             ``pnl``, ``stop_distance_pct``, ``price_moved_pct``.
         strategy_type : str
-            One of ``kmp``, ``kpr``, ``pcim``, ``nulrimok`` (case-insensitive).
+            Strategy type used to select configured scoring rules.
 
         Returns
         -------

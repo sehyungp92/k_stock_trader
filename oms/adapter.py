@@ -173,7 +173,7 @@ class KISExecutionAdapter:
             symbol: Stock code
             side: "BUY" or "SELL"
             qty: Order quantity
-            order_type: "MARKET", "LIMIT", "STOP_LIMIT", "MARKETABLE_LIMIT"
+            order_type: "MARKET", "LIMIT", "STOP_LIMIT", "MARKETABLE_LIMIT", "CLOSE_AUCTION"
             limit_price: Limit price (required for LIMIT/STOP_LIMIT)
             stop_price: Stop trigger price (required for STOP_LIMIT)
             max_retries: Max retry attempts for transient errors
@@ -226,7 +226,13 @@ class KISExecutionAdapter:
                     else:
                         order_result = await asyncio.to_thread(self.api.place_market_sell, symbol, qty)
 
-                elif order_type in ("LIMIT", "MARKETABLE_LIMIT"):
+                elif order_type in ("LIMIT", "MARKETABLE_LIMIT", "CLOSE_AUCTION"):
+                    if limit_price is None or float(limit_price) <= 0.0:
+                        return AdapterResult(
+                            False,
+                            error=AdapterError.REJECTED_INVALID,
+                            message=f"{order_type} requires a positive bounded limit price",
+                        )
                     if side == "BUY":
                         order_result = await asyncio.to_thread(self.api.place_limit_buy, symbol, limit_price, qty)
                     else:

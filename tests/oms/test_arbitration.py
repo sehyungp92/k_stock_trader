@@ -36,12 +36,12 @@ class TestArbitrationDecision:
         defer_until = time.time() + 60
         decision = ArbitrationDecision(
             result=ArbitrationResult.DEFER,
-            reason="Entry locked by KMP",
+            reason="Entry locked by ALPHA",
             defer_until=defer_until,
         )
 
         assert decision.result == ArbitrationResult.DEFER
-        assert decision.reason == "Entry locked by KMP"
+        assert decision.reason == "Entry locked by ALPHA"
         assert decision.defer_until == defer_until
 
 
@@ -50,10 +50,8 @@ class TestArbitrationEngineLockDurations:
 
     def test_lock_durations_defined(self):
         """Test lock durations are defined for strategies."""
-        assert ArbitrationEngine.LOCK_DURATIONS["KMP"] == 90
-        assert ArbitrationEngine.LOCK_DURATIONS["KPR"] == 180
         assert ArbitrationEngine.LOCK_DURATIONS["PCIM"] == 300
-        assert ArbitrationEngine.LOCK_DURATIONS["NULRIMOK"] == 60
+        assert ArbitrationEngine.LOCK_DURATIONS.get("ALPHA", 60) == 60
 
 
 class TestArbitrationEngineExits:
@@ -68,7 +66,7 @@ class TestArbitrationEngineExits:
         """Test EXIT intent always proceeds."""
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -80,7 +78,7 @@ class TestArbitrationEngineExits:
         """Test FLATTEN intent always proceeds."""
         intent = Intent(
             intent_type=IntentType.FLATTEN,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -92,11 +90,11 @@ class TestArbitrationEngineExits:
         """Test EXIT proceeds even when entry is locked."""
         # Set up entry lock by another strategy
         now = time.time()
-        state_store.set_entry_lock("005930", "KPR", now + 60)
+        state_store.set_entry_lock("005930", "BETA", now + 60)
 
         intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -117,7 +115,7 @@ class TestArbitrationEngineReductions:
         """Test REDUCE intent proceeds."""
         intent = Intent(
             intent_type=IntentType.REDUCE,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=50,
         )
@@ -140,7 +138,7 @@ class TestArbitrationEngineEntry:
         """Create sample ENTER intent."""
         return Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -152,29 +150,28 @@ class TestArbitrationEngineEntry:
         assert decision.result == ArbitrationResult.PROCEED
 
         pos = state_store.get_position("005930")
-        assert pos.entry_lock_owner == "KMP"
+        assert pos.entry_lock_owner == "ALPHA"
         assert pos.entry_lock_until is not None
 
     def test_entry_lock_duration(self, engine, state_store, enter_intent):
-        """Test entry lock uses strategy-specific duration."""
+        """Test entry lock uses the default duration for generic strategies."""
         now = time.time()
         decision = engine.arbitrate(enter_intent)
 
         assert decision.result == ArbitrationResult.PROCEED
 
         pos = state_store.get_position("005930")
-        # KMP lock duration is 90 seconds
-        expected_until = now + 90
+        expected_until = now + 60
         assert abs(pos.entry_lock_until - expected_until) < 1
 
     def test_entry_blocked_by_another_strategy(self, engine, state_store):
         """Test entry is deferred when locked by another strategy."""
         now = time.time()
-        state_store.set_entry_lock("005930", "KPR", now + 60)
+        state_store.set_entry_lock("005930", "BETA", now + 60)
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -183,16 +180,16 @@ class TestArbitrationEngineEntry:
 
         assert decision.result == ArbitrationResult.DEFER
         assert "locked" in decision.reason.lower()
-        assert "KPR" in decision.reason
+        assert "BETA" in decision.reason
 
     def test_entry_allowed_by_same_strategy(self, engine, state_store):
         """Test entry is allowed when already locked by same strategy."""
         now = time.time()
-        state_store.set_entry_lock("005930", "KMP", now + 60)
+        state_store.set_entry_lock("005930", "ALPHA", now + 60)
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -203,11 +200,11 @@ class TestArbitrationEngineEntry:
 
     def test_entry_cancelled_if_already_holds(self, engine, state_store):
         """Test entry is cancelled if strategy already holds position."""
-        state_store.update_allocation("005930", "KMP", 100)
+        state_store.update_allocation("005930", "ALPHA", 100)
 
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -222,14 +219,14 @@ class TestArbitrationEngineEntry:
         # Add pending exit intent
         exit_intent = Intent(
             intent_type=IntentType.EXIT,
-            strategy_id="KPR",
+            strategy_id="BETA",
             symbol="005930",
         )
         engine.add_pending(exit_intent)
 
         enter_intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -272,7 +269,7 @@ class TestArbitrationEnginePending:
         """Test adding pending intent."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -286,7 +283,7 @@ class TestArbitrationEnginePending:
         """Test removing pending intent."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
@@ -300,13 +297,13 @@ class TestArbitrationEnginePending:
         """Test removing pending intent by ID."""
         intent1 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             desired_qty=100,
         )
         intent2 = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KPR",
+            strategy_id="BETA",
             symbol="005930",
             desired_qty=50,
         )
@@ -316,7 +313,7 @@ class TestArbitrationEnginePending:
         engine.remove_pending(intent1)
 
         assert len(engine._pending_intents["005930"]) == 1
-        assert engine._pending_intents["005930"][0].strategy_id == "KPR"
+        assert engine._pending_intents["005930"][0].strategy_id == "BETA"
 
 
 class TestArbitrationEngineNetTarget:
@@ -336,22 +333,22 @@ class TestArbitrationEngineNetTarget:
 
     def test_compute_net_target_single(self, engine, state_store):
         """Test net target with single allocation."""
-        state_store.update_allocation("005930", "KMP", 100)
+        state_store.update_allocation("005930", "ALPHA", 100)
 
         net, allocs = engine.compute_net_target("005930")
 
         assert net == 100
-        assert allocs == {"KMP": 100}
+        assert allocs == {"ALPHA": 100}
 
     def test_compute_net_target_multiple(self, engine, state_store):
         """Test net target with multiple allocations."""
-        state_store.update_allocation("005930", "KMP", 100)
-        state_store.update_allocation("005930", "KPR", 50)
+        state_store.update_allocation("005930", "ALPHA", 100)
+        state_store.update_allocation("005930", "BETA", 50)
 
         net, allocs = engine.compute_net_target("005930")
 
         assert net == 150
-        assert allocs == {"KMP": 100, "KPR": 50}
+        assert allocs == {"ALPHA": 100, "BETA": 50}
 
 
 class TestArbitrationEngineTradeQty:
@@ -401,7 +398,7 @@ class TestArbitrationEngineOperational:
         """Test SET_TARGET intent proceeds through arbitration."""
         intent = Intent(
             intent_type=IntentType.SET_TARGET,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
             target_qty=100,
         )
@@ -412,7 +409,7 @@ class TestArbitrationEngineOperational:
         """Test CANCEL_ORDERS intent proceeds through arbitration."""
         intent = Intent(
             intent_type=IntentType.CANCEL_ORDERS,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
         decision = engine.arbitrate(intent)
@@ -422,7 +419,7 @@ class TestArbitrationEngineOperational:
         """Test MODIFY_RISK intent proceeds through arbitration."""
         intent = Intent(
             intent_type=IntentType.MODIFY_RISK,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
         decision = engine.arbitrate(intent)
@@ -441,7 +438,7 @@ class TestArbitrationEngineRemovePendingNonexistent:
         """Test remove_pending for a symbol not in pending dict does not raise."""
         intent = Intent(
             intent_type=IntentType.ENTER,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="999999",
             desired_qty=100,
         )
@@ -458,8 +455,8 @@ class TestArbitrationEngineNetTargetZeroQty:
 
     def test_compute_net_target_zero_qty_alloc(self, engine, state_store):
         """Test net target when allocation is added then fully removed."""
-        state_store.update_allocation("005930", "KMP", 100)
-        state_store.update_allocation("005930", "KMP", -100)
+        state_store.update_allocation("005930", "ALPHA", 100)
+        state_store.update_allocation("005930", "ALPHA", -100)
         net, allocs = engine.compute_net_target("005930")
         assert net == 0
-        assert allocs["KMP"] == 0
+        assert allocs["ALPHA"] == 0

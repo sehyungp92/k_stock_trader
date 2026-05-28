@@ -59,7 +59,7 @@ class ExperimentRegistry:
             success_metric: "pnl"
             start_date: "2026-03-15"
             max_duration_days: 14
-            strategy_type: "kmp"
+            strategy_type: "pcim"
             status: "active"
     """
 

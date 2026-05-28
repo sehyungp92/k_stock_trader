@@ -7,7 +7,7 @@ import pytest
 from backtests.core.completed_bar_policy import bar_availability_time, visible_bars_at
 from backtests.engine.replay import run_replay
 from backtests.engine.sim_broker import SimBroker
-from strategy_common.actions import SubmitEntry, SubmitExit
+from strategy_common.actions import FlattenPosition, SubmitEntry, SubmitExit
 from strategy_common.events import DecisionEvent
 from strategy_common.clock import KST
 from strategy_common.market import MarketBar
@@ -24,7 +24,7 @@ def test_completed_bar_policy_delays_higher_timeframe_visibility():
 def test_sim_broker_blocks_same_bar_fill_after_completed_signal():
     broker = SimBroker(1_000_000)
     signal_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 100, 101, 99, 100, 1000)
-    broker.submit(SubmitEntry("KMP", "000001", 1, "MARKET", None, 98, "test"), signal_bar.timestamp)
+    broker.submit(SubmitEntry("ALPHA", "000001", 1, "MARKET", None, 98, "test"), signal_bar.timestamp)
     assert broker.process_bar(signal_bar) == []
     next_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 1, tzinfo=KST), "1m", 101, 102, 100, 101, 1000)
     fills = broker.process_bar(next_bar)
@@ -36,8 +36,8 @@ def test_sim_broker_marks_each_symbol_with_its_own_last_price():
     broker = SimBroker(1_000_000)
     first = MarketBar("000001", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
     second = MarketBar("000002", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 200, 200, 200, 200, 1000)
-    broker.submit(SubmitEntry("kmp", "000001", 10, "MARKET", None, 95, "first"), first.timestamp)
-    broker.submit(SubmitEntry("kmp", "000002", 10, "MARKET", None, 190, "second"), second.timestamp)
+    broker.submit(SubmitEntry("alpha", "000001", 10, "MARKET", None, 95, "first"), first.timestamp)
+    broker.submit(SubmitEntry("alpha", "000002", 10, "MARKET", None, 190, "second"), second.timestamp)
     broker.process_bar(first)
     broker.process_bar(second)
 
@@ -55,11 +55,11 @@ def test_sim_broker_rejects_cash_overallocation():
     broker = SimBroker(1_000)
     signal_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
     fill_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 1, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
-    broker.submit(SubmitEntry("KMP", "000001", 20, "MARKET", None, 95, "too_large"), signal_bar.timestamp)
+    broker.submit(SubmitEntry("ALPHA", "000001", 20, "MARKET", None, 95, "too_large"), signal_bar.timestamp)
 
     broker.process_bar(signal_bar)
     assert broker.process_bar(fill_bar) == []
-    assert broker.position_qty("KMP", "000001") == 0
+    assert broker.position_qty("ALPHA", "000001") == 0
     assert broker.rejected_orders
 
 
@@ -68,14 +68,51 @@ def test_exit_fill_event_qty_matches_position_qty():
     signal_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
     fill_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 1, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
     exit_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 2, tzinfo=KST), "1m", 101, 101, 101, 101, 1000)
-    broker.submit(SubmitEntry("KMP", "000001", 5, "MARKET", None, 95, "entry"), signal_bar.timestamp)
+    broker.submit(SubmitEntry("ALPHA", "000001", 5, "MARKET", None, 95, "entry"), signal_bar.timestamp)
     broker.process_bar(signal_bar)
     broker.process_bar(fill_bar)
-    broker.submit(SubmitExit("KMP", "000001", 100, "MARKET", None, "oversized_exit"), fill_bar.timestamp)
+    broker.submit(SubmitExit("ALPHA", "000001", 100, "MARKET", None, "oversized_exit"), fill_bar.timestamp)
 
     fills = broker.process_bar(exit_bar)
     assert len(fills) == 1
     assert fills[0].qty == 5
+
+
+def test_same_day_forced_flatten_does_not_carry_to_next_session():
+    class Adapter:
+        strategy_id = "TEST"
+
+        def on_bar(self, bar: MarketBar, broker: SimBroker) -> list[DecisionEvent]:
+            if bar.timestamp.hour == 9 and bar.timestamp.minute == 0:
+                broker.submit(SubmitEntry("TEST", "000001", 1, "MARKET", None, 95, "entry"), bar.timestamp)
+            return []
+
+        def on_timestamp_end(self, timestamp: datetime, bars: tuple[MarketBar, ...], broker: SimBroker) -> list[DecisionEvent]:
+            if timestamp.hour == 15 and timestamp.minute == 15:
+                broker.submit(
+                    FlattenPosition(
+                        "TEST",
+                        "000001",
+                        "eod_flatten",
+                        metadata={"same_day_force_exit": True, "eod_same_day_only": True},
+                    ),
+                    timestamp,
+                )
+            return []
+
+    bars = [
+        MarketBar("000001", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "5m", 100, 100, 100, 100, 1000),
+        MarketBar("000001", datetime(2026, 1, 5, 9, 5, tzinfo=KST), "5m", 101, 101, 101, 101, 1000),
+        MarketBar("000001", datetime(2026, 1, 5, 15, 15, tzinfo=KST), "5m", 105, 105, 105, 105, 1000),
+        MarketBar("000001", datetime(2026, 1, 6, 9, 0, tzinfo=KST), "5m", 120, 120, 120, 120, 1000),
+    ]
+
+    result = run_replay(bars, Adapter(), costs=None)
+
+    assert len(result.trades) == 1
+    assert result.trades[0].exit_fill_time.date() == datetime(2026, 1, 5, tzinfo=KST).date()
+    assert result.trades[0].exit_fill_time.hour == 15
+    assert result.broker.same_day_forced_exit_count == 1
 
 
 def test_replay_rejects_incomplete_bars_before_strategy_logic():

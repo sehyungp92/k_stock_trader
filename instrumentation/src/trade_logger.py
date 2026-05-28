@@ -2,7 +2,7 @@
 Trade event logger for the K Stock Trader instrumentation layer.
 
 Records structured JSONL trade events (entry and exit) for all four strategies
-(KMP, KPR, PCIM, NULRIMOK) routed through the centralized OMS.
+through the centralized OMS.
 
 All instrumentation is fault-tolerant: failures are caught, logged to the
 errors directory, and never propagate back to the trading hot path.

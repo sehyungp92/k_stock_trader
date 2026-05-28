@@ -58,7 +58,7 @@ def test_trade_event_has_param_set_id():
 
 def test_daily_snapshot_has_new_fields():
     from instrumentation.src.daily_snapshot import DailySnapshot
-    snap = DailySnapshot(date="2026-03-05", bot_id="test", strategy_type="kmp")
+    snap = DailySnapshot(date="2026-03-05", bot_id="test", strategy_type="alpha")
     d = snap.to_dict()
     assert d["max_concurrent_positions"] == 0
     assert d["avg_exit_efficiency"] is None
@@ -103,7 +103,7 @@ def test_emit_heartbeat_accepts_positions():
 
 def test_daily_snapshot_has_experiment_breakdown():
     from instrumentation.src.daily_snapshot import DailySnapshot
-    snap = DailySnapshot(date="2026-03-06", bot_id="test", strategy_type="kmp")
+    snap = DailySnapshot(date="2026-03-06", bot_id="test", strategy_type="alpha")
     d = snap.to_dict()
     assert "experiment_breakdown" in d
     assert d["experiment_breakdown"] == {}
@@ -125,12 +125,12 @@ def test_on_order_event_fire_and_forget():
         # Create a minimal kit with mocked dependencies
         kit = InstrumentationKit.__new__(InstrumentationKit)
         kit._order_logger = OrderLogger({"bot_id": "test", "data_dir": tmpdir})
-        # Call with valid params — should not raise
+        # Call with valid params ??should not raise
         kit.on_order_event(
             order_id="test_001", pair="005930", order_type="MARKET",
             status="SUBMITTED", requested_qty=10,
         )
-        # Call with broken logger — should swallow exception
+        # Call with broken logger ??should swallow exception
         kit._order_logger = MagicMock()
         kit._order_logger.log_order.side_effect = RuntimeError("boom")
         kit.on_order_event(

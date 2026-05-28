@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from loguru import logger
 
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env
@@ -109,6 +109,7 @@ class IntentConstraintsModel(BaseModel):
     limit_price: Optional[float] = None
     stop_price: Optional[float] = None
     expiry_ts: Optional[float] = None
+    execution_style: Optional[str] = None
 
 
 class RiskPayloadModel(BaseModel):
@@ -130,6 +131,7 @@ class IntentRequest(BaseModel):
     constraints: IntentConstraintsModel = IntentConstraintsModel()
     risk_payload: RiskPayloadModel = RiskPayloadModel()
     signal_hash: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class IntentResultModel(BaseModel):
@@ -349,6 +351,7 @@ async def submit_intent(req: IntentRequest):
             limit_price=req.constraints.limit_price,
             stop_price=req.constraints.stop_price,
             expiry_ts=req.constraints.expiry_ts,
+            execution_style=req.constraints.execution_style,
         ),
         risk_payload=RiskPayload(
             entry_px=req.risk_payload.entry_px,
@@ -358,6 +361,7 @@ async def submit_intent(req: IntentRequest):
             confidence=req.risk_payload.confidence,
         ),
         signal_hash=req.signal_hash,
+        metadata=dict(req.metadata or {}),
     )
 
     result = await oms.submit_intent(intent)

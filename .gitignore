@@ -116,6 +116,8 @@ postgres_data/
 # =============================================
 # Project Specific
 # =============================================
+tmp/
+
 # YouTube watcher state
 youtube_state.json
 

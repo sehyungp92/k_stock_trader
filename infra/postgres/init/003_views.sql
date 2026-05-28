@@ -12,9 +12,6 @@ SELECT
     p.frozen,
     p.entry_lock_owner,
     p.vi_cooldown_until,
-    COALESCE(a.kpr_qty, 0) AS kpr_qty,
-    COALESCE(a.kmp_qty, 0) AS kmp_qty,
-    COALESCE(a.nulrimok_qty, 0) AS nulrimok_qty,
     COALESCE(a.pcim_qty, 0) AS pcim_qty,
     p.real_qty - COALESCE(a.total_alloc, 0) AS drift,
     p.last_update_at
@@ -23,9 +20,6 @@ LEFT JOIN (
     SELECT
         symbol,
         SUM(qty) AS total_alloc,
-        SUM(CASE WHEN strategy_id = 'KPR' THEN qty ELSE 0 END) AS kpr_qty,
-        SUM(CASE WHEN strategy_id = 'KMP' THEN qty ELSE 0 END) AS kmp_qty,
-        SUM(CASE WHEN strategy_id = 'NULRIMOK' THEN qty ELSE 0 END) AS nulrimok_qty,
         SUM(CASE WHEN strategy_id = 'PCIM' THEN qty ELSE 0 END) AS pcim_qty
     FROM allocations
     GROUP BY symbol

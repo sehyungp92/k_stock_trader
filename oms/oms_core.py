@@ -290,7 +290,7 @@ class OMSCore:
             plan = self.planner.create_exit_plan(
                 symbol=intent.symbol, qty=exit_qty,
                 strategy_id=intent.strategy_id,
-                intent_id=intent.intent_id, urgency=intent.urgency,
+                intent_id=intent.intent_id, urgency=intent.urgency, intent=intent,
             )
         elif intent.intent_type == IntentType.REDUCE:
             reduce_qty = abs(final_qty)
@@ -310,7 +310,7 @@ class OMSCore:
             plan = self.planner.create_exit_plan(
                 symbol=intent.symbol, qty=reduce_qty,
                 strategy_id=intent.strategy_id,
-                intent_id=intent.intent_id, urgency=intent.urgency,
+                intent_id=intent.intent_id, urgency=intent.urgency, intent=intent,
             )
         elif intent.intent_type == IntentType.SET_TARGET:
             # Compute delta = target_qty - current_allocation
@@ -341,10 +341,18 @@ class OMSCore:
             ) if delta > 0 else self.planner.create_exit_plan(
                 symbol=intent.symbol, qty=sell_qty,
                 strategy_id=intent.strategy_id,
-                intent_id=intent.intent_id, urgency=intent.urgency,
+                intent_id=intent.intent_id, urgency=intent.urgency, intent=intent,
             )
         else:
             return await self._finalize(intent, IntentStatus.REJECTED, f"Unsupported intent type: {intent.intent_type}", oms_received_at=oms_received_at)
+
+        if plan.execution_style == "SYNTHETIC_STOP":
+            return await self._finalize(
+                intent,
+                IntentStatus.ACCEPTED,
+                "Synthetic stop accepted for trigger-then-submit routing; no broker limit order submitted",
+                oms_received_at=oms_received_at,
+            )
 
         order_price = plan.limit_price or current_price or 0.0
         sector_reserved = False
@@ -1157,7 +1165,7 @@ class OMSCore:
             f"{intent.intent_type.name} -> {status.name}: {message}"
         )
 
-        if status == IntentStatus.EXECUTED:
+        if status in {IntentStatus.EXECUTED, IntentStatus.ACCEPTED}:
             self._idem.put(intent.idempotency_key, result)
             self._rejection_counts.pop(intent.idempotency_key, None)
         elif status == IntentStatus.REJECTED:

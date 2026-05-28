@@ -49,7 +49,7 @@ def test_exit_stage_trade_validates_against_assistant_schema(tmp_path):
         passed_filters=[],
         strategy_params={},
         bot_id="k_stock_trader",
-        strategy_id="KMP",
+        strategy_id="ALPHA",
     )
 
     trade = logger.log_exit(
@@ -77,7 +77,7 @@ def test_missed_opportunity_validates_against_assistant_schema(tmp_path):
         signal_id="sig-1",
         signal_strength=0.7,
         blocked_by="risk_cap",
-        strategy_type="kmp",
+        strategy_type="alpha",
     )
 
     AssistantMissedOpportunityEvent.model_validate(event.to_dict())

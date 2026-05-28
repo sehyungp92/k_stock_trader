@@ -12,33 +12,6 @@
 #   - max_hold_bars is in 1-minute bars (KRX session = 09:00-15:30 = 390 bars)
 
 simulation_policies:
-
-  # KMP - Intraday momentum breakout
-  # Aggressive entries on breakout, tight stops, moderate hold
-  kmp:
-    entry_fill_model: next_trade      # breakout entries fill at market
-    slippage_model: fixed_bps
-    slippage_bps: 5
-    fees_included: true
-    fee_bps: 20                       # ~0.20% round trip on KRX
-    tp_sl_logic: atr_based
-    tp_value: 2.0                     # 2x ATR take profit
-    sl_value: 1.2                     # 1.2x ATR stop loss
-    max_hold_bars: 60                 # ~1 hour max hold
-
-  # KPR - Intraday mean-reversion
-  # Fills closer to mid, tighter TP, quick exits
-  kpr:
-    entry_fill_model: mid             # mean-reversion often uses limit orders
-    slippage_model: fixed_bps
-    slippage_bps: 5
-    fees_included: true
-    fee_bps: 20
-    tp_sl_logic: atr_based
-    tp_value: 2.0                     # 2x ATR take profit
-    sl_value: 1.0                     # 1x ATR stop loss
-    max_hold_bars: 50                 # ~50 minutes max hold
-
   # PCIM - Event-driven influencer signal
   # Longer hold, wider stops for event-driven moves
   pcim:
@@ -51,19 +24,6 @@ simulation_policies:
     tp_value: 2.5                     # 2.5x ATR take profit (wider for events)
     sl_value: 1.5                     # 1.5x ATR stop loss
     max_hold_bars: 200                # ~3.3 hours for event plays
-
-  # NULRIMOK - Swing dip-buying
-  # Patient limit entries, moderate targets
-  nulrimok:
-    entry_fill_model: mid             # dip-buy with limit orders
-    slippage_model: fixed_bps
-    slippage_bps: 5
-    fees_included: true
-    fee_bps: 20
-    tp_sl_logic: atr_based
-    tp_value: 1.5                     # 1.5x ATR take profit
-    sl_value: 1.2                     # 1.2x ATR stop loss
-    max_hold_bars: 150                # ~2.5 hours (may span sessions)
 
   # Fallback policy for unknown strategy types
   default:

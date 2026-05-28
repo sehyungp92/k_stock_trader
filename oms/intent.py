@@ -52,6 +52,7 @@ class IntentConstraints:
     limit_price: Optional[float] = None
     stop_price: Optional[float] = None
     expiry_ts: Optional[float] = None  # Unix epoch seconds
+    execution_style: Optional[str] = None
 
 
 @dataclass
@@ -96,6 +97,7 @@ class Intent:
 
     # Deterministic dedup: strategies should set this for ENTER intents
     signal_hash: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     # Auto-generated
     intent_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -105,6 +107,7 @@ class Intent:
     def __post_init__(self):
         # Normalize strategy ID (case-sensitive match with RiskConfig budgets)
         self.strategy_id = self.strategy_id.upper().strip()
+        self.metadata = dict(self.metadata or {})
 
         if self.idempotency_key is None:
             trade_date = _kst_trade_date()

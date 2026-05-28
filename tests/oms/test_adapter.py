@@ -186,6 +186,35 @@ class TestKISExecutionAdapterSubmitOrder:
         mock_api.place_limit_buy.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_close_auction_maps_to_bounded_limit(self, adapter, mock_api, monkeypatch):
+        """KRX close-auction style maps to a bounded limit order."""
+        monkeypatch.setattr(adapter, "_is_order_session_open", lambda now=None: True)
+        result = await adapter.submit_order(
+            symbol="005930",
+            side="SELL",
+            qty=100,
+            order_type="CLOSE_AUCTION",
+            limit_price=72000,
+        )
+
+        assert result.success is True
+        mock_api.place_limit_sell.assert_called_once_with("005930", 72000, 100)
+
+    @pytest.mark.asyncio
+    async def test_close_auction_requires_limit(self, adapter, monkeypatch):
+        """Close auction is bounded; unsupported fake market-on-close is rejected."""
+        monkeypatch.setattr(adapter, "_is_order_session_open", lambda now=None: True)
+        result = await adapter.submit_order(
+            symbol="005930",
+            side="BUY",
+            qty=100,
+            order_type="CLOSE_AUCTION",
+        )
+
+        assert result.success is False
+        assert result.error == AdapterError.REJECTED_INVALID
+
+    @pytest.mark.asyncio
     async def test_stop_limit_simulated(self, adapter, mock_api):
         """Test stop-limit order (simulated as limit)."""
         result = await adapter.submit_order(

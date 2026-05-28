@@ -46,14 +46,14 @@ class TestWorkingOrder:
             price=72000,
             order_type="MARKET",
             status=OrderStatus.PARTIAL,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             cancel_after_sec=30.0,
         )
         assert wo.filled_qty == 50
         assert wo.price == 72000
         assert wo.order_type == "MARKET"
         assert wo.status == OrderStatus.PARTIAL
-        assert wo.strategy_id == "KMP"
+        assert wo.strategy_id == "ALPHA"
         assert wo.cancel_after_sec == 30.0
 
 
@@ -62,8 +62,8 @@ class TestStrategyAllocation:
 
     def test_default_values(self):
         """Test default values."""
-        alloc = StrategyAllocation(strategy_id="KMP")
-        assert alloc.strategy_id == "KMP"
+        alloc = StrategyAllocation(strategy_id="ALPHA")
+        assert alloc.strategy_id == "ALPHA"
         assert alloc.qty == 0
         assert alloc.cost_basis == 0.0
         assert alloc.entry_ts is None
@@ -74,7 +74,7 @@ class TestStrategyAllocation:
         """Test with all values."""
         now = datetime.now()
         alloc = StrategyAllocation(
-            strategy_id="KPR",
+            strategy_id="BETA",
             qty=100,
             cost_basis=70000,
             entry_ts=now,
@@ -138,19 +138,19 @@ class TestSymbolPosition:
         """Test working_qty filtered by strategy."""
         pos = SymbolPosition(symbol="005930")
         pos.working_orders = [
-            WorkingOrder(order_id="ORD001", symbol="005930", side="BUY", qty=100, strategy_id="KMP"),
-            WorkingOrder(order_id="ORD002", symbol="005930", side="BUY", qty=50, strategy_id="KPR"),
+            WorkingOrder(order_id="ORD001", symbol="005930", side="BUY", qty=100, strategy_id="ALPHA"),
+            WorkingOrder(order_id="ORD002", symbol="005930", side="BUY", qty=50, strategy_id="BETA"),
         ]
-        assert pos.working_qty(strategy_id="KMP") == 100
-        assert pos.working_qty(strategy_id="KPR") == 50
+        assert pos.working_qty(strategy_id="ALPHA") == 100
+        assert pos.working_qty(strategy_id="BETA") == 50
         assert pos.working_qty(strategy_id="PCIM") == 0
 
     def test_total_allocated(self):
         """Test total_allocated calculation."""
         pos = SymbolPosition(symbol="005930")
         pos.allocations = {
-            "KMP": StrategyAllocation(strategy_id="KMP", qty=100),
-            "KPR": StrategyAllocation(strategy_id="KPR", qty=50),
+            "ALPHA": StrategyAllocation(strategy_id="ALPHA", qty=100),
+            "BETA": StrategyAllocation(strategy_id="BETA", qty=50),
         }
         assert pos.total_allocated() == 150
 
@@ -158,8 +158,8 @@ class TestSymbolPosition:
         """Test allocation_drift calculation."""
         pos = SymbolPosition(symbol="005930", real_qty=150)
         pos.allocations = {
-            "KMP": StrategyAllocation(strategy_id="KMP", qty=100),
-            "KPR": StrategyAllocation(strategy_id="KPR", qty=40),
+            "ALPHA": StrategyAllocation(strategy_id="ALPHA", qty=100),
+            "BETA": StrategyAllocation(strategy_id="BETA", qty=40),
         }
         # real=150, allocated=140, drift=10
         assert pos.allocation_drift() == 10
@@ -168,7 +168,7 @@ class TestSymbolPosition:
         """Test negative allocation drift."""
         pos = SymbolPosition(symbol="005930", real_qty=100)
         pos.allocations = {
-            "KMP": StrategyAllocation(strategy_id="KMP", qty=120),
+            "ALPHA": StrategyAllocation(strategy_id="ALPHA", qty=120),
         }
         # real=100, allocated=120, drift=-20
         assert pos.allocation_drift() == -20
@@ -176,10 +176,10 @@ class TestSymbolPosition:
     def test_get_allocation(self):
         """Test get_allocation method."""
         pos = SymbolPosition(symbol="005930")
-        pos.allocations["KMP"] = StrategyAllocation(strategy_id="KMP", qty=100)
+        pos.allocations["ALPHA"] = StrategyAllocation(strategy_id="ALPHA", qty=100)
 
-        assert pos.get_allocation("KMP") == 100
-        assert pos.get_allocation("KPR") == 0
+        assert pos.get_allocation("ALPHA") == 100
+        assert pos.get_allocation("BETA") == 0
 
     def test_is_entry_locked(self):
         """Test is_entry_locked method."""
@@ -203,14 +203,14 @@ class TestSymbolPosition:
         now = time.time()
 
         # No lock - anyone can enter
-        assert pos.can_strategy_enter("KMP", now) is True
-        assert pos.can_strategy_enter("KPR", now) is True
+        assert pos.can_strategy_enter("ALPHA", now) is True
+        assert pos.can_strategy_enter("BETA", now) is True
 
-        # Lock held by KMP
-        pos.entry_lock_owner = "KMP"
+        # Lock held by ALPHA
+        pos.entry_lock_owner = "ALPHA"
         pos.entry_lock_until = now + 60
-        assert pos.can_strategy_enter("KMP", now) is True
-        assert pos.can_strategy_enter("KPR", now) is False
+        assert pos.can_strategy_enter("ALPHA", now) is True
+        assert pos.can_strategy_enter("BETA", now) is False
 
 
 class TestStateStore:
@@ -257,10 +257,10 @@ class TestStateStore:
     def test_update_allocation_new(self):
         """Test update_allocation creates new allocation."""
         store = StateStore()
-        store.update_allocation("005930", "KMP", qty_delta=100, cost_basis=70000)
+        store.update_allocation("005930", "ALPHA", qty_delta=100, cost_basis=70000)
 
         pos = store.get_position("005930")
-        alloc = pos.allocations.get("KMP")
+        alloc = pos.allocations.get("ALPHA")
         assert alloc is not None
         assert alloc.qty == 100
         assert alloc.cost_basis == 70000
@@ -269,20 +269,20 @@ class TestStateStore:
     def test_update_allocation_add(self):
         """Test update_allocation adds to existing."""
         store = StateStore()
-        store.update_allocation("005930", "KMP", qty_delta=100, cost_basis=70000)
-        store.update_allocation("005930", "KMP", qty_delta=50)
+        store.update_allocation("005930", "ALPHA", qty_delta=100, cost_basis=70000)
+        store.update_allocation("005930", "ALPHA", qty_delta=50)
 
         pos = store.get_position("005930")
-        assert pos.allocations["KMP"].qty == 150
+        assert pos.allocations["ALPHA"].qty == 150
 
     def test_update_allocation_reduce_to_zero(self):
         """Test update_allocation clears entry_ts when qty becomes zero."""
         store = StateStore()
-        store.update_allocation("005930", "KMP", qty_delta=100)
-        store.update_allocation("005930", "KMP", qty_delta=-100)
+        store.update_allocation("005930", "ALPHA", qty_delta=100)
+        store.update_allocation("005930", "ALPHA", qty_delta=-100)
 
         pos = store.get_position("005930")
-        alloc = pos.allocations["KMP"]
+        alloc = pos.allocations["ALPHA"]
         assert alloc.qty == 0
         assert alloc.entry_ts is None
 
@@ -291,11 +291,11 @@ class TestStateStore:
         store = StateStore()
         now = time.time()
 
-        result = store.set_entry_lock("005930", "KMP", now + 60)
+        result = store.set_entry_lock("005930", "ALPHA", now + 60)
         assert result is True
 
         pos = store.get_position("005930")
-        assert pos.entry_lock_owner == "KMP"
+        assert pos.entry_lock_owner == "ALPHA"
         assert pos.entry_lock_until == now + 60
 
     def test_set_entry_lock_already_held(self):
@@ -303,8 +303,8 @@ class TestStateStore:
         store = StateStore()
         now = time.time()
 
-        store.set_entry_lock("005930", "KMP", now + 60)
-        result = store.set_entry_lock("005930", "KPR", now + 60)
+        store.set_entry_lock("005930", "ALPHA", now + 60)
+        result = store.set_entry_lock("005930", "BETA", now + 60)
 
         assert result is False
 
@@ -313,8 +313,8 @@ class TestStateStore:
         store = StateStore()
         now = time.time()
 
-        store.set_entry_lock("005930", "KMP", now + 60)
-        result = store.set_entry_lock("005930", "KMP", now + 120)
+        store.set_entry_lock("005930", "ALPHA", now + 60)
+        result = store.set_entry_lock("005930", "ALPHA", now + 120)
 
         assert result is True
         pos = store.get_position("005930")
@@ -325,8 +325,8 @@ class TestStateStore:
         store = StateStore()
         now = time.time()
 
-        store.set_entry_lock("005930", "KMP", now + 60)
-        store.release_entry_lock("005930", "KMP")
+        store.set_entry_lock("005930", "ALPHA", now + 60)
+        store.release_entry_lock("005930", "ALPHA")
 
         pos = store.get_position("005930")
         assert pos.entry_lock_owner is None
@@ -337,11 +337,11 @@ class TestStateStore:
         store = StateStore()
         now = time.time()
 
-        store.set_entry_lock("005930", "KMP", now + 60)
-        store.release_entry_lock("005930", "KPR")
+        store.set_entry_lock("005930", "ALPHA", now + 60)
+        store.release_entry_lock("005930", "BETA")
 
         pos = store.get_position("005930")
-        assert pos.entry_lock_owner == "KMP"
+        assert pos.entry_lock_owner == "ALPHA"
 
     def test_add_working_order(self):
         """Test adding working order."""
@@ -393,14 +393,14 @@ class TestStateStore:
     def test_get_allocations_for_strategy(self):
         """Test getting all allocations for a strategy."""
         store = StateStore()
-        store.update_allocation("005930", "KMP", 100)
-        store.update_allocation("000660", "KMP", 50)
-        store.update_allocation("035420", "KPR", 75)
+        store.update_allocation("005930", "ALPHA", 100)
+        store.update_allocation("000660", "ALPHA", 50)
+        store.update_allocation("035420", "BETA", 75)
 
-        kmp_allocs = store.get_allocations_for_strategy("KMP")
-        assert len(kmp_allocs) == 2
-        assert kmp_allocs["005930"].qty == 100
-        assert kmp_allocs["000660"].qty == 50
+        alpha_allocs = store.get_allocations_for_strategy("ALPHA")
+        assert len(alpha_allocs) == 2
+        assert alpha_allocs["005930"].qty == 100
+        assert alpha_allocs["000660"].qty == 50
 
     def test_update_daily_pnl(self):
         """Test updating daily P&L."""
@@ -467,9 +467,9 @@ class TestStateStoreAllocationWeightedAvg:
     def test_update_allocation_weighted_avg_cost(self):
         """Test weighted average cost basis on multiple buys."""
         store = StateStore()
-        store.update_allocation("005930", "KMP", qty_delta=100, cost_basis=70000)
-        store.update_allocation("005930", "KMP", qty_delta=50, cost_basis=73000)
-        alloc = store.get_position("005930").allocations["KMP"]
+        store.update_allocation("005930", "ALPHA", qty_delta=100, cost_basis=70000)
+        store.update_allocation("005930", "ALPHA", qty_delta=50, cost_basis=73000)
+        alloc = store.get_position("005930").allocations["ALPHA"]
         assert alloc.qty == 150
         # Weighted avg: (70000*100 + 73000*50) / 150 = 71000
         assert alloc.cost_basis == pytest.approx(71000, abs=1)
@@ -494,11 +494,11 @@ class TestSymbolPositionWorkingQtyCombined:
         """Test working_qty filtered by both strategy_id and side."""
         pos = SymbolPosition(symbol="005930")
         pos.working_orders = [
-            WorkingOrder(order_id="ORD001", symbol="005930", side="BUY", qty=100, strategy_id="KMP"),
-            WorkingOrder(order_id="ORD002", symbol="005930", side="SELL", qty=50, strategy_id="KMP"),
-            WorkingOrder(order_id="ORD003", symbol="005930", side="BUY", qty=75, strategy_id="KPR"),
+            WorkingOrder(order_id="ORD001", symbol="005930", side="BUY", qty=100, strategy_id="ALPHA"),
+            WorkingOrder(order_id="ORD002", symbol="005930", side="SELL", qty=50, strategy_id="ALPHA"),
+            WorkingOrder(order_id="ORD003", symbol="005930", side="BUY", qty=75, strategy_id="BETA"),
         ]
-        assert pos.working_qty(strategy_id="KMP", side="BUY") == 100
-        assert pos.working_qty(strategy_id="KMP", side="SELL") == 50
-        assert pos.working_qty(strategy_id="KPR", side="BUY") == 75
-        assert pos.working_qty(strategy_id="KPR", side="SELL") == 0
+        assert pos.working_qty(strategy_id="ALPHA", side="BUY") == 100
+        assert pos.working_qty(strategy_id="ALPHA", side="SELL") == 50
+        assert pos.working_qty(strategy_id="BETA", side="BUY") == 75
+        assert pos.working_qty(strategy_id="BETA", side="SELL") == 0

@@ -25,7 +25,7 @@ def test_emit_error_writes_jsonl():
             heartbeat=MagicMock(),
             exit_backfiller=MagicMock(),
             data_provider=MagicMock(),
-            strategy_type="kmp",
+            strategy_type="alpha",
             data_dir=tmpdir,
         )
         kit.emit_error(
@@ -46,7 +46,7 @@ def test_emit_error_writes_jsonl():
         assert record["severity"] == "error"
         assert record["error_type"] == "oms_timeout"
         assert record["message"] == "OMS did not respond within 5s"
-        assert record["strategy_type"] == "kmp"
+        assert record["strategy_type"] == "alpha"
         assert record["context"]["symbol"] == "005930"
 
 
@@ -62,7 +62,7 @@ def test_emit_error_never_raises():
         heartbeat=MagicMock(),
         exit_backfiller=MagicMock(),
         data_provider=MagicMock(),
-        strategy_type="kmp",
+        strategy_type="alpha",
         data_dir="/nonexistent/path/that/will/fail",
     )
     # Should not raise even with invalid path

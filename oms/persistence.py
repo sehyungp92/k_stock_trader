@@ -32,6 +32,7 @@ class OMSPersistence:
         self.pool: Optional[asyncpg.Pool] = None
         self.consecutive_failures: int = 0
         self.total_failures: int = 0
+        self._intents_execution_style_column: Optional[bool] = None
 
     async def connect(self) -> None:
         """Initialize connection pool."""
@@ -102,6 +103,12 @@ class OMSPersistence:
             table_name,
         )
         return list(columns or [])
+
+    async def _intent_execution_style_supported(self) -> bool:
+        """Return whether this schema can persist close-auction execution style."""
+        if self._intents_execution_style_column is None:
+            self._intents_execution_style_column = await self._relation_has_column("intents", "execution_style")
+        return bool(self._intents_execution_style_column)
 
     async def _check_schema_compat(self) -> None:
         """Verify DB has the scoped schema and required dashboard views."""
@@ -197,28 +204,15 @@ class OMSPersistence:
         if not self._is_connected():
             return
         try:
-            await self.pool.execute(
-                """
-                INSERT INTO intents (
-                    intent_id, idempotency_key, strategy_id, symbol,
-                    intent_type, desired_qty, target_qty, urgency, time_horizon,
-                    max_slippage_bps, max_spread_bps, limit_price, stop_price, expiry_ts,
-                    entry_px, stop_px, hard_stop_px, rationale_code, confidence, signal_hash,
-                    status, result_message, modified_qty, order_id, cooldown_until, processed_at,
-                    oms_id
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                    to_timestamp($14), $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-                    to_timestamp($25), NOW(), $26
-                )
-                ON CONFLICT (idempotency_key) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    result_message = EXCLUDED.result_message,
-                    modified_qty = EXCLUDED.modified_qty,
-                    order_id = EXCLUDED.order_id,
-                    cooldown_until = EXCLUDED.cooldown_until,
-                    processed_at = NOW()
-                """,
+            has_execution_style = await self._intent_execution_style_supported()
+            execution_style_column = ", execution_style" if has_execution_style else ""
+            execution_style_value = ", $15" if has_execution_style else ""
+            execution_style_update = ",\n                    execution_style = EXCLUDED.execution_style" if has_execution_style else ""
+            entry_base = 16 if has_execution_style else 15
+            expiry_index = 14
+            cooldown_index = entry_base + 10
+            oms_index = entry_base + 11
+            params = [
                 intent.intent_id,
                 intent.idempotency_key,
                 intent.strategy_id,
@@ -233,18 +227,48 @@ class OMSPersistence:
                 intent.constraints.limit_price,
                 intent.constraints.stop_price,
                 intent.constraints.expiry_ts,
-                intent.risk_payload.entry_px,
-                intent.risk_payload.stop_px,
-                intent.risk_payload.hard_stop_px,
-                intent.risk_payload.rationale_code,
-                intent.risk_payload.confidence,
-                intent.signal_hash,
-                result.status.name,
-                result.message,
-                result.modified_qty,
-                result.order_id,
-                result.cooldown_until,
-                self.oms_id,
+            ]
+            if has_execution_style:
+                params.append(intent.constraints.execution_style)
+            params.extend(
+                [
+                    intent.risk_payload.entry_px,
+                    intent.risk_payload.stop_px,
+                    intent.risk_payload.hard_stop_px,
+                    intent.risk_payload.rationale_code,
+                    intent.risk_payload.confidence,
+                    intent.signal_hash,
+                    result.status.name,
+                    result.message,
+                    result.modified_qty,
+                    result.order_id,
+                    result.cooldown_until,
+                    self.oms_id,
+                ]
+            )
+            await self.pool.execute(
+                f"""
+                INSERT INTO intents (
+                    intent_id, idempotency_key, strategy_id, symbol,
+                    intent_type, desired_qty, target_qty, urgency, time_horizon,
+                    max_slippage_bps, max_spread_bps, limit_price, stop_price, expiry_ts{execution_style_column},
+                    entry_px, stop_px, hard_stop_px, rationale_code, confidence, signal_hash,
+                    status, result_message, modified_qty, order_id, cooldown_until, processed_at,
+                    oms_id
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                    to_timestamp(${expiry_index}){execution_style_value}, ${entry_base}, ${entry_base + 1}, ${entry_base + 2}, ${entry_base + 3}, ${entry_base + 4}, ${entry_base + 5}, ${entry_base + 6}, ${entry_base + 7}, ${entry_base + 8}, ${entry_base + 9},
+                    to_timestamp(${cooldown_index}), NOW(), ${oms_index}
+                )
+                ON CONFLICT (idempotency_key) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    result_message = EXCLUDED.result_message,
+                    modified_qty = EXCLUDED.modified_qty,
+                    order_id = EXCLUDED.order_id,
+                    cooldown_until = EXCLUDED.cooldown_until{execution_style_update},
+                    processed_at = NOW()
+                """,
+                *params,
             )
             self._record_success()
         except Exception as e:

@@ -1,4 +1,4 @@
-"""Integration test — simulates a full trade lifecycle day."""
+"""Integration test ??simulates a full trade lifecycle day."""
 
 import json
 import tempfile
@@ -35,7 +35,7 @@ class TestFullLifecycle:
         self.tmpdir = tempfile.mkdtemp()
         self.config = {
             "bot_id": "integration_test",
-            "strategy_type": "kmp",
+            "strategy_type": "alpha",
             "data_dir": self.tmpdir,
             "data_source_id": "test",
         }
@@ -58,7 +58,7 @@ class TestFullLifecycle:
             position_size=10,
             position_size_quote=500000,
             entry_signal="momentum breakout",
-            entry_signal_id="kmp_breakout",
+            entry_signal_id="alpha_breakout",
             entry_signal_strength=0.8,
             active_filters=["regime_gate", "volume_gate"],
             passed_filters=["regime_gate", "volume_gate"],
@@ -83,7 +83,7 @@ class TestFullLifecycle:
             position_size=5,
             position_size_quote=255000,
             entry_signal="momentum breakout",
-            entry_signal_id="kmp_breakout",
+            entry_signal_id="alpha_breakout",
             entry_signal_strength=0.6,
             active_filters=["regime_gate"],
             passed_filters=["regime_gate"],
@@ -104,11 +104,11 @@ class TestFullLifecycle:
             pair="035420",
             side="LONG",
             signal="momentum breakout",
-            signal_id="kmp_breakout",
+            signal_id="alpha_breakout",
             signal_strength=0.75,
             blocked_by="volume_gate",
             block_reason="Volume ratio 0.8x below threshold 1.5x",
-            strategy_type="kmp",
+            strategy_type="alpha",
             market_regime="trending_up",
         )
         assert missed.blocked_by == "volume_gate"
@@ -181,7 +181,7 @@ class TestFullLifecycle:
         # Map fields to what scorer expects
         trade_dict["regime"] = trade_dict.get("market_regime", "")
         trade_dict["signal_strength"] = trade_dict.get("entry_signal_strength", 0)
-        score = scorer.score_trade(trade_dict, "kmp")
+        score = scorer.score_trade(trade_dict, "alpha")
 
         assert 0 <= score.process_quality_score <= 100
         assert score.classification in ["good_process", "neutral", "bad_process"]
@@ -230,18 +230,18 @@ class TestFullLifecycle:
             regime_classifier=MagicMock(),
             daily_builder=MagicMock(),
             data_provider=MagicMock(),
-            strategy_type="kmp",
+            strategy_type="alpha",
             data_dir=self.tmpdir,
         )
 
         blocking = [
-            {"strategy": "KPR", "symbol": "000660", "qty": 50, "exposure_pct": 0.065, "side": "LONG"},
-            {"strategy": "KMP", "symbol": "005930", "qty": 100, "exposure_pct": 0.072, "side": "LONG"},
+            {"strategy": "BETA", "symbol": "000660", "qty": 50, "exposure_pct": 0.065, "side": "LONG"},
+            {"strategy": "ALPHA", "symbol": "005930", "qty": 100, "exposure_pct": 0.072, "side": "LONG"},
         ]
         kit.on_signal_blocked(
             symbol="035420",
             signal="momentum breakout",
-            signal_id="kmp_breakout",
+            signal_id="alpha_breakout",
             blocked_by="oms_rejected",
             block_reason="Max positions (10) reached",
             blocking_positions=blocking,

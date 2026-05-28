@@ -59,6 +59,25 @@ class MarketBar:
             "metadata": dict(self.metadata),
         }
 
+    def __reduce__(self):
+        return (
+            self.__class__,
+            (
+                self.symbol,
+                self.timestamp,
+                self.timeframe,
+                self.open,
+                self.high,
+                self.low,
+                self.close,
+                self.volume,
+                self.is_completed,
+                self.source,
+                self.source_fingerprint,
+                dict(self.metadata),
+            ),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class MarketFeatureBundle:
@@ -69,6 +88,9 @@ class MarketFeatureBundle:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "features", _freeze_mapping(self.features))
+
+    def __reduce__(self):
+        return (self.__class__, (self.symbol, self.timestamp, dict(self.features), self.source_fingerprint))
 
 
 def require_completed_bar(bar: MarketBar) -> MarketBar:
@@ -83,4 +105,3 @@ def require_time_ordered(bars: Iterable[MarketBar]) -> list[MarketBar]:
         if current.timestamp < previous.timestamp:
             raise ValueError("Market bars must be sorted by timestamp")
     return ordered
-

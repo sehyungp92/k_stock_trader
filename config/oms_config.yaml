@@ -7,33 +7,12 @@
 # - max_risk_pct: Maximum risk per trade as percentage of equity
 
 strategy_budgets:
-  KMP:
-    # KMP: Korean Market Opening Breakdown Strategy
-    # Trades 09:15-14:30, heavy activity at open
-    max_positions: 8
-    max_risk_pct: 0.025  # 2.5% of equity per trade
-    capital_allocation_pct: 0.50  # 50% of capital (VPS runs 2 strategies)
-
-  KPR:
-    # KPR: VWAP Pullback Reversion Strategy
-    # Trades 09:10-14:00, moderate activity throughout
-    max_positions: 5
-    max_risk_pct: 0.025  # 2.5% of equity per trade
-    capital_allocation_pct: 0.50  # 50% of capital (VPS runs 2 strategies)
-
-  NULRIMOK:
-    # Nulrimok: Swing/Multi-day Strategy
-    # Trades 08:00-15:10, light activity
-    max_positions: 5
-    max_risk_pct: 0.025   # 2.5% of equity per trade (larger swings)
-    capital_allocation_pct: 0.50  # 50% of capital (VPS runs 2 strategies)
-
   PCIM:
     # PCIM: YouTube Signal Strategy
     # Evening + 08:00-15:00, varies by signals
     max_positions: 8
     max_risk_pct: 0.025   # 2.5% of equity per trade
-    capital_allocation_pct: 0.50  # 50% of capital (VPS runs 2 strategies)
+    capital_allocation_pct: 1.00
 
 
 # Risk Configuration
@@ -68,14 +47,6 @@ regime_exposure_caps:
 
 
 # Rate Limiting Priority Windows (KST)
-# During priority windows, the specified strategy gets 2x API rate budget,
-# while others get 0.5x. Outside windows, all get equal access.
+# During priority windows, the specified strategy gets 2x API rate budget.
 
-priority_windows:
-  KMP:
-    - start: "09:10"
-      end: "10:00"
-  NULRIMOK:
-    - start: "08:00"
-      end: "08:30"
-  # KPR and PCIM have no priority windows
+priority_windows: {}

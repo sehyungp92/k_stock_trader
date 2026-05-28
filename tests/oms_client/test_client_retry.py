@@ -11,7 +11,7 @@ from oms.intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, 
 def _make_intent(**overrides):
     defaults = dict(
         intent_type=IntentType.ENTER,
-        strategy_id="NULRIMOK",
+        strategy_id="GAMMA",
         symbol="005930",
         desired_qty=100,
         urgency=Urgency.LOW,
@@ -29,7 +29,7 @@ class TestSubmitIntentRetry:
     @pytest.mark.asyncio
     async def test_succeeds_on_first_attempt(self):
         """No retry needed when first attempt succeeds."""
-        client = OMSClient("http://localhost:8000", strategy_id="NULRIMOK")
+        client = OMSClient("http://localhost:8000", strategy_id="GAMMA")
         intent = _make_intent()
 
         mock_resp = AsyncMock()
@@ -55,7 +55,7 @@ class TestSubmitIntentRetry:
     @pytest.mark.asyncio
     async def test_retries_on_connection_error(self):
         """Retries on transient connection error, succeeds on 2nd attempt."""
-        client = OMSClient("http://localhost:8000", strategy_id="NULRIMOK")
+        client = OMSClient("http://localhost:8000", strategy_id="GAMMA")
         intent = _make_intent()
 
         mock_resp = AsyncMock()
@@ -96,7 +96,7 @@ class TestSubmitIntentRetry:
     @pytest.mark.asyncio
     async def test_gives_up_after_max_retries(self):
         """Returns REJECTED after exhausting all retries."""
-        client = OMSClient("http://localhost:8000", strategy_id="NULRIMOK")
+        client = OMSClient("http://localhost:8000", strategy_id="GAMMA")
         intent = _make_intent()
 
         mock_session = AsyncMock()
@@ -117,7 +117,7 @@ class TestSubmitIntentRetry:
     @pytest.mark.asyncio
     async def test_no_retry_on_oms_rejection(self):
         """OMS HTTP 200 with REJECTED status is not retried (intentional risk decision)."""
-        client = OMSClient("http://localhost:8000", strategy_id="NULRIMOK")
+        client = OMSClient("http://localhost:8000", strategy_id="GAMMA")
         intent = _make_intent()
 
         mock_resp = AsyncMock()
@@ -138,14 +138,14 @@ class TestSubmitIntentRetry:
         result = await client.submit_intent(intent)
         assert result.status == IntentStatus.REJECTED
         assert "Gross exposure" in result.message
-        # Only 1 call — no retry for OMS-level rejections
+        # Only 1 call ??no retry for OMS-level rejections
         assert mock_session.post.call_count == 1
         await client.close()
 
     @pytest.mark.asyncio
     async def test_no_retry_on_http_error(self):
         """HTTP 4xx/5xx errors are not retried (server responded)."""
-        client = OMSClient("http://localhost:8000", strategy_id="NULRIMOK")
+        client = OMSClient("http://localhost:8000", strategy_id="GAMMA")
         intent = _make_intent()
 
         mock_resp = AsyncMock()

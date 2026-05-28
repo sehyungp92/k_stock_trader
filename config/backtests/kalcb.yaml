@@ -1,0 +1,40 @@
+strategy: kalcb
+daily_data_root: data/krx_daily_parquet
+capability_level: synthetic
+fixture: synthetic
+timeframe: 5m
+execution_timeframe: 5m_next_open
+live_parity_fill_timing: next_5m_open
+auction_mode: non_auction_continuous
+tick_policy: krx_tick_table
+artifact_promotion_policy: smoke_only
+date_range:
+  start: "2026-01-05"
+  end: "2026-01-05"
+initial_equity: 100000000
+symbol: "005930"
+commission_bps: 2
+slippage_bps: 3
+spread_bps: 0
+initial_mutations:
+  kalcb.session.opening_range_bars: 6
+  kalcb.session.entry_window_end: "12:00"
+  kalcb.session.ws_budget: 1
+  kalcb.entry.rvol_threshold: 2.0
+  kalcb.entry.rvol_max: 5.0
+  kalcb.entry.or_width_min_pct: 0.0015
+  kalcb.entry.breakout_distance_cap_r: 1.0
+  kalcb.entry.orb_entry_range_cap_r: 1.1
+  kalcb.entry.combined_breakout_score_min: 5
+  kalcb.entry.combined_breakout_min_rvol: 2.5
+  kalcb.entry.combined_avwap_cap_pct: 0.003
+  kalcb.entry.pdh_avwap_cap_pct: 0.005
+  kalcb.entry.block_combined_regime_b: true
+  kalcb.entry.entry_score_blocklist: []
+  kalcb.risk.stop_atr_multiple: 0.8
+  kalcb.risk.pdh_size_mult: 0.75
+  kalcb.exit.use_partial_takes: false
+  kalcb.exit.quick_exit_enabled: true
+  kalcb.exit.quick_exit_bars: 10
+  kalcb.exit.quick_exit_min_r: -0.5
+  kalcb.carry.mode: shadow

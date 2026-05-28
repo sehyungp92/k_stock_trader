@@ -60,11 +60,11 @@ class TestMissedOpportunityLogger:
             pair="005930",
             side="LONG",
             signal="momentum breakout confirmed",
-            signal_id="kmp_breakout",
+            signal_id="alpha_breakout",
             signal_strength=0.75,
             blocked_by="volume_gate",
             block_reason="Volume ratio 0.8x below threshold 1.5x",
-            strategy_type="kmp",
+            strategy_type="alpha",
         )
         assert isinstance(event, MissedOpportunityEvent)
         assert event.pair == "005930"
@@ -79,7 +79,7 @@ class TestMissedOpportunityLogger:
             signal_id="test",
             signal_strength=0.5,
             blocked_by="regime_gate",
-            strategy_type="kmp",
+            strategy_type="alpha",
         )
         # Mid price is 50000, slippage of 5bps = 50000 * 5/10000 = 25
         # LONG: base_price + slippage = 50000 + 25 = 50025
@@ -176,7 +176,7 @@ class TestMissedOpportunityLogger:
     def test_blocking_positions_written(self):
         """log_missed with blocking_positions writes field to event."""
         blocking = [
-            {"strategy": "KPR", "symbol": "000660", "qty": 50, "exposure_pct": 0.065, "side": "LONG"},
+            {"strategy": "BETA", "symbol": "000660", "qty": 50, "exposure_pct": 0.065, "side": "LONG"},
         ]
         event = self.mol.log_missed(
             pair="005930",

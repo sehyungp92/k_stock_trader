@@ -1,7 +1,12 @@
 #!/bin/bash
 
-VPS_NAME=${1:-"unknown"}
+STACK_SCOPE=${1:-"base"}
 ALERT_WEBHOOK=${2:-""}  # Slack/Discord webhook URL
+SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+
+cd "$PROJECT_DIR"
 
 check_service() {
     local service=$1
@@ -14,44 +19,59 @@ check_service() {
         echo "[FAIL] $service is DOWN"
         if [ -n "$ALERT_WEBHOOK" ]; then
             curl -X POST -H "Content-Type: application/json" \
-                -d "{\"text\":\"$VPS_NAME: $service is DOWN\"}" \
+                -d "{\"text\":\"$STACK_SCOPE: $service is DOWN\"}" \
                 "$ALERT_WEBHOOK"
         fi
         return 1
     fi
 }
 
-check_container() {
-    local container=$1
+check_compose_service() {
+    local service=$1
 
-    if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-        echo "[OK] Container $container is running"
+    if docker compose -f "$COMPOSE_FILE" ps --services --status running | grep -qx "$service"; then
+        echo "[OK] Compose service $service is running"
         return 0
     else
-        echo "[FAIL] Container $container is NOT running"
+        echo "[FAIL] Compose service $service is NOT running"
         if [ -n "$ALERT_WEBHOOK" ]; then
             curl -X POST -H "Content-Type: application/json" \
-                -d "{\"text\":\"$VPS_NAME: Container $container is NOT running\"}" \
+                -d "{\"text\":\"$STACK_SCOPE: Compose service $service is NOT running\"}" \
                 "$ALERT_WEBHOOK"
         fi
         return 1
     fi
 }
 
-echo "=== Health Check: $VPS_NAME ==="
+echo "=== Health Check: $STACK_SCOPE ==="
 echo "Time: $(date)"
 
-# Check OMS
 check_service "OMS" "http://localhost:8000/health"
 
-# Check containers based on VPS
-if [ "$VPS_NAME" == "VPS1" ]; then
-    check_container "strategy_kmp"
-    check_container "strategy_nulrimok"
-elif [ "$VPS_NAME" == "VPS2" ]; then
-    check_container "strategy_kpr"
-    check_container "strategy_pcim"
-    check_container "trading_db"
-fi
+services=(postgres oms)
+
+case "$STACK_SCOPE" in
+    base|single-vps)
+        ;;
+    pcim)
+        services+=(pcim)
+        ;;
+    olr-kalcb|runtime)
+        services+=(runtime)
+        ;;
+    dashboard)
+        services+=(dashboard)
+        ;;
+    all)
+        services+=(pcim runtime dashboard)
+        ;;
+    *)
+        echo "[WARN] Unknown scope '$STACK_SCOPE'; checking base services only"
+        ;;
+esac
+
+for service in "${services[@]}"; do
+    check_compose_service "$service"
+done
 
 echo "=== End Health Check ==="

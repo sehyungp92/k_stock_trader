@@ -2,7 +2,7 @@
 
 Strategies import InstrumentationKit and call high-level methods:
 
-    kit = InstrumentationKit.create(api, strategy_type="kmp")
+    kit = InstrumentationKit.create(api, strategy_type="pcim")
     kit.on_entry_fill(...)
     kit.on_exit_fill(...)
     kit.on_signal_blocked(...)

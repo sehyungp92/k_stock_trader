@@ -68,7 +68,7 @@ class TestFilterLogger:
         event = lg.log_decision(
             pair="005930", filter_name="rvol_min",
             passed=True, threshold=2.0, actual_value=3.2,
-            signal_name="kmp_value_surge", strategy_type="kmp",
+            signal_name="alpha_value_surge", strategy_type="alpha",
         )
         assert event.passed is True
 

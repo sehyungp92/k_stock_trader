@@ -16,14 +16,14 @@ def _write_jsonl(filepath: Path, events: list):
 
 class TestDailySnapshot:
     def test_to_dict(self):
-        snap = DailySnapshot(date="2026-03-01", bot_id="test", strategy_type="kmp")
+        snap = DailySnapshot(date="2026-03-01", bot_id="test", strategy_type="alpha")
         d = snap.to_dict()
         assert isinstance(d, dict)
         assert d["date"] == "2026-03-01"
         assert d["bot_id"] == "test"
 
     def test_defaults(self):
-        snap = DailySnapshot(date="2026-03-01", bot_id="test", strategy_type="kmp")
+        snap = DailySnapshot(date="2026-03-01", bot_id="test", strategy_type="alpha")
         assert snap.total_trades == 0
         assert snap.win_count == 0
         assert snap.net_pnl == 0.0
@@ -35,7 +35,7 @@ class TestDailySnapshotBuilder:
         self.tmpdir = tempfile.mkdtemp()
         self.config = {
             "bot_id": "test_bot",
-            "strategy_type": "kmp",
+            "strategy_type": "alpha",
             "data_dir": self.tmpdir,
         }
         self.builder = DailySnapshotBuilder(self.config)
@@ -49,7 +49,7 @@ class TestDailySnapshotBuilder:
 
     def test_trades_aggregated(self):
         trades = [
-            # Entry event (ignored in aggregation — only exit events with pnl count)
+            # Entry event (ignored in aggregation ??only exit events with pnl count)
             {"trade_id": "t1", "stage": "entry", "entry_price": 50000},
             # Exit: winning trade
             {
@@ -290,7 +290,7 @@ class TestDailySnapshotBuilder:
 
     def test_experiment_breakdown_default_field(self):
         """New field should exist with default empty dict."""
-        snap = DailySnapshot(date="2026-03-01", bot_id="test", strategy_type="kmp")
+        snap = DailySnapshot(date="2026-03-01", bot_id="test", strategy_type="alpha")
         assert snap.experiment_breakdown == {}
         d = snap.to_dict()
         assert "experiment_breakdown" in d

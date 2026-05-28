@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, TypeAlias
 
-OrderKind: TypeAlias = Literal["MARKET", "LIMIT", "STOP", "STOP_LIMIT"]
+OrderKind: TypeAlias = Literal["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "CLOSE_AUCTION"]
 
 
 def _freeze_metadata(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
@@ -138,4 +138,3 @@ def action_to_json_dict(action: StrategyAction) -> dict[str, Any]:
     if "metadata" in payload:
         payload["metadata"] = dict(payload["metadata"])
     return payload
-

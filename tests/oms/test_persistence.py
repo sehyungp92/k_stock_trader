@@ -46,7 +46,7 @@ class TestOMSPersistenceOrderKeying:
             side="BUY",
             qty=100,
             price=72000,
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             status=OrderStatus.WORKING,
         )
 
@@ -72,7 +72,7 @@ class TestOMSPersistenceOrderKeying:
         await persistence.record_order_event(
             "ORDER_SUBMITTED",
             order_id="1234567890",
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             symbol="005930",
         )
 
@@ -155,7 +155,7 @@ class TestOMSPersistenceScopedUpserts:
 
         await persistence.update_daily_risk_strategy(
             trade_date=date(2026, 4, 20),
-            strategy_id="KMP",
+            strategy_id="ALPHA",
             realized_pnl_krw=1000,
             unrealized_pnl_krw=200,
             trades_count=3,
@@ -174,7 +174,7 @@ class TestOMSPersistenceScopedUpserts:
         persistence.pool.execute = AsyncMock()
 
         await persistence.update_strategy_state(
-            strategy_id="KPR",
+            strategy_id="BETA",
             mode="RUNNING",
             symbols_hot=1,
             symbols_warm=2,

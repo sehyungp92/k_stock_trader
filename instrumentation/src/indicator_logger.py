@@ -22,7 +22,7 @@ class IndicatorSnapshot:
     signal_name: str                  # e.g. "kmp_value_surge", "kpr_vwap_pullback"
     signal_strength: float            # 0.0-1.0
     decision: str                     # "enter", "skip", or "exit"
-    strategy_type: str                # "kmp", "kpr", "pcim", "nulrimok"
+    strategy_type: str
     event_id: str = ""
     bar_id: Optional[str] = None
     context: dict = field(default_factory=dict)  # strategy-specific extra context

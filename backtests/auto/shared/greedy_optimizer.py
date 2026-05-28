@@ -88,6 +88,7 @@ def run_greedy(
     baseline = evaluate_batch([Experiment("__baseline__", {})], current_mutations)
     base_score = baseline[0].score if baseline else 0.0
     current_score = base_score
+    candidate_evaluations: list[dict[str, object]] = []
     _emit(progress_callback, {"event": "baseline_complete", "base_score": base_score})
 
     if checkpoint_path:
@@ -108,11 +109,23 @@ def run_greedy(
                 reject_streak[candidate.name] = reject_streak.get(candidate.name, 0) + 1 if candidate.name in rejected_names else 0
             valid = [item for item in scored if not item.rejected]
             if not valid:
+                candidate_evaluations.extend(
+                    _candidate_evaluations(round_num, scored, current_score=current_score, best_name="", kept_name="")
+                )
                 rounds.append(GreedyRound(round_num, len(remaining), "", current_score, 0.0, False, len(scored)))
                 break
             best = max(valid, key=lambda item: item.score)
             delta = _delta_ratio(best.score, current_score)
             kept = best.score > current_score and delta >= min_delta
+            candidate_evaluations.extend(
+                _candidate_evaluations(
+                    round_num,
+                    scored,
+                    current_score=current_score,
+                    best_name=best.name,
+                    kept_name=best.name if kept else "",
+                )
+            )
             rounds.append(GreedyRound(round_num, len(remaining), best.name, best.score, delta * 100.0, kept, len(scored) - len(valid)))
             if not kept:
                 break
@@ -155,9 +168,42 @@ def run_greedy(
         total_candidates=len(candidates),
         accepted_count=len(kept_features),
         elapsed_seconds=time.time() - started,
+        candidate_evaluations=candidate_evaluations,
     )
 
 
 def _emit(callback, payload: dict[str, object]) -> None:
     if callable(callback):
         callback(payload)
+
+
+def _candidate_evaluations(
+    round_num: int,
+    scored: list[ScoredCandidate],
+    *,
+    current_score: float,
+    best_name: str,
+    kept_name: str,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "round_num": int(round_num),
+            "name": item.name,
+            "score": float(item.score),
+            "score_delta_pct": _delta_ratio(float(item.score), float(current_score)) * 100.0,
+            "rejected": bool(item.rejected),
+            "reject_reason": item.reject_reason,
+            "is_best": item.name == best_name,
+            "kept": item.name == kept_name,
+            "metrics": _scalar_metrics(item.metrics),
+        }
+        for item in scored
+    ]
+
+
+def _scalar_metrics(metrics: dict[str, object]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in metrics.items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            result[str(key)] = value
+    return result
