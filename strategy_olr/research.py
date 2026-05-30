@@ -783,6 +783,7 @@ def run_daily_selection(
     index_ohlcv_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     artifact_root: str | Path | None = "data/strategy/olr",
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
     lrs=None,
 ) -> OLRDailySnapshot:
     """Build and persist an OLR daily artifact from rows or a research snapshot.
@@ -809,6 +810,7 @@ def run_daily_selection(
             institutional_flow_by_symbol=institutional_flow_by_symbol,
             index_ohlcv_by_symbol=index_ohlcv_by_symbol,
             source_fingerprint=source_fingerprint,
+            generated_at=generated_at,
         )
     candidate_snapshot = daily_selection_from_snapshot(research_snapshot, cfg)
     if artifact_root is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -33,7 +34,9 @@ from .session_driver import RuntimeSessionDriver, handle_combined_bar
 ARTIFACT_ONLY_MODES = {"artifact_only", "artifact_only_stage1"}
 EXECUTION_MODES = {"dry_run", "paper", "live"}
 RUNTIME_MODES = ARTIFACT_ONLY_MODES | EXECUTION_MODES
-DEFAULT_STRATEGY_CONFIG_SOURCE = Path("data/live_readiness/olr_kalcb/2026-05-27/baseline_manifest.json")
+DEFAULT_STRATEGY_CONFIG_SOURCE = Path(
+    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json")
+)
 
 REQUIRED_HEALTH_CHECKS_BY_MODE: dict[str, tuple[str, ...]] = {
     "artifact_only": (),
@@ -407,6 +410,7 @@ def prepare_runtime_session(
     *,
     trade_date: date,
     mode: str = "artifact_only",
+    completed_bar_source: str = "paced_rest",
     artifact_roots: dict[str, str | Path] | None = None,
     health_checks: Mapping[str, Any] | None = None,
     oms_client: Any | None = None,
@@ -469,6 +473,7 @@ def prepare_runtime_session(
         sids,
         trade_date=trade_date,
         mode=mode_name,
+        completed_bar_source=completed_bar_source,
         artifacts=artifacts,
         configs=configs,
         artifact_roots=artifact_roots,
@@ -935,6 +940,7 @@ def _build_runtime_kis_resource_plan(
     *,
     trade_date: date,
     mode: str,
+    completed_bar_source: str = "paced_rest",
     artifacts: Mapping[str, KALCBDailySnapshot | OLRDailySnapshot],
     configs: Mapping[str, KALCBConfig | OLRConfig],
     artifact_roots: Mapping[str, str | Path] | None,
@@ -963,7 +969,7 @@ def _build_runtime_kis_resource_plan(
         kalcb_snapshot=kalcb_snapshot if isinstance(kalcb_snapshot, KALCBDailySnapshot) else None,
         olr_stage1_snapshot=olr_stage1,
         olr_final_snapshot=olr_final,
-        completed_bar_source="paced_rest",
+        completed_bar_source=completed_bar_source,
     )
 
 

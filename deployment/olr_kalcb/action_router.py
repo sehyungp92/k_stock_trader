@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
+from datetime import date, datetime, timezone
+from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
 from oms.intent import IntentStatus
@@ -82,13 +83,17 @@ class RuntimeActionRouter:
         return DecisionRefIndex(tuple(refs), {key: tuple(dict.fromkeys(value)) for key, value in action_refs.items()})
 
     def record_state_snapshot(self, strategy_id: str, state: Any, *, metadata: Mapping[str, Any] | None = None) -> str:
+        metadata_payload = dict(metadata or {})
+        decodable_state_required = _decodable_state_required(metadata_payload)
+        state_payload = _json_safe_full_state(state) if decodable_state_required else _json_safe_state(state)
         payload = {
             "record_type": "state_snapshot",
             "strategy_id": str(strategy_id).upper().strip(),
-            "metadata": dict(metadata or {}),
-            "state": _json_safe_state(state),
+            "metadata": metadata_payload,
+            "state_encoding": _state_encoding(state, decodable=decodable_state_required),
+            "state": state_payload,
         }
-        payload["state_hash"] = canonical_json_hash(payload["state"])
+        payload["state_hash"] = canonical_json_hash(state_payload)
         self.recorder.append_jsonl("state_snapshots.jsonl", payload)
         return str(payload["state_hash"])
 
@@ -715,13 +720,9 @@ def _json_safe_state(state: Any) -> Any:
     if state is None:
         return {}
     if state.__class__.__name__ == "KALCBState":
-        from strategy_kalcb.core.serializers import snapshot_state
-
-        return snapshot_state(state)
+        return _compact_kalcb_state(state)
     if state.__class__.__name__ == "OLRState":
-        from strategy_olr.core.serializers import snapshot_state
-
-        return snapshot_state(state)
+        return _compact_olr_state(state)
     if hasattr(state, "to_json_dict"):
         return state.to_json_dict()
     if hasattr(state, "__dataclass_fields__"):
@@ -729,6 +730,210 @@ def _json_safe_state(state: Any) -> Any:
     if isinstance(state, Mapping):
         return dict(state)
     return repr(state)
+
+
+def _json_safe_full_state(state: Any) -> Any:
+    if state is None:
+        return {}
+    if state.__class__.__name__ == "KALCBState":
+        from strategy_kalcb.core.serializers import snapshot_state
+
+        return snapshot_state(state)
+    if state.__class__.__name__ == "OLRState":
+        from strategy_olr.core.serializers import snapshot_state
+
+        return snapshot_state(state)
+    return _json_safe_state(state)
+
+
+def _decodable_state_required(metadata: Mapping[str, Any]) -> bool:
+    return str(metadata.get("record_reason") or "").endswith("pre_start")
+
+
+def _state_encoding(state: Any, *, decodable: bool = False) -> str:
+    if state is None:
+        return "empty"
+    name = state.__class__.__name__
+    if decodable and name == "KALCBState":
+        return "kalcb-state-decodable-v1"
+    if decodable and name == "OLRState":
+        return "olr-state-decodable-v1"
+    if name == "KALCBState":
+        return "kalcb-state-compact-v1"
+    if name == "OLRState":
+        return "olr-state-compact-v1"
+    return "json-safe-full"
+
+
+def _compact_kalcb_state(state: Any) -> dict[str, Any]:
+    symbols = {
+        str(symbol).zfill(6): _compact_kalcb_symbol(symbol_state)
+        for symbol, symbol_state in sorted(dict(getattr(state, "symbols", {}) or {}).items())
+    }
+    return {
+        "schema": "kalcb-state-compact-v1",
+        "snapshot_hash": str(getattr(state, "snapshot_hash", "") or ""),
+        "source_fingerprint": str(getattr(state, "source_fingerprint", "") or ""),
+        "session_date": _json_value(getattr(state, "session_date", None)),
+        "order_roles": _digest_payload(getattr(state, "order_roles", {}) or {}),
+        "meta": _digest_payload(getattr(state, "meta", {}) or {}),
+        "symbol_count": len(symbols),
+        "symbols_hash": canonical_json_hash(symbols),
+        "stage_counts": _stage_counts(symbols),
+        "position_symbols": _symbols_matching(symbols, lambda item: item.get("position") is not None),
+        "pending_symbols": _symbols_matching(symbols, lambda item: bool(item.get("pending_entry_order_id"))),
+    }
+
+
+def _compact_kalcb_symbol(symbol_state: Any) -> dict[str, Any]:
+    bars = list(getattr(symbol_state, "bars", []) or [])
+    candidate = getattr(symbol_state, "candidate", None)
+    position = getattr(symbol_state, "position", None)
+    return {
+        "symbol": str(getattr(symbol_state, "symbol", "") or "").zfill(6),
+        "stage": _enum_value(getattr(symbol_state, "stage", "")),
+        "candidate": _candidate_ref(candidate),
+        "candidate_rank": int(getattr(symbol_state, "candidate_rank", 0) or 0),
+        "session_date": _json_value(getattr(symbol_state, "session_date", None)),
+        "bars_count": len(bars),
+        "last_bar_hash": _bar_hash(bars[-1]) if bars else "",
+        "opening_range_built": bool(getattr(symbol_state, "opening_range_built", False)),
+        "or_high": _float_or_zero(getattr(symbol_state, "or_high", 0.0)),
+        "or_low": _float_or_zero(getattr(symbol_state, "or_low", 0.0)),
+        "or_volume": _float_or_zero(getattr(symbol_state, "or_volume", 0.0)),
+        "vwap_value": _float_or_zero(getattr(symbol_state, "vwap_value", 0.0)),
+        "vwap_volume": _float_or_zero(getattr(symbol_state, "vwap_volume", 0.0)),
+        "pending_entry_order_id": str(getattr(symbol_state, "pending_entry_order_id", "") or ""),
+        "pending_entry_metadata": _digest_payload(getattr(symbol_state, "pending_entry_metadata", {}) or {}),
+        "touched_vwap": bool(getattr(symbol_state, "touched_vwap", False)),
+        "touched_or_mid": bool(getattr(symbol_state, "touched_or_mid", False)),
+        "touched_or_high": bool(getattr(symbol_state, "touched_or_high", False)),
+        "touched_pdh": bool(getattr(symbol_state, "touched_pdh", False)),
+        "touched_reclaim_levels": _digest_payload(getattr(symbol_state, "touched_reclaim_levels", {}) or {}),
+        "position": _compact_position(position),
+        "rejected_reason": str(getattr(symbol_state, "rejected_reason", "") or ""),
+        "entry_attempted": bool(getattr(symbol_state, "entry_attempted", False)),
+        "last_decision_code": str(getattr(symbol_state, "last_decision_code", "") or ""),
+        "last_decision_details": _digest_payload(getattr(symbol_state, "last_decision_details", {}) or {}),
+    }
+
+
+def _compact_olr_state(state: Any) -> dict[str, Any]:
+    symbols = {
+        str(symbol).zfill(6): _compact_olr_symbol(symbol_state)
+        for symbol, symbol_state in sorted(dict(getattr(state, "symbols", {}) or {}).items())
+    }
+    return {
+        "schema": "olr-state-compact-v1",
+        "snapshot_hash": str(getattr(state, "snapshot_hash", "") or ""),
+        "source_fingerprint": str(getattr(state, "source_fingerprint", "") or ""),
+        "session_date": _json_value(getattr(state, "session_date", None)),
+        "order_roles": _digest_payload(getattr(state, "order_roles", {}) or {}),
+        "meta": _digest_payload(getattr(state, "meta", {}) or {}),
+        "symbol_count": len(symbols),
+        "symbols_hash": canonical_json_hash(symbols),
+        "stage_counts": _stage_counts(symbols),
+        "position_symbols": _symbols_matching(symbols, lambda item: item.get("position") is not None),
+        "pending_symbols": _symbols_matching(
+            symbols,
+            lambda item: bool(item.get("pending_entry_order_id") or item.get("pending_exit_order_id")),
+        ),
+    }
+
+
+def _compact_olr_symbol(symbol_state: Any) -> dict[str, Any]:
+    session_bars = list(getattr(symbol_state, "session_bars", []) or [])
+    candidate = getattr(symbol_state, "candidate", None)
+    position = getattr(symbol_state, "position", None)
+    return {
+        "symbol": str(getattr(symbol_state, "symbol", "") or "").zfill(6),
+        "stage": _enum_value(getattr(symbol_state, "stage", "")),
+        "session_date": _json_value(getattr(symbol_state, "session_date", None)),
+        "candidate": _candidate_ref(candidate),
+        "pending_entry_order_id": str(getattr(symbol_state, "pending_entry_order_id", "") or ""),
+        "pending_exit_order_id": str(getattr(symbol_state, "pending_exit_order_id", "") or ""),
+        "pending_entry_metadata": _digest_payload(getattr(symbol_state, "pending_entry_metadata", {}) or {}),
+        "pending_exit_metadata": _digest_payload(getattr(symbol_state, "pending_exit_metadata", {}) or {}),
+        "session_bars_count": len(session_bars),
+        "last_session_bar_hash": _bar_hash(session_bars[-1]) if session_bars else "",
+        "position": _compact_position(position),
+        "entry_attempted": bool(getattr(symbol_state, "entry_attempted", False)),
+        "exit_attempted_dates": _json_value(getattr(symbol_state, "exit_attempted_dates", set()) or set()),
+        "last_decision_code": str(getattr(symbol_state, "last_decision_code", "") or ""),
+        "last_decision_details": _digest_payload(getattr(symbol_state, "last_decision_details", {}) or {}),
+    }
+
+
+def _candidate_ref(candidate: Any) -> dict[str, Any] | None:
+    if candidate is None:
+        return None
+    return {
+        "symbol": str(getattr(candidate, "symbol", "") or "").zfill(6),
+        "trade_date": _json_value(getattr(candidate, "trade_date", None)),
+        "source_fingerprint": str(getattr(candidate, "source_fingerprint", "") or ""),
+        "tradable": bool(getattr(candidate, "tradable", True)),
+    }
+
+
+def _compact_position(position: Any) -> dict[str, Any] | None:
+    if position is None:
+        return None
+    payload = _json_value(position)
+    if isinstance(payload, dict) and "metadata" in payload:
+        payload["metadata"] = _digest_payload(payload.get("metadata") or {})
+    return payload if isinstance(payload, dict) else {"value": payload}
+
+
+def _digest_payload(payload: Any) -> dict[str, Any]:
+    normalized = _json_value(payload)
+    if isinstance(normalized, dict):
+        keys = sorted(str(key) for key in normalized)
+    else:
+        keys = []
+    return {
+        "hash": canonical_json_hash(normalized),
+        "keys": keys,
+    }
+
+
+def _stage_counts(symbols: Mapping[str, Mapping[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in symbols.values():
+        stage = str(item.get("stage") or "")
+        counts[stage] = counts.get(stage, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _symbols_matching(symbols: Mapping[str, Mapping[str, Any]], predicate: Any) -> list[str]:
+    return [symbol for symbol, item in sorted(symbols.items()) if predicate(item)]
+
+
+def _bar_hash(bar: Any) -> str:
+    return canonical_json_hash(_json_value(bar))
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if hasattr(value, "to_json_dict") and callable(getattr(value, "to_json_dict")):
+        return _json_value(value.to_json_dict())
+    if is_dataclass(value):
+        return _json_value(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, set):
+        return sorted(_json_value(item) for item in value)
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def _enum_value(value: Any) -> str:
+    return str(value.value if isinstance(value, Enum) else value)
 
 
 def _float_or_zero(value: Any) -> float:

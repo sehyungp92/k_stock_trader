@@ -490,6 +490,7 @@ def run_daily_selection(
     daily_institutional_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     artifact_root: str | Path | None = None,
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
     lrs=None,
 ) -> KALCBDailySnapshot:
     """Build the unfinalized KALCB daily candidate snapshot from rows or snapshot.
@@ -509,6 +510,7 @@ def run_daily_selection(
         daily_foreign_flow_by_symbol=daily_foreign_flow_by_symbol,
         daily_institutional_flow_by_symbol=daily_institutional_flow_by_symbol,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
     candidate_snapshot = daily_selection_from_snapshot(research_snapshot, cfg)
     if artifact_root is not None:
@@ -534,6 +536,7 @@ def _coerce_kalcb_research_snapshot(
     daily_foreign_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     daily_institutional_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
 ) -> KALCBResearchSnapshot:
     if isinstance(daily_by_symbol, KALCBResearchSnapshot):
         return daily_by_symbol
@@ -548,6 +551,7 @@ def _coerce_kalcb_research_snapshot(
         daily_foreign_flow_by_symbol=daily_foreign_flow_by_symbol,
         daily_institutional_flow_by_symbol=daily_institutional_flow_by_symbol,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
 
 

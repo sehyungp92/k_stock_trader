@@ -121,7 +121,13 @@ def build_kis_resource_plan(
         kalcb_surface, surface_warnings = extract_kalcb_candidate_surface(kalcb_snapshot, kalcb_cfg)
         surfaces.append(kalcb_surface)
         warnings.extend(surface_warnings)
-        failures.extend(_kalcb_surface_failures(kalcb_surface, kalcb_cfg))
+        failures.extend(
+            _kalcb_surface_failures(
+                kalcb_surface,
+                kalcb_cfg,
+                completed_bar_source=completed_bar_source,
+            )
+        )
 
     olr_cfg = olr_config
     if olr_stage1_snapshot is not None or olr_final_snapshot is not None:
@@ -368,7 +374,12 @@ def _build_lease_windows(
                 ws_reg_budget=ws_budget,
                 order_reserve=profile.order_rest_reserve_per_5m,
                 oms_reserve=profile.oms_reconcile_reserve_per_5m,
-                source="kalcb active_symbols from finalized artifact",
+                source=(
+                    "external completed bars cover KALCB frontier orderable universe"
+                    if completed_bar_source == "external_completed_bars"
+                    and bool(kalcb_config.entry_plan_frontier_branch_universe)
+                    else "kalcb active_symbols from finalized artifact"
+                ),
             )
         )
         windows.append(
@@ -458,7 +469,12 @@ def _build_lease_windows(
     return windows
 
 
-def _kalcb_surface_failures(surface: CandidateSurface, config: KALCBConfig) -> list[str]:
+def _kalcb_surface_failures(
+    surface: CandidateSurface,
+    config: KALCBConfig,
+    *,
+    completed_bar_source: str = DEFAULT_COMPLETED_BAR_SOURCE,
+) -> list[str]:
     failures: list[str] = []
     if len(surface.active_symbols) > int(config.ws_budget):
         failures.append(f"kalcb_ws_budget_exceeded:active={len(surface.active_symbols)} ws_budget={config.ws_budget}")
@@ -489,7 +505,11 @@ def _kalcb_surface_failures(surface: CandidateSurface, config: KALCBConfig) -> l
         failures.append("kalcb_active_symbol_count_mismatch")
     if _metadata_count_mismatch(surface.metadata.get("reported_frontier_symbol_count"), len(surface.frontier_symbols)):
         failures.append("kalcb_frontier_symbol_count_mismatch")
-    if bool(config.entry_plan_frontier_branch_universe) and len(surface.orderable_symbols) > int(config.ws_budget):
+    if (
+        bool(config.entry_plan_frontier_branch_universe)
+        and len(surface.orderable_symbols) > int(config.ws_budget)
+        and str(completed_bar_source or "") != "external_completed_bars"
+    ):
         failures.append("kalcb_frontier_branch_universe_requires_explicit_ws_budget_for_all_orderable_symbols")
     return failures
 

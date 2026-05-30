@@ -91,6 +91,35 @@ def test_driver_records_post_fill_state_transition(tmp_path):
     assert _jsonl(tmp_path / "session" / "decision_stream.jsonl")[-1]["record_type"] == "runtime_no_action"
 
 
+def test_router_records_compact_strategy_state_snapshot(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder, account_state=AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0))
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    engine = KALCBEngine()
+    symbol_state = engine.state.symbol_state("005930")
+    symbol_state.candidate = SimpleNamespace(
+        symbol="005930",
+        trade_date=date(2026, 2, 2),
+        source_fingerprint="unit-source",
+        tradable=True,
+        metadata={"oversized": "x" * 100_000},
+    )
+    symbol_state.add_bar(_bar("005930"))
+
+    state_hash = router.record_state_snapshot("KALCB", engine.state, metadata={"record_reason": "unit"})
+
+    row = _jsonl(tmp_path / "session" / "state_snapshots.jsonl")[0]
+    assert row["state_encoding"] == "kalcb-state-compact-v1"
+    assert row["state_hash"] == state_hash
+    assert row["state"]["symbol_count"] == 1
+    assert row["state"]["symbols_hash"]
+    assert row["state"]["stage_counts"] == {"WATCHING": 1}
+    assert row["state"]["position_symbols"] == []
+    assert row["state"]["pending_symbols"] == []
+    assert "symbols" not in row["state"]
+    assert "oversized" not in json.dumps(row)
+
+
 def test_driver_applies_paper_fill_to_seeded_portfolio_context_when_refresh_empty(tmp_path):
     driver = _driver(tmp_path, _NoActionEngine(), mode="paper", oms=_NoRefreshOMS())
     driver.portfolio_context.account_state = AccountState(equity=1_000.0, buyable_cash=1_000.0)

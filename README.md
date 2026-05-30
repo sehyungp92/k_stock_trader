@@ -1,107 +1,111 @@
 # k_stock_trader
 
-Algorithmic trading system for the Korean stock market (KRX), built on the Korea Investment & Securities (KIS) API.
+Algorithmic trading system for the Korean stock market (KRX), built on the Korea Investment & Securities (KIS) Open API.
 
-PCIM runs through the centralised Order Management System (OMS) with pre-trade risk checks. KALCB and OLR remain available for research, backtests, artifact generation, and deployment readiness workflows.
+The active portfolio is **KALCB** (intraday breakout) and **OLR** (overnight leader rotation with afternoon execution). Both run through a single artifact-gated runtime service that talks to the centralised Order Management System (OMS) for pre-trade risk checks, order routing, and reconciliation.
 
 ## Architecture
 
 ```
-Single-VPS Docker runtime
-+---------------------------+
-|  PCIM Strategy            |
-|  OLR/KALCB Runtime        |
-+---------------------------+
-|  OMS                      |
-|  PostgreSQL               |
-|  Dashboard                |
-+---------------------------+
-              |
-    +---------v---------+
-    |    KIS API        |
-    |  REST + WebSocket |
-    +-------------------+
+Single-VPS Docker stack
++--------------------------------------------+
+|  runtime  (KALCB + OLR, artifact-gated)    |
++--------------------------------------------+
+|  oms        (FastAPI, risk + KIS routing)  |
+|  postgres   (trade lifecycle + state)      |
+|  dashboard  (Next.js, optional profile)    |
++--------------------------------------------+
+                    |
+            +-------v--------+
+            |    KIS API     |
+            | REST + WS      |
+            +----------------+
 ```
 
 ## Strategies
 
-| Strategy | Style | Trading Hours (KST) | Signal Source |
-|----------|-------|---------------------|---------------|
-| **KALCB** | Intraday breakout research | Research/backtest | Completed-bar KRX/KIS replay |
-| **OLR** | Overnight leader rotation | Research/backtest | Daily flow + afternoon execution |
-| **PCIM** | Premarket catalyst | 09:01 - 10:30 | YouTube influencers + Gemini AI |
+| Strategy | Style | Selection Cutoff (KST) | Signal Source |
+|----------|-------|------------------------|---------------|
+| **KALCB** | Intraday breakout | Premarket daily artifact | KRX daily + KIS completed-bar replay |
+| **OLR** | Overnight leader rotation | Stage1 premarket + final at 14:30 | Daily flow (foreign/inst) + afternoon execution context |
 
 ### KALCB
 
-KALCB research and backtest modules evaluate completed-bar breakout candidates with artifact-backed replay paths and promotion checks.
+Structural-campaign breakout on a finalized daily candidate set. The premarket artifact pipeline scores universe symbols on relative strength, daily trend, and compression, then freezes the day's candidates into `data/strategy/kalcb/`. Runtime consumes completed bars and routes intents through OMS.
 
 ### OLR
 
-OLR research and backtest modules build overnight leader selections from daily/flow data, then evaluate afternoon execution plans with explicit holdout and parity artifacts.
+Two-stage artifact pipeline. **Stage 1** runs premarket to build the overnight leader snapshot from daily OHLCV, foreign/institutional flow, and sector panels. **Final** runs after the 14:30 KST cutoff to layer the afternoon execution context (sector intraday panel, ranked entry plan) on top. The runtime is restarted between stages so it loads each artifact at the right time.
 
-### PCIM - AI Premarket Intelligence
-
-Overnight pipeline fetches YouTube videos from configured influencer channels, extracts trading signals via Google Gemini, then scores/filters candidates through gap-reversal checks and trend gates. Two execution buckets (A: early trigger, B: normal) stage entries at market open.
-
-PCIM front-runs the retail attention wave by processing influencer signals overnight before the market opens. AI extraction and scoring allows systematic participation in the opening momentum that retail viewers generate, with trend and gap-reversal filters to avoid crowded or exhausted setups.
+Both strategies share a portfolio arbitration layer (`deployment/olr_kalcb/portfolio.py`) and a single readiness manifest at `data/live_readiness/olr_kalcb/<DATE>/baseline_manifest.json`.
 
 ## Project Structure
 
 ```
 k_stock_trader/
-|-- kis_core/            # KIS API wrapper: REST, WebSocket, auth, rate limiting
-|-- oms/                 # Order Management System: risk gateway, state, persistence
-|-- oms_client/          # Strategy-side OMS client library
-|-- strategy_kalcb/      # KALCB strategy/research support
-|-- strategy_olr/        # OLR strategy/research support
-|-- strategy_pcim/       # PCIM strategy
-|-- config/              # YAML configs per strategy + OMS
-|-- deployment/          # Runtime entrypoints and Docker images
-|-- infra/               # PostgreSQL init scripts, dashboard config, cron wrappers
-|-- scripts/             # Utility scripts (artifacts, migrations, backups, health checks)
-|-- tests/               # Unit + integration tests
-|-- docker-compose.yml   # Canonical single-VPS compose stack
+|-- kis_core/                # KIS API wrapper: REST, WS, auth, rate limiting
+|-- oms/                     # OMS service: risk gateway, allocation, reconciliation
+|-- oms_client/              # Strategy-side OMS HTTP client
+|-- strategy_kalcb/          # KALCB research, signals, models, artifact store
+|-- strategy_olr/            # OLR research, models, artifact store
+|-- strategy_common/         # Shared clock, sector maps, daily/intraday panels, parquet loaders
+|-- strategy_pcim/           # PCIM (research mode, not part of the deployed portfolio)
+|-- deployment/olr_kalcb/    # Unified runtime: coordinator, readiness, replay, session driver
+|-- config/                  # YAML/JSON configs (see below)
+|-- scripts/                 # Artifact generation, preflight, optimization, promotion, parity
+|-- infra/cron/              # Premarket + afternoon restart wrappers
+|-- infra/postgres/          # DB init + retention SQL
+|-- infra/dashboard/         # Next.js dashboard
+|-- data/                    # Artifacts, parquet, paper sessions, readiness manifests
+|-- tests/                   # Unit + integration tests
+|-- docker-compose.yml       # Canonical single-VPS stack
 ```
 
 ## Core Components
 
-### OMS (Order Management System)
+### OMS
 
-FastAPI service that sits between strategies and the KIS broker API.
+FastAPI service between strategies and KIS.
 
-- **Intent-based ordering**: strategies submit `Intent` objects (enter/exit/scale), OMS decides execution
-- **Pre-trade risk gateway**: global limits, daily P&L, exposure caps, per-strategy budgets, sector caps
-- **Position allocation**: virtual per-strategy allocations on top of real broker positions
-- **Reconciliation**: periodic sync with KIS to detect external fills/cancels
-- **Persistence**: full audit trail in PostgreSQL (intents, orders, fills, trades)
+- Intent-based ordering (`enter` / `exit` / `scale`) with deterministic idempotency keys
+- Pre-trade risk gateway: gross exposure, daily P&L, per-strategy budgets, sector caps, frozen symbols
+- Virtual per-strategy allocations on top of real broker positions, updated on fill detection
+- Reconciliation against KIS with `_UNKNOWN_` allocation on drift
+- Full audit trail in Postgres (intents, orders, fills, trades, allocations)
 
-### kis_core
+### OLR/KALCB Runtime (`deployment/olr_kalcb/`)
 
-Shared library wrapping the KIS Open API.
+One container, both strategies. Key pieces:
 
-- REST client with rate limiting and exponential backoff
-- WebSocket client for real-time tick/ask-bid data (40 slots per account)
-- VWAP computation, bar aggregation, technical indicators
-- Universe filtering (market cap, ADTV, listing status)
-- Sector exposure tracking
+- `runtime.py` — preflight, mode gating, session preparation
+- `coordinator.py` / `session_driver.py` — completed-bar dispatch into each strategy
+- `action_router.py` — routes strategy actions through `OMSClient` or the dry-run recorder
+- `portfolio.py` / `portfolio_context.py` — cross-strategy arbitration
+- `readiness.py` — artifact validation + health-check gating
+- `market_data_coordinator.py` — KIS WS completed-bar source with offline replay fallback
+- `replay.py` / `session_capture.py` — paper session capture and replay for parity audits
+
+Runtime modes form an escalating gate: `artifact_only_stage1` → `artifact_only` → `dry_run` → `paper` → `live`, each requiring the previous mode's gate to have passed plus its own health checks.
 
 ### Database
 
-PostgreSQL stores the full trade lifecycle:
+PostgreSQL stores the full trade lifecycle and readiness state:
 
-- `intents` / `orders` / `fills` / `trades` - order flow audit trail
-- `positions` / `allocations` - real and virtual position state
-- `risk_daily_strategy` / `risk_daily_portfolio` - daily risk snapshots
-- Dashboard views: `v_live_positions`, `v_live_allocations`, `v_today_risk`, `v_strategy_performance`, `v_service_health`
+- `intents` / `orders` / `order_events` / `fills` / `trades`
+- `positions` / `allocations`
+- `risk_daily_strategy` / `risk_daily_portfolio` / `recon_log` / `oms_state` / `strategy_state`
+- Views: `v_live_positions`, `v_live_allocations`, `v_today_risk`, `v_strategy_performance`, `v_service_health`
+
+Retention: see `infra/postgres/retention.sql` (order_events 60d, intents 90d, recon_log 30d).
 
 ## Setup
 
 ### Prerequisites
 
 - Python 3.12+
-- Docker and Docker Compose
+- Docker + Docker Compose
 - KIS Open API credentials (paper or production)
-- Google Gemini API key (PCIM strategy only)
+- KRX daily parquet + KIS intraday parquet mounted at `data/krx_daily_parquet/` and `data/kis_intraday_parquet/`
 
 ### Environment
 
@@ -112,109 +116,157 @@ Copy `.env.example` to `.env` and fill in:
 KIS_APP_KEY=...
 KIS_APP_SECRET=...
 KIS_ACCOUNT_NO=...
+KIS_ACCOUNT_PROD_CODE=01
 KIS_IS_PAPER=true
+KIS_HTS_ID=...
 
-# Paper trading credentials (separate from real)
+# Paper trading credentials (optional, if separate)
 KIS_PAPER_APP_KEY=...
 KIS_PAPER_APP_SECRET=...
 KIS_PAPER_ACCOUNT_NO=...
 
-# Database
+# Postgres
 POSTGRES_PASSWORD=...
 POSTGRES_WRITER_PASSWORD=...
+POSTGRES_READER_PASSWORD=...
 
-# PCIM only
-GEMINI_API_KEY=...
+# OLR/KALCB runtime
+OLR_KALCB_RUNTIME_MODE=dry_run
+OLR_KALCB_DAILY_UNIVERSE_FILE=config/olr_kalcb/olr_deployment_universe_103.yaml
+OLR_KALCB_BASELINE_MANIFEST=/app/data/live_readiness/olr_kalcb/<DATE>/baseline_manifest.json
+OLR_KALCB_BARS_PARQUET=    # required before starting runtime container
+OLR_KALCB_START_RUNTIME_AFTER_PREMARKET=false
+OLR_KALCB_RESTART_RUNTIME_AFTER_AFTERNOON=true
 ```
-
-### Local Development
-
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run tests
-pytest tests/ -v
-
-# Start base services locally (Postgres + OMS)
-docker compose up --build
-
-# Start optional strategy/dashboard services
-docker compose --profile pcim up --build pcim
-docker compose --profile dashboard up --build dashboard
-
-# Start the OLR/KALCB runtime after artifacts and runtime env are ready
-docker compose --profile olr-kalcb up --build runtime
-```
-
-### Production Deployment
-
-```bash
-# Build the canonical single-VPS stack, including profiled services
-docker compose --profile all build
-
-# Start shared infrastructure first
-docker compose up -d postgres oms
-
-# Apply existing-database migrations when upgrading an installed VPS
-scripts/apply_db_migrations.sh
-
-# Start optional services for the portfolio
-docker compose --profile dashboard up -d dashboard
-docker compose --profile pcim up -d pcim
-
-# Generate date-sensitive OLR/KALCB artifacts explicitly, then restart runtime
-infra/cron/olr_kalcb_premarket_restart.sh
-infra/cron/olr_kalcb_afternoon_restart.sh
-```
-
-The premarket wrapper defaults to the approved OLR deployment universe manifest at `config/olr_kalcb/olr_deployment_universe_103.yaml`; replacing it should be a reviewed config change, not an ad hoc runtime fallback.
 
 ### Configuration
 
-Each strategy has a YAML config in `config/`:
-
 | File | Purpose |
 |------|---------|
-| `kalcb.yaml` | KALCB runtime/research settings |
-| `olr.yaml` | OLR runtime/research settings |
-| `pcim.yaml` | YouTube channels, AI settings, filters |
-| `oms_config.yaml` | Risk limits, exposure caps, reconciliation |
-| `conservative.yaml` | Tighter thresholds for cautious mode |
+| `config/kalcb.yaml` | KALCB strategy + research settings |
+| `config/olr/sector_map.yaml` | Canonical OLR sector mapping |
+| `config/olr_kalcb/olr_deployment_universe_103.yaml` | Approved 103-symbol deployment universe |
+| `config/olr_kalcb/portfolio_policy.conservative.json` | Cross-strategy arbitration policy |
+| `config/backtests/kalcb.yaml` | KALCB backtest configuration |
+| `config/optimization/kalcb.yaml`, `config/optimization/olr.yaml` | Optimization search configs |
+| `config/optimization/portfolio_synergy.yaml` | Joint portfolio search |
+| `config/oms_config.yaml` | Risk limits, exposure caps, reconciliation |
+| `config/conservative.yaml` | Tighter thresholds (`CONSERVATIVE_MODE=true`) |
+| `config/universe_103.yaml` | Base universe definition |
 
-Set `CONSERVATIVE_MODE=true` in `.env` to activate tighter entry filters across all strategies.
+Replacing the approved deployment universe should be a reviewed config change, not an ad-hoc runtime override.
 
-## Testing
+## Daily Operations
+
+### Premarket gate
+
+Run after KRX/KIS daily data is refreshed, before market open:
 
 ```bash
-# All tests
+infra/cron/olr_kalcb_premarket_restart.sh
+```
+
+This:
+1. Brings up `postgres` and `oms`.
+2. Stops the current `runtime` container.
+3. Generates the KALCB daily artifact and the OLR stage1 artifact.
+4. Runs the `artifact_only_stage1` preflight gate.
+5. Optionally starts the runtime if `OLR_KALCB_START_RUNTIME_AFTER_PREMARKET=true` (requires `OLR_KALCB_BARS_PARQUET`).
+
+### Afternoon gate
+
+Run after the 14:30 KST completed-bar cutoff:
+
+```bash
+infra/cron/olr_kalcb_afternoon_restart.sh
+```
+
+This generates the OLR final afternoon artifact, runs the `artifact_only` gate, then recreates the `runtime` container so it loads the final OLR snapshot.
+
+### Manual artifact + preflight commands
+
+```bash
+# KALCB daily + OLR stage1 (premarket)
+docker compose run --rm runtime \
+  python scripts/generate_olr_kalcb_artifacts.py daily \
+    --trade-date 2026-05-28 \
+    --daily-universe-file config/olr_kalcb/olr_deployment_universe_103.yaml
+
+# OLR final (afternoon, after 14:30 KST)
+docker compose run --rm runtime \
+  python scripts/generate_olr_kalcb_artifacts.py afternoon \
+    --trade-date 2026-05-28
+
+# Preflight (modes: artifact_only_stage1 | artifact_only | dry_run | paper | live)
+docker compose run --rm runtime \
+  python scripts/run_olr_kalcb_runtime_session.py preflight \
+    --trade-date 2026-05-28 --mode dry_run
+
+# Replay completed bars from parquet without starting the runtime loop
+docker compose run --rm runtime \
+  python scripts/run_olr_kalcb_runtime_session.py dry-run-bars \
+    --trade-date 2026-05-28 --bars-parquet /app/data/kis_intraday_parquet/...
+```
+
+### Local development
+
+```bash
+pip install -r requirements.txt
 pytest tests/ -v
 
-# By component
-pytest tests/oms/ -v
-pytest tests/strategy_kalcb/ -v
-pytest tests/strategy_olr/ -v
-pytest tests/strategy_pcim/ -v
-pytest tests/kis_core/ -v
+# Base services
+docker compose up -d postgres oms
+
+# Runtime (after artifacts + readiness manifest exist for the trade date)
+docker compose --profile olr-kalcb up --build runtime
+
+# Dashboard (optional)
+docker compose --profile dashboard up -d dashboard
+
+# Apply DB migrations on an existing VPS
+scripts/apply_db_migrations.sh
 ```
+
+## Research, Backtests, and Promotion
+
+Research and optimization live in `scripts/` and the strategy packages. Key entry points:
+
+- `strategy_kalcb/research.py`, `strategy_kalcb/research_generator.py` — KALCB candidate generation
+- `strategy_olr/research.py`, `strategy_olr/research_generator.py` — OLR research pipeline
+- `scripts/kalcb_*.py` — KALCB optimization sweeps, OOS ablations, route conversion, structural reruns
+- `scripts/olr_*.py` — OLR score-band searches, sector data sweeps, reject filter analysis
+- `scripts/promote_kalcb_*.py`, `scripts/promote_olr_*.py` — promotion scripts that snapshot champion configs into `data/strategy/<strategy>/`
+- `scripts/replay_paper_session.py`, `scripts/summarize_paper_parity.py` — paper/live parity audits
+
+Backtest configs are under `config/backtests/`; optimization configs under `config/optimization/`.
 
 ## Monitoring
 
 ### Dashboard
 
-Available on the single VPS at port 3000 after starting the `dashboard` profile. Lightweight Next.js dashboard (`infra/dashboard/`) reads shared Postgres views server-side and shows positions, risk, and service health.
+`docker compose --profile dashboard up -d dashboard` exposes the Next.js dashboard on port 3000. It reads shared Postgres views server-side and shows positions, allocations, risk, and service health.
 
-### Log Diagnostics
-
-Containers log structured diagnostics. Key grep patterns:
+### Log diagnostics
 
 ```bash
-# OMS health
-docker compose logs oms 2>&1 | grep "KIS order rejected\|Limit BUY failed"
+# Runtime artifact + preflight events
+docker compose logs runtime 2>&1 | grep -E "artifact|preflight|gate"
 
-# Strategy status
-docker compose logs pcim 2>&1 | grep "Signal\|Entry rejected\|OMS returned"
+# OMS health and rejections
+docker compose logs oms 2>&1 | grep -iE "reject|halt|breach|KIS order"
 
-# Risk events
-docker compose logs oms 2>&1 | grep -i "reject\|halt\|breach"
+# Strategy actions routed through OMS
+docker compose logs runtime 2>&1 | grep -E "KALCB|OLR" | grep -iE "intent|fill|exit"
+```
+
+## Testing
+
+```bash
+pytest tests/ -v
+
+pytest tests/oms/ -v
+pytest tests/strategy_kalcb/ -v
+pytest tests/strategy_olr/ -v
+pytest tests/kis_core/ -v
+pytest tests/deployment/olr_kalcb/ -v
 ```

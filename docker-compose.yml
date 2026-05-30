@@ -118,7 +118,7 @@ services:
     environment:
       <<: *common-env
       OMS_URL: http://oms:8000
-      OLR_KALCB_BASELINE_MANIFEST: /app/data/live_readiness/olr_kalcb/2026-05-27/baseline_manifest.json
+      OLR_KALCB_BASELINE_MANIFEST: ${OLR_KALCB_BASELINE_MANIFEST:-/app/data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json}
       OLR_KALCB_DAILY_UNIVERSE_FILE: ${OLR_KALCB_DAILY_UNIVERSE_FILE:-config/olr_kalcb/olr_deployment_universe_103.yaml}
       OLR_KALCB_PORTFOLIO_POLICY: /app/config/olr_kalcb/portfolio_policy.conservative.json
       OLR_KALCB_SECTOR_MAP: /app/config/olr/sector_map.yaml
@@ -172,7 +172,7 @@ services:
     image: postgres:16-alpine
     container_name: postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: trading
       POSTGRES_USER: postgres

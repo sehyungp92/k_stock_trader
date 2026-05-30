@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -44,6 +44,7 @@ def generate_kalcb_daily(
     source_fingerprint: str | None = None,
     candidate_config_hash: str | None = None,
     config_mutations: dict[str, Any] | None = None,
+    generated_at: datetime | None = None,
 ) -> tuple[KALCBDailySnapshot, ArtifactGenerationResult]:
     started = monotonic()
     cfg = config or KALCBConfig()
@@ -60,6 +61,7 @@ def generate_kalcb_daily(
         candidate_config_hash=candidate_config_hash,
         config_mutations=config_mutations,
         source=KALCB_CANONICAL_SOURCE,
+        generated_at=generated_at,
     )
     path = KALCBArtifactStore(artifact_root).path_for(trade_date)
     return snapshot, _result("KALCB", snapshot, path, monotonic() - started)
@@ -77,6 +79,7 @@ def generate_olr_daily(
     index_ohlcv_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     artifact_root: str | Path = "data/strategy/olr",
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
 ) -> tuple[OLRDailySnapshot, ArtifactGenerationResult]:
     started = monotonic()
     snapshot = generate_olr_candidate_snapshot(
@@ -90,6 +93,7 @@ def generate_olr_daily(
         index_ohlcv_by_symbol=index_ohlcv_by_symbol,
         artifact_root=artifact_root,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
     path = OLRArtifactStore(artifact_root).path_for(trade_date, artifact_stage=OLR_STAGE1_ARTIFACT_STAGE)
     return snapshot, _result("OLR", snapshot, path, monotonic() - started)

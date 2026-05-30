@@ -28,7 +28,9 @@ from deployment.olr_kalcb.runtime import EXECUTION_MODES, prepare_runtime_sessio
 from deployment.olr_kalcb.session_capture import PaperSessionRecorder, market_bar_hash
 from strategy_olr.artifact_store import OLR_FINAL_ARTIFACT_STAGE, OLRArtifactStore
 
-DEFAULT_BASELINE_MANIFEST = Path("data/live_readiness/olr_kalcb/2026-05-27/baseline_manifest.json")
+DEFAULT_BASELINE_MANIFEST = Path(
+    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json")
+)
 DEFAULT_PORTFOLIO_POLICY = Path("config/olr_kalcb/portfolio_policy.conservative.json")
 DEFAULT_SECTOR_MAP = Path("config/olr/sector_map.yaml")
 DEFAULT_SESSION_ROOT = Path("data/paper_live/olr_kalcb")
@@ -492,6 +494,7 @@ def _prepare_plan(
         session_recorder=recorder,
         portfolio_config=portfolio_policy,
         strategy_config_source=strategy_config_source,
+        completed_bar_source=_resolve_market_data_source(args, mode),
         sector_map=sector_map,
         initial_account_state=initial_account_state,
         initial_positions=initial_positions,

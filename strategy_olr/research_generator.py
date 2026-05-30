@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ def generate_research_snapshot(
     institutional_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     index_ohlcv_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
 ) -> OLRResearchSnapshot:
     """Build today's causal OLR research snapshot from prepared completed daily rows."""
 
@@ -35,6 +36,7 @@ def generate_research_snapshot(
         institutional_flow_by_symbol=institutional_flow_by_symbol,
         index_ohlcv_by_symbol=index_ohlcv_by_symbol,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
 
 
@@ -50,6 +52,7 @@ def generate_candidate_snapshot(
     index_ohlcv_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     artifact_root: str | Path | None = "data/strategy/olr",
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
     lrs=None,
 ) -> OLRDailySnapshot:
     cfg = config or OLRConfig()
@@ -63,6 +66,7 @@ def generate_candidate_snapshot(
         institutional_flow_by_symbol=institutional_flow_by_symbol,
         index_ohlcv_by_symbol=index_ohlcv_by_symbol,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
     return run_daily_selection(
         research_snapshot,

@@ -35,7 +35,7 @@ from strategy_olr.artifact_store import OLR_STAGE1_ARTIFACT_STAGE
 from strategy_olr.config import OLRConfig
 from strategy_olr.research import load_candidate_snapshot
 
-DEFAULT_BASELINE_MANIFEST = Path(os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-27/baseline_manifest.json"))
+DEFAULT_BASELINE_MANIFEST = Path(os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json"))
 DEFAULT_DAILY_UNIVERSE_FILE = Path(os.environ.get("OLR_KALCB_DAILY_UNIVERSE_FILE", "config/olr_kalcb/olr_deployment_universe_103.yaml"))
 DEFAULT_DAILY_ROOT = Path(os.environ.get("OLR_KALCB_DAILY_ROOT", "data/krx_daily_parquet"))
 DEFAULT_INTRADAY_ROOT = Path(os.environ.get("OLR_KALCB_INTRADAY_ROOT", "data/kis_intraday_parquet"))
@@ -94,6 +94,7 @@ def run_daily(args: argparse.Namespace) -> dict[str, Any]:
     trade_date = date.fromisoformat(args.trade_date)
     daily_end = date.fromisoformat(args.daily_end) if args.daily_end else trade_date - timedelta(days=1)
     daily_start = daily_end - timedelta(days=int(args.daily_lookback_days))
+    fixture_generated_at = _parse_fixture_generated_at(getattr(args, "fixture_generated_at", None))
     configs = _load_strategy_configs(args.baseline_manifest)
     sector_map = _load_sector_map(args.sector_map)
     strategies = {str(item).upper().strip() for item in args.strategies}
@@ -136,6 +137,7 @@ def run_daily(args: argparse.Namespace) -> dict[str, Any]:
             artifact_root=_resolve_path(args.kalcb_artifact_root),
             source_fingerprint=args.source_fingerprint or None,
             config_mutations=configs["KALCB"]["mutations"],
+            generated_at=fixture_generated_at,
         )
         results.append(_result_payload(result))
     if "OLR" in strategies:
@@ -150,6 +152,7 @@ def run_daily(args: argparse.Namespace) -> dict[str, Any]:
             index_ohlcv_by_symbol=bundle["index_ohlcv_by_symbol"],
             artifact_root=_resolve_path(args.olr_artifact_root),
             source_fingerprint=args.source_fingerprint or None,
+            generated_at=fixture_generated_at,
         )
         results.append(_result_payload(result))
 
@@ -170,6 +173,7 @@ def run_daily(args: argparse.Namespace) -> dict[str, Any]:
         "unexpected_symbols": list(universe.unexpected_symbols),
         "sector_map_count": len(sector_map),
         "baseline_manifest": str(_resolve_path(args.baseline_manifest)),
+        "fixture_generated_at": fixture_generated_at.isoformat() if fixture_generated_at else "",
         "results": results,
         "next_gate": f"python scripts/run_olr_kalcb_runtime_session.py preflight --trade-date {trade_date.isoformat()} --mode artifact_only_stage1",
     }
@@ -693,6 +697,14 @@ def _row_date(row: Mapping[str, Any]) -> date | None:
     return datetime.fromisoformat(text).date() if "T" in text else date.fromisoformat(text[:10])
 
 
+def _parse_fixture_generated_at(value: str | None) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=KST)
+
+
 def _frame_records(frame: Any, *, drop: Sequence[str] = ()) -> list[dict[str, Any]]:
     if frame is None or frame.empty:
         return []
@@ -787,6 +799,7 @@ def _parser() -> argparse.ArgumentParser:
     daily.add_argument("--max-daily-lag-days", type=int, default=4, help="Reject daily inputs older than this many calendar days before trade date.")
     daily.add_argument("--strategies", nargs="+", default=["KALCB", "OLR"], choices=("KALCB", "OLR"))
     daily.add_argument("--source-fingerprint", help="Override source fingerprint; normally omitted so generators hash causal rows.")
+    daily.add_argument("--fixture-generated-at", help="Fixture rehearsal only: override daily artifact generated_at timestamp, ISO format.")
     daily.add_argument("--allow-partial-universe", action="store_true", help="Fixture/shadow only: allow missing or subset daily universe inputs.")
 
     afternoon = subparsers.add_parser("afternoon", help="Generate the OLR final afternoon artifact from completed 5m bars.")

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ def generate_research_snapshot(
     daily_foreign_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     daily_institutional_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
 ) -> KALCBResearchSnapshot:
     """Build today's research snapshot from already prepared daily bars.
 
@@ -43,6 +44,7 @@ def generate_research_snapshot(
         daily_foreign_flow_by_symbol=daily_foreign_flow_by_symbol,
         daily_institutional_flow_by_symbol=daily_institutional_flow_by_symbol,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
 
 
@@ -57,6 +59,7 @@ def generate_candidate_snapshot(
     daily_institutional_flow_by_symbol: dict[str, list[dict[str, Any]]] | None = None,
     artifact_root: str | Path | None = None,
     source_fingerprint: str | None = None,
+    generated_at: datetime | None = None,
     lrs=None,
 ) -> KALCBDailySnapshot:
     """Build the research-stage candidate snapshot.
@@ -76,6 +79,7 @@ def generate_candidate_snapshot(
         daily_institutional_flow_by_symbol=daily_institutional_flow_by_symbol,
         artifact_root=artifact_root,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
         lrs=lrs,
     )
 
@@ -94,6 +98,7 @@ def generate_finalized_candidate_snapshot(
     candidate_config_hash: str | None = None,
     config_mutations: dict[str, Any] | None = None,
     source: str = KALCB_CANONICAL_SOURCE,
+    generated_at: datetime | None = None,
     lrs=None,
 ) -> KALCBDailySnapshot:
     config_was_defaulted = config is None
@@ -115,6 +120,7 @@ def generate_finalized_candidate_snapshot(
         daily_institutional_flow_by_symbol=daily_institutional_flow_by_symbol,
         artifact_root=None,
         source_fingerprint=source_fingerprint,
+        generated_at=generated_at,
     )
     snapshot = finalize_candidate_snapshot(
         base,
@@ -126,6 +132,7 @@ def generate_finalized_candidate_snapshot(
         unavailable_symbols=(),
         source_universe_count=len(daily_by_symbol),
         sector_map_size=len(sector_map or {}),
+        generated_at=generated_at,
     )
     if artifact_root is not None:
         KALCBArtifactStore(artifact_root).save_snapshot(snapshot)

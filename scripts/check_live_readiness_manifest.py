@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deployment.olr_kalcb.hashing import file_sha256
+
+DEFAULT_BASELINE_MANIFEST = Path(
+    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json")
+)
 
 
 def check_manifest(path: str | Path) -> dict:
@@ -54,7 +59,7 @@ def check_manifest(path: str | Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify an OLR/KALCB live-readiness baseline manifest.")
-    parser.add_argument("manifest", nargs="?", default="data/live_readiness/olr_kalcb/2026-05-27/baseline_manifest.json")
+    parser.add_argument("manifest", nargs="?", default=str(DEFAULT_BASELINE_MANIFEST))
     args = parser.parse_args()
     result = check_manifest(args.manifest)
     print(json.dumps(result, indent=2, sort_keys=True))

@@ -159,6 +159,59 @@ def test_resource_plan_router_restricts_kalcb_to_active_and_routes_olr_final_onl
     ) == ()
 
 
+def test_kalcb_frontier_branch_can_replay_from_external_completed_bars_without_kis_ws_budget_failure():
+    trade_date = date(2026, 2, 2)
+    kalcb_cfg = KALCBConfig.from_mapping(
+        {
+            "kalcb.session.ws_budget": 2,
+            "kalcb.frontier.size": 4,
+            "kalcb.entry.frontier_branch_universe": True,
+        }
+    )
+    snapshot = _kalcb_snapshot(trade_date, kalcb_cfg, count=4, active_count=2)
+
+    plan = build_kis_resource_plan(
+        trade_date=trade_date,
+        mode="dry_run",
+        kalcb_config=kalcb_cfg,
+        kalcb_snapshot=snapshot,
+        completed_bar_source="external_completed_bars",
+    )
+
+    assert plan.passed is True
+    assert "kalcb_frontier_branch_universe_requires_explicit_ws_budget_for_all_orderable_symbols" not in plan.failures
+    assert candidate_surface_for(plan, "KALCB").orderable_symbols == _symbols(4)
+    assert target_strategy_ids_for_bar(
+        plan,
+        symbol="000003",
+        timestamp=datetime.combine(trade_date, time(10, 30), tzinfo=KST),
+        available_strategy_ids=("KALCB",),
+    ) == ("KALCB",)
+
+
+def test_kalcb_frontier_branch_still_blocks_kis_websocket_when_orderable_exceeds_ws_budget():
+    trade_date = date(2026, 2, 2)
+    kalcb_cfg = KALCBConfig.from_mapping(
+        {
+            "kalcb.session.ws_budget": 2,
+            "kalcb.frontier.size": 4,
+            "kalcb.entry.frontier_branch_universe": True,
+        }
+    )
+
+    plan = build_kis_resource_plan(
+        trade_date=trade_date,
+        mode="paper",
+        kalcb_config=kalcb_cfg,
+        kalcb_snapshot=_kalcb_snapshot(trade_date, kalcb_cfg, count=4, active_count=2),
+        completed_bar_source="kis_websocket",
+        kis_is_paper=True,
+    )
+
+    assert plan.passed is False
+    assert "kalcb_frontier_branch_universe_requires_explicit_ws_budget_for_all_orderable_symbols" in plan.failures
+
+
 def test_kalcb_resource_plan_fails_inconsistent_active_frontier_metadata():
     trade_date = date(2026, 2, 2)
     config = KALCBConfig.from_mapping({"kalcb.session.ws_budget": 2, "kalcb.selection.frontier_size": 4})
