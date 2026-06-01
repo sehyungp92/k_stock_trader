@@ -2,24 +2,622 @@
   "compression": "zstd",
   "convert_after_download": true,
   "counts": {
-    "converted": 0,
+    "converted": 65,
     "errors": 0,
     "skipped": 0,
-    "total": 0
+    "total": 65
   },
-  "created_at": "2026-06-01T01:37:51.919262",
+  "created_at": "2026-06-01T05:26:31.249307",
   "download_workers": 4,
-  "files": [],
+  "files": [
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000100\\000100_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 122612,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000100\\000100_15m_20250529_20260529.parquet",
+      "rows": 6578,
+      "source_bytes": 444191,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000100\\000100_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 36469,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000100\\000100_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 116339,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000100\\000100_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1316464,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000100\\000100_1m_20250529_20260529.parquet",
+      "rows": 92786,
+      "source_bytes": 6142776,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000100\\000100_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 66037,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000100\\000100_30m_20250529_20260529.parquet",
+      "rows": 3412,
+      "source_bytes": 231828,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000100\\000100_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 311311,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000100\\000100_5m_20250529_20260529.parquet",
+      "rows": 18756,
+      "source_bytes": 1257871,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000270\\000270_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 128591,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000270\\000270_15m_20250529_20260529.parquet",
+      "rows": 6578,
+      "source_bytes": 450832,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000270\\000270_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 39914,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000270\\000270_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 117996,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000270\\000270_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1411341,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000270\\000270_1m_20250529_20260529.parquet",
+      "rows": 92790,
+      "source_bytes": 6235528,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000270\\000270_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 71392,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000270\\000270_30m_20250529_20260529.parquet",
+      "rows": 3412,
+      "source_bytes": 234650,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000270\\000270_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 340129,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000270\\000270_5m_20250529_20260529.parquet",
+      "rows": 18756,
+      "source_bytes": 1275400,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000660\\000660_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 141750,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000660\\000660_15m_20250529_20260529.parquet",
+      "rows": 6574,
+      "source_bytes": 461754,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000660\\000660_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 42788,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000660\\000660_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 120838,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000660\\000660_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1490432,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000660\\000660_1m_20250529_20260529.parquet",
+      "rows": 92782,
+      "source_bytes": 6399062,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000660\\000660_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 79440,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000660\\000660_30m_20250529_20260529.parquet",
+      "rows": 3408,
+      "source_bytes": 240753,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000660\\000660_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 368081,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000660\\000660_5m_20250529_20260529.parquet",
+      "rows": 18752,
+      "source_bytes": 1307616,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000720\\000720_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 132869,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000720\\000720_15m_20250529_20260529.parquet",
+      "rows": 6575,
+      "source_bytes": 437584,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000720\\000720_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 40654,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000720\\000720_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 114651,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000720\\000720_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1430465,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000720\\000720_1m_20250529_20260529.parquet",
+      "rows": 92769,
+      "source_bytes": 6057162,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000720\\000720_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 73406,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000720\\000720_30m_20250529_20260529.parquet",
+      "rows": 3409,
+      "source_bytes": 227692,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\000720\\000720_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 346637,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\000720\\000720_5m_20250529_20260529.parquet",
+      "rows": 18753,
+      "source_bytes": 1239011,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\001040\\001040_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 119461,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\001040\\001040_15m_20250529_20260529.parquet",
+      "rows": 6578,
+      "source_bytes": 448187,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\001040\\001040_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 37892,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\001040\\001040_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 117547,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\001040\\001040_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1413166,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\001040\\001040_1m_20250529_20260529.parquet",
+      "rows": 92783,
+      "source_bytes": 6212461,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\001040\\001040_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 67121,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\001040\\001040_30m_20250529_20260529.parquet",
+      "rows": 3412,
+      "source_bytes": 233496,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\001040\\001040_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 309040,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\001040\\001040_5m_20250529_20260529.parquet",
+      "rows": 18756,
+      "source_bytes": 1270558,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003490\\003490_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 112100,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003490\\003490_15m_20250529_20260529.parquet",
+      "rows": 6578,
+      "source_bytes": 428571,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003490\\003490_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 33581,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003490\\003490_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 112411,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003490\\003490_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1211714,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003490\\003490_1m_20250529_20260529.parquet",
+      "rows": 92793,
+      "source_bytes": 5924369,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003490\\003490_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 61771,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003490\\003490_30m_20250529_20260529.parquet",
+      "rows": 3412,
+      "source_bytes": 223386,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003490\\003490_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 299282,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003490\\003490_5m_20250529_20260529.parquet",
+      "rows": 18756,
+      "source_bytes": 1213036,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003550\\003550_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 119140,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003550\\003550_15m_20250529_20260529.parquet",
+      "rows": 6575,
+      "source_bytes": 425939,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003550\\003550_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 36142,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003550\\003550_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 111655,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003550\\003550_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1312677,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003550\\003550_1m_20250529_20260529.parquet",
+      "rows": 92765,
+      "source_bytes": 5885906,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003550\\003550_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 65554,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003550\\003550_30m_20250529_20260529.parquet",
+      "rows": 3409,
+      "source_bytes": 222313,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003550\\003550_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 310034,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003550\\003550_5m_20250529_20260529.parquet",
+      "rows": 18753,
+      "source_bytes": 1206067,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003670\\003670_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 129244,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003670\\003670_15m_20250529_20260529.parquet",
+      "rows": 6576,
+      "source_bytes": 450628,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003670\\003670_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 40163,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003670\\003670_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 118021,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003670\\003670_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1413397,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003670\\003670_1m_20250529_20260529.parquet",
+      "rows": 92783,
+      "source_bytes": 6238070,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003670\\003670_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 72010,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003670\\003670_30m_20250529_20260529.parquet",
+      "rows": 3410,
+      "source_bytes": 234958,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\003670\\003670_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 333760,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\003670\\003670_5m_20250529_20260529.parquet",
+      "rows": 18754,
+      "source_bytes": 1276194,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004020\\004020_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 119535,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004020\\004020_15m_20250529_20260529.parquet",
+      "rows": 6578,
+      "source_bytes": 426697,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004020\\004020_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 36454,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004020\\004020_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 111600,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004020\\004020_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1341172,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004020\\004020_1m_20250529_20260529.parquet",
+      "rows": 92776,
+      "source_bytes": 5893762,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004020\\004020_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 66370,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004020\\004020_30m_20250529_20260529.parquet",
+      "rows": 3412,
+      "source_bytes": 222219,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004020\\004020_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 317383,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004020\\004020_5m_20250529_20260529.parquet",
+      "rows": 18756,
+      "source_bytes": 1206140,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004170\\004170_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 118600,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004170\\004170_15m_20250529_20260529.parquet",
+      "rows": 6576,
+      "source_bytes": 445591,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004170\\004170_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 38742,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004170\\004170_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 116508,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004170\\004170_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1352221,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004170\\004170_1m_20250529_20260529.parquet",
+      "rows": 92663,
+      "source_bytes": 6157180,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004170\\004170_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 67879,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004170\\004170_30m_20250529_20260529.parquet",
+      "rows": 3410,
+      "source_bytes": 231966,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004170\\004170_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 312771,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004170\\004170_5m_20250529_20260529.parquet",
+      "rows": 18754,
+      "source_bytes": 1260189,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004990\\004990_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 113803,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004990\\004990_15m_20250529_20260529.parquet",
+      "rows": 6577,
+      "source_bytes": 423532,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004990\\004990_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 33935,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004990\\004990_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 111041,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004990\\004990_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1297709,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004990\\004990_1m_20250529_20260529.parquet",
+      "rows": 92643,
+      "source_bytes": 5838620,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004990\\004990_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 62665,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004990\\004990_30m_20250529_20260529.parquet",
+      "rows": 3411,
+      "source_bytes": 220910,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\004990\\004990_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 295508,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\004990\\004990_5m_20250529_20260529.parquet",
+      "rows": 18755,
+      "source_bytes": 1198789,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005300\\005300_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 107240,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005300\\005300_15m_20250529_20260529.parquet",
+      "rows": 6575,
+      "source_bytes": 442570,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005300\\005300_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 34274,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005300\\005300_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 116059,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005300\\005300_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1292927,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005300\\005300_1m_20250529_20260529.parquet",
+      "rows": 91148,
+      "source_bytes": 6018319,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005300\\005300_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 60928,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005300\\005300_30m_20250529_20260529.parquet",
+      "rows": 3409,
+      "source_bytes": 230801,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005300\\005300_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 290508,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005300\\005300_5m_20250529_20260529.parquet",
+      "rows": 18753,
+      "source_bytes": 1254232,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005930\\005930_15m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 140419,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005930\\005930_15m_20250529_20260529.parquet",
+      "rows": 6578,
+      "source_bytes": 450460,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005930\\005930_1h_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 41995,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005930\\005930_1h_20250529_20260529.parquet",
+      "rows": 1706,
+      "source_bytes": 118130,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005930\\005930_1m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 1579570,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005930\\005930_1m_20250529_20260529.parquet",
+      "rows": 92793,
+      "source_bytes": 6239893,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005930\\005930_30m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 77542,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005930\\005930_30m_20250529_20260529.parquet",
+      "rows": 3412,
+      "source_bytes": 235039,
+      "status": "converted"
+    },
+    {
+      "csv_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\005930\\005930_5m_20250529_20260529.csv",
+      "message": "",
+      "parquet_bytes": 379519,
+      "parquet_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet\\005930\\005930_5m_20250529_20260529.parquet",
+      "rows": 18756,
+      "source_bytes": 1276981,
+      "status": "converted"
+    }
+  ],
   "incremental_manifest": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\incremental_manifest.json",
   "input_dir": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday",
   "min_file_age_sec": 0.0,
   "overwrite": true,
   "parquet_output_dir": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet",
   "request_min_interval_sec": 2.0,
-  "skip_up_to_date": true,
+  "skip_up_to_date": false,
   "source": "update_kis_intraday.py",
   "symbols": [
-    "000100"
+    "000100",
+    "000270",
+    "000660",
+    "000720",
+    "001040",
+    "003490",
+    "003550",
+    "003670",
+    "004020",
+    "004170",
+    "004990",
+    "005300",
+    "005930"
   ],
   "timeframes": [
     "1m",
@@ -29,43 +627,43 @@
     "1h"
   ],
   "validation": {
-    "checked": 5,
+    "checked": 65,
     "failures": [],
     "passed": true,
     "target_end": "2026-05-29",
     "timeframes": {
       "15m": {
-        "checked": 1,
+        "checked": 13,
         "latest_max": "2026-05-29T15:30:00+09:00",
-        "latest_min": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:15:00+09:00",
         "missing": 0,
         "stale": 0
       },
       "1h": {
-        "checked": 1,
+        "checked": 13,
         "latest_max": "2026-05-29T15:00:00+09:00",
         "latest_min": "2026-05-29T15:00:00+09:00",
         "missing": 0,
         "stale": 0
       },
       "1m": {
-        "checked": 1,
+        "checked": 13,
         "latest_max": "2026-05-29T15:30:00+09:00",
-        "latest_min": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:19:00+09:00",
         "missing": 0,
         "stale": 0
       },
       "30m": {
-        "checked": 1,
+        "checked": 13,
         "latest_max": "2026-05-29T15:30:00+09:00",
-        "latest_min": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:00:00+09:00",
         "missing": 0,
         "stale": 0
       },
       "5m": {
-        "checked": 1,
+        "checked": 13,
         "latest_max": "2026-05-29T15:30:00+09:00",
-        "latest_min": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:15:00+09:00",
         "missing": 0,
         "stale": 0
       }
