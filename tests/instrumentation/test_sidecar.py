@@ -77,6 +77,31 @@ def test_read_unsent_events_streams_jsonl_with_watermark(tmp_path, monkeypatch):
     assert [json.loads(event["payload"])["trade_id"] for event in events] == ["t2", "t3"]
 
 
+def test_daily_directory_includes_canonical_jsonl(tmp_path, monkeypatch):
+    monkeypatch.delenv("RELAY_URL", raising=False)
+
+    daily_dir = tmp_path / "daily"
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    filepath = daily_dir / "daily_2026-03-10.jsonl"
+    filepath.write_text(
+        json.dumps(
+            {
+                "event_id": "evt-1",
+                "bot_id": "k_stock_trader",
+                "event_type": "session_closeout",
+                "exchange_timestamp": "2026-03-10T15:30:00+09:00",
+                "payload": {"record_type": "session_closeout"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    files = Sidecar(_make_config(tmp_path))._get_event_files()
+
+    assert (filepath, "daily_snapshot") in files
+
+
 def test_trade_forwarding_skips_entry_stage_and_validates_completed_trade(tmp_path, monkeypatch):
     """Only completed trade records should leave the bot as assistant trade events."""
     monkeypatch.delenv("RELAY_URL", raising=False)

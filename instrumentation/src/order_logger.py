@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,31 @@ class OrderEvent:
     order_id: str                          # broker-assigned order ID
     bot_id: str
     pair: str
+    event_type: str = "order"
+    schema_version: str = "order_event_v2"
+    strategy_id: str = ""
+    family_id: str = ""
+    portfolio_id: str = ""
+    account_alias: str = ""
+    intent_id: str = ""
+    idempotency_key: str = ""
+    action_ref: str = ""
+    provisional_order_ref: str = ""
+    portfolio_decision_ref: str = ""
+    oms_order_id: str = ""
+    kis_order_id: str = ""
+    kis_order_date: str = ""
+    kis_exec_id: str = ""
+    status_before: str = ""
+    status_after: str = ""
+    broker_status: str = ""
+    order_submitted_at: str = ""
+    oms_received_at: str = ""
+    fill_timestamp: str = ""
+    fill_qty: Optional[float] = None
+    fill_notional: Optional[float] = None
+    exchange: str = "KRX"
+    currency: str = "KRW"
     side: str = "LONG"                     # always LONG for k_stock_trader
 
     # Order details
@@ -73,6 +98,22 @@ class OrderLogger:
         related_trade_id: str = "",
         exchange_timestamp: Optional[datetime] = None,
         bar_id: Optional[str] = None,
+        strategy_id: str = "",
+        intent_id: str = "",
+        idempotency_key: str = "",
+        action_ref: str = "",
+        provisional_order_ref: str = "",
+        portfolio_decision_ref: str = "",
+        oms_order_id: str = "",
+        kis_order_id: str = "",
+        kis_order_date: str = "",
+        kis_exec_id: str = "",
+        status_before: str = "",
+        broker_status: str = "",
+        order_submitted_at: str = "",
+        oms_received_at: str = "",
+        fill_timestamp: str = "",
+        extra_metadata: Optional[dict[str, Any]] = None,
     ) -> OrderEvent:
         """Record an order lifecycle event."""
         now = exchange_timestamp or datetime.now(timezone.utc)
@@ -93,12 +134,40 @@ class OrderLogger:
             exchange_timestamp=now,
             data_source_id="kis_rest",
             bar_id=bar_id,
+            schema_version="order_event_v2",
+            strategy_id=strategy_id,
+            family_id="krx_equity" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+            portfolio_id="olr_kalcb" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+            scope="oms",
         )
+        metadata = meta.to_dict() if hasattr(meta, "to_dict") else meta
+        if extra_metadata:
+            metadata.update(extra_metadata)
 
         event = OrderEvent(
             order_id=order_id,
             bot_id=self.bot_id,
             pair=pair,
+            strategy_id=strategy_id,
+            family_id=metadata.get("family_id") or "",
+            portfolio_id=metadata.get("portfolio_id") or "",
+            intent_id=intent_id,
+            idempotency_key=idempotency_key,
+            action_ref=action_ref,
+            provisional_order_ref=provisional_order_ref,
+            portfolio_decision_ref=portfolio_decision_ref,
+            oms_order_id=oms_order_id,
+            kis_order_id=kis_order_id or order_id,
+            kis_order_date=kis_order_date,
+            kis_exec_id=kis_exec_id,
+            status_before=status_before,
+            status_after=status,
+            broker_status=broker_status,
+            order_submitted_at=order_submitted_at,
+            oms_received_at=oms_received_at,
+            fill_timestamp=fill_timestamp,
+            fill_qty=filled_qty if filled_qty else None,
+            fill_notional=(filled_qty * fill_price) if filled_qty and fill_price else None,
             side="LONG",
             order_type=order_type,
             status=status,
@@ -113,7 +182,7 @@ class OrderLogger:
             related_trade_id=related_trade_id,
             experiment_id=self._experiment_id,
             experiment_variant=self._experiment_variant,
-            event_metadata=meta.to_dict() if hasattr(meta, "to_dict") else meta,
+            event_metadata=metadata,
         )
 
         self._write_event(event)

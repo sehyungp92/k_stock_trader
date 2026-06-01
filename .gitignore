@@ -93,7 +93,12 @@ desktop.ini
 # =============================================
 # Data & Logs
 # =============================================
-data/
+data/*
+!data/
+!data/krx_daily_parquet/
+!data/krx_daily_parquet/**
+!data/kis_intraday_parquet/
+!data/kis_intraday_parquet/**
 logs/
 *.log
 *.log.*

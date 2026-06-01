@@ -189,6 +189,7 @@ class RuntimeActionRouter:
         portfolio_record["portfolio_decision_ref"] = canonical_json_hash(portfolio_record)
         self.recorder.append_jsonl("portfolio_arbitration.jsonl", portfolio_record)
         if decision.decision == "blocked":
+            self._export_missed_action(prepared, routed_payload, portfolio_record, blocked_scope="portfolio_rule")
             return RoutedActionResult(
                 action_ref=prepared.action_ref,
                 provisional_order_ref=str(prepared.metadata.get("provisional_order_ref") or ""),
@@ -235,6 +236,20 @@ class RuntimeActionRouter:
             _intent_result_record(result, intent_payload=intent_payload, dry_run=self.dry_run),
         )
         if status in {IntentStatus.REJECTED, IntentStatus.CANCELLED, IntentStatus.DEFERRED}:
+            self._export_missed_action(
+                prepared,
+                routed_payload,
+                {
+                    **portfolio_record,
+                    "oms_status": getattr(status, "name", str(status or "")),
+                    "intent_id": getattr(result, "intent_id", None),
+                    "blocking_positions": getattr(result, "blocking_positions", None),
+                    "resource_conflict_type": getattr(result, "resource_conflict_type", None),
+                    "message": getattr(result, "message", ""),
+                },
+                blocked_scope="oms_risk" if status == IntentStatus.REJECTED else "execution",
+            )
+        if status in {IntentStatus.REJECTED, IntentStatus.CANCELLED, IntentStatus.DEFERRED}:
             final_ref = None
         else:
             final_ref = getattr(result, "order_id", None) or getattr(result, "intent_id", None)
@@ -257,6 +272,66 @@ class RuntimeActionRouter:
         if result.accepted and portfolio_item is not None:
             self._remember_pending_reservation(result, portfolio_item, decision)
         return result
+
+    def _export_missed_action(
+        self,
+        prepared: "_PreparedAction",
+        action_payload: Mapping[str, Any],
+        context: Mapping[str, Any],
+        *,
+        blocked_scope: str,
+    ) -> None:
+        exporter = getattr(self.recorder, "assistant_exporter", None)
+        writer = getattr(exporter, "writer", None)
+        if writer is None:
+            return
+        try:
+            metadata = dict(prepared.metadata or {})
+            payload = {
+                "record_type": "missed_opportunity",
+                "event_type": "missed_opportunity",
+                "schema_version": "missed_opportunity_v2",
+                "logical_event_id": f"{prepared.action.strategy_id}:{str(prepared.action.symbol).zfill(6)}:{metadata.get('event_ref', '')}:{prepared.action_ref}",
+                "revision": 0,
+                "strategy_id": prepared.action.strategy_id,
+                "pair": str(prepared.action.symbol).zfill(6),
+                "side": "LONG" if _action_side(prepared.action) == "BUY" else "EXIT",
+                "signal": str(getattr(prepared.action, "reason", "") or ""),
+                "signal_id": metadata.get("candidate_hash") or prepared.action_ref,
+                "signal_strength": float(metadata.get("candidate_score") or metadata.get("signal_strength") or 0.0),
+                "signal_time": _action_timestamp(metadata).isoformat(),
+                "blocked_by": str(context.get("reason_code") or context.get("oms_status") or "blocked"),
+                "block_reason": str(context.get("message") or context.get("reason_code") or ""),
+                "blocked_scope": blocked_scope,
+                "event_ref": metadata.get("event_ref", ""),
+                "decision_ref": metadata.get("decision_ref", ""),
+                "action_ref": prepared.action_ref,
+                "provisional_order_ref": metadata.get("provisional_order_ref", ""),
+                "portfolio_decision_ref": context.get("portfolio_decision_ref", ""),
+                "intent_id": context.get("intent_id", ""),
+                "blocking_positions": context.get("blocking_positions"),
+                "resource_conflict_type": context.get("resource_conflict_type", ""),
+                "action": dict(action_payload),
+                "portfolio_context": dict(context),
+            }
+            writer.write(
+                "missed_opportunity",
+                payload,
+                payload_key=f"{payload['logical_event_id']}:rev:0",
+                exchange_timestamp=payload["signal_time"],
+                lineage={
+                    "strategy_id": prepared.action.strategy_id,
+                    "artifact_hash": metadata.get("source_artifact_hash", ""),
+                    "source_fingerprint": metadata.get("source_fingerprint", ""),
+                    "candidate_hash": metadata.get("candidate_hash", ""),
+                    "portfolio_policy_hash": context.get("policy_hash", ""),
+                },
+                logical_event_id=payload["logical_event_id"],
+                revision=0,
+                scope="strategy",
+            )
+        except Exception:
+            return
 
     def pending_reservations_for(self, item: PortfolioArbitrationInput) -> "_ReservationTotals":
         totals = _ReservationTotals()

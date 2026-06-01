@@ -32,6 +32,7 @@ class RiskResult:
     cooldown_sec: Optional[float] = None
     blocking_positions: Optional[List[Dict[str, Any]]] = None
     resource_conflict_type: Optional[str] = None
+    trace: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -104,6 +105,7 @@ class RiskGateway:
             unknown_sector_policy="allow",
         )
         self._sector_exposure = SectorExposure(sector_map or {}, sector_config)
+        self.last_trace: List[Dict[str, Any]] = []
 
     def _get_price(self, symbol: str, fallback: Optional[float] = None) -> Optional[float]:
         """Get live price via injected getter, with fallback."""
@@ -188,6 +190,8 @@ class RiskGateway:
 
         Returns RiskResult with decision and any modifications.
         """
+        trace: List[Dict[str, Any]] = []
+
         # Block entries if equity not yet loaded
         if intent.intent_type == IntentType.ENTER and self.state.equity <= 0:
             return RiskResult(
@@ -197,56 +201,141 @@ class RiskGateway:
 
         # 1. Global hard blocks
         result = self._check_global_blocks(intent)
+        trace.append(self._trace_row("global_blocks", intent, result))
         if result.decision != RiskDecision.APPROVE:
-            return result
+            return self._with_trace(result, trace)
 
         # 2. Daily circuit breakers
         result = self._check_daily_limits(intent)
+        trace.append(
+            self._trace_row(
+                "daily_limits",
+                intent,
+                result,
+                thresholds={
+                    "daily_loss_warn_pct": self.config.daily_loss_warn_pct,
+                    "daily_loss_halt_pct": self.config.daily_loss_halt_pct,
+                },
+                observed={"daily_pnl_pct": self.state.daily_pnl_pct},
+            )
+        )
         if result.decision != RiskDecision.APPROVE:
-            return result
+            return self._with_trace(result, trace)
 
         # 3. Exposure limits (only for entries)
         modified_qty = None
         if intent.intent_type == IntentType.ENTER:
             result = self._check_exposure_limits(intent)
+            trace.append(
+                self._trace_row(
+                    "exposure_limits",
+                    intent,
+                    result,
+                    thresholds={
+                        "max_gross_exposure_pct": self.config.max_gross_exposure_pct,
+                        "max_position_pct": self.config.max_position_pct,
+                        "max_positions_count": self.config.max_positions_count,
+                    },
+                    observed={"equity": self.state.equity},
+                )
+            )
             if result.decision == RiskDecision.MODIFY:
                 # Apply modification but continue checking with modified qty
                 modified_qty = result.modified_qty
                 intent.desired_qty = modified_qty
             elif result.decision != RiskDecision.APPROVE:
-                return result
+                return self._with_trace(result, trace)
 
         # 3b. Sector limits (only for entries)
         if intent.intent_type == IntentType.ENTER:
             result = self._check_sector_limits(intent)
+            trace.append(
+                self._trace_row(
+                    "sector_limits",
+                    intent,
+                    result,
+                    thresholds={"max_sector_pct": self.config.max_sector_pct},
+                )
+            )
             if result.decision != RiskDecision.APPROVE:
-                return result
+                return self._with_trace(result, trace)
 
         # 4. Strategy budget (only for entries)
         if intent.intent_type == IntentType.ENTER:
             result = self._check_strategy_budget(intent)
+            trace.append(
+                self._trace_row(
+                    "strategy_budget",
+                    intent,
+                    result,
+                    thresholds=dict(self.config.strategy_budgets.get(intent.strategy_id) or {}),
+                    observed={"strategy_id": intent.strategy_id},
+                )
+            )
             if result.decision == RiskDecision.MODIFY:
                 # Take the more restrictive of the two modifications
                 if modified_qty is None or result.modified_qty < modified_qty:
                     modified_qty = result.modified_qty
                     intent.desired_qty = modified_qty
             elif result.decision != RiskDecision.APPROVE:
-                return result
+                return self._with_trace(result, trace)
 
         # 5. Microstructure gates
         result = self._check_microstructure(intent)
+        trace.append(
+            self._trace_row(
+                "microstructure",
+                intent,
+                result,
+                thresholds={
+                    "vi_cooldown_sec": self.config.vi_cooldown_sec,
+                    "max_spread_bps": self.config.max_spread_bps,
+                },
+            )
+        )
         if result.decision != RiskDecision.APPROVE:
-            return result
+            return self._with_trace(result, trace)
 
         # Return MODIFY if qty was scaled down by any check
         if modified_qty is not None:
-            return RiskResult(
-                decision=RiskDecision.MODIFY,
-                reason=f"Qty scaled to {modified_qty}",
-                modified_qty=modified_qty,
+            return self._with_trace(
+                RiskResult(
+                    decision=RiskDecision.MODIFY,
+                    reason=f"Qty scaled to {modified_qty}",
+                    modified_qty=modified_qty,
+                ),
+                trace,
             )
 
-        return RiskResult(decision=RiskDecision.APPROVE)
+        return self._with_trace(RiskResult(decision=RiskDecision.APPROVE), trace)
+
+    def _with_trace(self, result: RiskResult, trace: List[Dict[str, Any]]) -> RiskResult:
+        result.trace = list(trace)
+        self.last_trace = list(trace)
+        return result
+
+    def _trace_row(
+        self,
+        rule: str,
+        intent: Intent,
+        result: RiskResult,
+        *,
+        thresholds: Optional[Dict[str, Any]] = None,
+        observed: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "rule": rule,
+            "strategy_id": intent.strategy_id,
+            "symbol": intent.symbol,
+            "intent_type": intent.intent_type.name,
+            "decision": result.decision.name,
+            "reason": result.reason,
+            "modified_qty": result.modified_qty,
+            "thresholds": thresholds or {},
+            "observed": observed or {},
+            "blocking_positions": result.blocking_positions,
+            "resource_conflict_type": result.resource_conflict_type,
+        }
 
     def _check_global_blocks(self, intent: Intent) -> RiskResult:
         """Check system-level blocks."""

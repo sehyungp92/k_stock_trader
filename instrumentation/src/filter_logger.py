@@ -7,7 +7,9 @@ import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from .event_metadata import create_event_metadata
 
 logger = logging.getLogger("instrumentation.filter_logger")
 
@@ -27,10 +29,23 @@ class FilterDecisionEvent:
     strategy_type: str = ""
     event_id: str = ""
     bar_id: Optional[str] = None
+    event_metadata: dict[str, Any] | None = None
+    schema_version: str = "filter_decision_v1"
+    strategy_id: str = ""
+    family_id: str = ""
+    portfolio_id: str = ""
+    decision_id: str = ""
+    event_ref: str = ""
+    trace_id: str = ""
+    filter_group: str = "entry"
+    threshold_operator: str = ">="
+    distance_to_threshold: Optional[float] = None
+    input_refs: list[str] | None = None
 
     def __post_init__(self):
         if not self.event_id:
-            raw = f"{self.bot_id}|{self.timestamp}|filter_decision|{self.pair}:{self.filter_name}"
+            key = f"{self.strategy_id or self.strategy_type}:{self.pair}:{self.bar_id or self.timestamp}:{self.signal_name}:{self.filter_name}"
+            raw = f"{self.bot_id}|{self.timestamp}|filter_decision|{key}"
             self.event_id = hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     @property
@@ -69,10 +84,31 @@ class FilterLogger:
         strategy_type: str = "",
         exchange_timestamp: Optional[datetime] = None,
         bar_id: Optional[str] = None,
+        decision_id: str = "",
+        event_ref: str = "",
+        filter_group: str = "entry",
+        threshold_operator: str = ">=",
+        input_refs: Optional[list[str]] = None,
     ) -> FilterDecisionEvent:
         ts = exchange_timestamp or datetime.now(timezone.utc)
         ts_str = ts.isoformat() if isinstance(ts, datetime) else str(ts)
 
+        strategy_id = str(strategy_type or "").upper().strip()
+        metadata = create_event_metadata(
+            bot_id=self._bot_id,
+            event_type="filter_decision",
+            payload_key=f"{strategy_id}:{pair}:{bar_id or ts_str}:{signal_name}:{filter_name}",
+            exchange_timestamp=ts,
+            data_source_id="runtime_session",
+            bar_id=bar_id,
+            schema_version="filter_decision_v1",
+            strategy_id=strategy_id,
+            family_id="krx_equity" if strategy_id in {"KALCB", "OLR"} else "",
+            portfolio_id="olr_kalcb" if strategy_id in {"KALCB", "OLR"} else "",
+            decision_id=decision_id,
+            trace_id=event_ref,
+            scope="strategy",
+        ).to_dict()
         event = FilterDecisionEvent(
             bot_id=self._bot_id,
             pair=pair,
@@ -84,7 +120,19 @@ class FilterLogger:
             signal_name=signal_name,
             signal_strength=signal_strength,
             strategy_type=strategy_type,
+            strategy_id=strategy_id,
             bar_id=bar_id,
+            event_metadata=metadata,
+            event_id=metadata["event_id"],
+            family_id=metadata.get("family_id") or "",
+            portfolio_id=metadata.get("portfolio_id") or "",
+            decision_id=decision_id,
+            event_ref=event_ref,
+            trace_id=event_ref,
+            filter_group=filter_group,
+            threshold_operator=threshold_operator,
+            distance_to_threshold=None if threshold == 0.0 else actual_value - threshold,
+            input_refs=input_refs or [],
         )
 
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")

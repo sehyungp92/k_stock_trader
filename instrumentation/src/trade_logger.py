@@ -30,14 +30,67 @@ class TradeEvent:
     # --- Identity ---
     trade_id: str
     event_metadata: Dict[str, Any]
+    event_type: str = "trade"
+    schema_version: str = "trade_event_v2"
 
     # --- Snapshots ---
-    entry_snapshot: Dict[str, Any]
+    entry_snapshot: Dict[str, Any] = field(default_factory=dict)
     exit_snapshot: Optional[Dict[str, Any]] = None
 
     # --- Bot/Strategy identity (for assistant schema) ---
     bot_id: str = ""
     strategy_id: str = ""
+    family_id: str = ""
+    portfolio_id: str = ""
+    account_alias: str = ""
+    strategy_version: str = ""
+    config_version: str = ""
+    portfolio_config_version: str = ""
+    risk_config_version: str = ""
+    allocation_version: str = ""
+    strategy_registry_version: str = ""
+    deployment_id: str = ""
+    parameter_set_id: str = ""
+    experiment_id: Optional[str] = None
+    variant_id: Optional[str] = None
+    code_sha: str = ""
+
+    # --- Runtime/OMS join keys ---
+    bar_id: str = ""
+    trace_id: str = ""
+    decision_id: str = ""
+    event_ref: str = ""
+    decision_ref: str = ""
+    action_ref: str = ""
+    provisional_order_ref: str = ""
+    portfolio_decision_ref: str = ""
+    intent_id: str = ""
+    idempotency_key: str = ""
+    oms_order_id: str = ""
+    kis_order_id: str = ""
+    kis_order_date: str = ""
+    entry_fill_id: str = ""
+    exit_fill_id: str = ""
+    entry_kis_exec_id: str = ""
+    exit_kis_exec_id: str = ""
+    entry_order_event_refs: List[str] = field(default_factory=list)
+    exit_order_event_refs: List[str] = field(default_factory=list)
+    artifact_hash: str = ""
+    source_fingerprint: str = ""
+    candidate_hash: str = ""
+    kis_resource_plan_hash: str = ""
+    portfolio_policy_hash: str = ""
+
+    # --- KRX/accounting ---
+    exchange: str = "KRX"
+    market: str = ""
+    krx_trade_date: str = ""
+    currency: str = "KRW"
+    commission: Optional[float] = None
+    tax: Optional[float] = None
+    gross_pnl: Optional[float] = None
+    net_pnl: Optional[float] = None
+    realized_pnl_krw: Optional[float] = None
 
     # --- Core trade fields ---
     pair: str = ""
@@ -115,7 +168,6 @@ class TradeEvent:
     drawdown_size_mult: Optional[float] = None
 
     # --- Experiment tracking ---
-    experiment_id: Optional[str] = None
     experiment_variant: Optional[str] = None
     param_set_id: Optional[str] = None
 
@@ -223,6 +275,14 @@ class TradeLogger:
                     exchange_timestamp=exch_ts,
                     data_source_id=self.data_source_id,
                     bar_id=bar_id,
+                    schema_version="trade_event_v2",
+                    strategy_id=strategy_id,
+                    family_id="krx_equity" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+                    portfolio_id="olr_kalcb" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+                    parameter_set_id=param_set_id,
+                    experiment_id=experiment_id,
+                    variant_id=experiment_variant,
+                    scope="strategy",
                 ).to_dict()
             except Exception:
                 metadata = {
@@ -236,6 +296,13 @@ class TradeLogger:
                 event_metadata=metadata,
                 bot_id=bot_id,
                 strategy_id=strategy_id,
+                family_id="krx_equity" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+                portfolio_id="olr_kalcb" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+                parameter_set_id=param_set_id or "",
+                bar_id=bar_id or "",
+                artifact_hash=str((strategy_params or {}).get("artifact_hash") or (strategy_params or {}).get("source_artifact_hash") or ""),
+                source_fingerprint=str((strategy_params or {}).get("source_fingerprint") or ""),
+                candidate_hash=str((strategy_params or {}).get("candidate_hash") or ""),
                 entry_snapshot=entry_snapshot_dict,
                 pair=pair,
                 side=side,
@@ -273,6 +340,7 @@ class TradeLogger:
 
             trade.experiment_id = experiment_id
             trade.experiment_variant = experiment_variant
+            trade.variant_id = experiment_variant or ""
             trade.param_set_id = param_set_id
             trade.execution_timeline = execution_timeline
             trade.session_type = classify_session_type(datetime.now(timezone.utc))
@@ -350,6 +418,9 @@ class TradeLogger:
             trade.pnl = round(pnl, 4)
             trade.pnl_pct = round(pnl_pct, 4)
             trade.fees_paid = fees_paid
+            trade.gross_pnl = round((exit_price - trade.entry_price) * trade.position_size, 4)
+            trade.net_pnl = round(pnl, 4)
+            trade.realized_pnl_krw = round(pnl, 4)
             trade.expected_exit_price = expected_exit_price
             trade.exit_slippage_bps = exit_slippage_bps
             trade.exit_latency_ms = exit_latency_ms

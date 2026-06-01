@@ -447,6 +447,9 @@ class KoreaInvestAPI:
     _TIMEOUT_DEFAULT = (3, 10)
     # Tighter timeout for latency-sensitive market data during trading hours
     _TIMEOUT_QUOTE = (3, 7)
+    # Historical intraday chart pages can be slow even though they live under
+    # /quotations/.  Keep this separate from realtime quote timeouts.
+    _TIMEOUT_HISTORICAL_CHART = (3, 30)
     # Generous timeout for order operations (must not be dropped)
     _TIMEOUT_ORDER = (5, 15)
     # inquire-investor is inherently slow (65s observed); generous read timeout
@@ -504,6 +507,8 @@ class KoreaInvestAPI:
             req_timeout = self._TIMEOUT_ORDER
         elif 'inquire-investor' in api_url:
             req_timeout = self._TIMEOUT_INVESTOR
+        elif 'inquire-time-dailychartprice' in api_url:
+            req_timeout = self._TIMEOUT_HISTORICAL_CHART
         elif '/quotations/' in api_url or '/price/' in api_url:
             req_timeout = self._TIMEOUT_QUOTE
         else:

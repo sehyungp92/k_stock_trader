@@ -423,6 +423,7 @@ def prepare_runtime_session(
     initial_account_state: Any | None = None,
     initial_positions: Any | None = None,
     initial_strategy_states: Mapping[str, Any] | None = None,
+    assistant_event_dir: str | Path | None = None,
 ) -> RuntimeSessionPlan:
     mode_name = _normalize_mode(mode)
     sids = tuple(dict.fromkeys(_normalize_strategy_id(strategy_id) for strategy_id in strategy_ids))
@@ -484,6 +485,13 @@ def prepare_runtime_session(
             for failure in kis_resource_plan.failures
         )
     resource_plan_path = ""
+    if session_recorder is not None and assistant_event_dir is not None:
+        enable_export = getattr(session_recorder, "enable_assistant_export", None)
+        if callable(enable_export):
+            try:
+                enable_export(assistant_event_dir)
+            except Exception:
+                pass
     if kis_resource_plan is not None and session_recorder is not None:
         resource_plan_path = str(session_recorder.write_resource_plan(kis_resource_plan.to_json_dict()))
     effective_oms_client = _runtime_oms_client(

@@ -86,6 +86,7 @@ class RuntimeSessionDriver:
     mode: str
     evidence_mode: str | None = None
     order_identity: dict[str, str] = field(default_factory=dict)
+    order_metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     async def handle_bar(self, bar: MarketBar) -> RuntimeEventResult:
         pending = await self.collect_bar(bar)
@@ -130,7 +131,9 @@ class RuntimeSessionDriver:
             int(getattr(fill, "qty", 0) or 0),
             float(getattr(fill, "price", 0.0) or 0.0),
         )
-        self.recorder.append_jsonl("fill_events.jsonl", _event_stream_row("runtime_fill_event", strategy_id, "fill", fill))
+        fill_row = _event_stream_row("runtime_fill_event", strategy_id, "fill", fill)
+        fill_row["portfolio_context_after"] = _portfolio_context_payload(self.portfolio_context, reason="fill_applied")
+        self.recorder.append_jsonl("fill_events.jsonl", fill_row)
         result = await self._handle(
             event_type="fill",
             timestamp=timestamp,
@@ -226,6 +229,7 @@ class RuntimeSessionDriver:
         post_position = _position_view(getattr(self.descriptor.engine, "state", None), symbol)
         pre_metadata = dict(pre_position.get("metadata") or {})
         fill_metadata = dict(getattr(fill, "metadata", {}) or {})
+        join_metadata = _trade_join_metadata(pre_metadata, fill_metadata)
         source_artifact_hash = str(
             pre_position.get("source_artifact_hash")
             or pre_metadata.get("source_artifact_hash")
@@ -233,8 +237,21 @@ class RuntimeSessionDriver:
             or self.descriptor.artifact_hash
             or ""
         )
+        exit_order_id = str(getattr(fill, "order_id", "") or "")
+        broker_order_id = str(fill_metadata.get("broker_order_id") or fill_metadata.get("original_order_id") or "")
+        trade_id = canonical_json_hash(
+            {
+                "strategy_id": self.descriptor.strategy_id,
+                "symbol": symbol,
+                "entry_order_id": str(pre_position.get("entry_order_id") or ""),
+                "exit_order_id": exit_order_id,
+                "exit_time": _event_timestamp(fill).isoformat(),
+                "qty": qty,
+            }
+        )
         payload = {
             "record_type": "runtime_trade_outcome",
+            "trade_id": trade_id,
             "strategy_id": self.descriptor.strategy_id,
             "symbol": symbol,
             "qty": qty,
@@ -246,11 +263,17 @@ class RuntimeSessionDriver:
             "realized_pnl": (exit_price - entry_price) * qty,
             "position_closed": post_position is None or int(post_position.get("qty_open") or 0) <= 0,
             "entry_order_id": str(pre_position.get("entry_order_id") or ""),
-            "exit_order_id": str(getattr(fill, "order_id", "") or ""),
+            "exit_order_id": exit_order_id,
+            "order_id": exit_order_id,
+            "broker_order_id": broker_order_id,
+            "kis_order_id": broker_order_id,
+            "exit_fill_id": str(fill_metadata.get("kis_exec_id") or fill_metadata.get("execution_id") or f"{exit_order_id}:{_event_timestamp(fill).isoformat()}:{qty}"),
             "source_artifact_hash": source_artifact_hash,
+            "artifact_hash": source_artifact_hash,
             "candidate_rank": int(pre_position.get("candidate_rank") or pre_metadata.get("candidate_rank") or fill_metadata.get("candidate_rank") or 0),
             "sector": str(pre_position.get("sector") or pre_metadata.get("sector") or fill_metadata.get("sector") or "UNKNOWN"),
             "reason": str(getattr(fill, "reason", "") or ""),
+            **join_metadata,
             "metadata": _stable_trade_metadata({**pre_metadata, **fill_metadata}),
         }
         self.recorder.append_jsonl("trade_outcomes.jsonl", payload)
@@ -400,6 +423,8 @@ class RuntimeSessionDriver:
             provisional = str(getattr(result, "provisional_order_ref", "") or "")
             if not provisional:
                 continue
+            action_payload = dict(getattr(result, "routed_action_payload", {}) or {})
+            action_metadata = dict(action_payload.get("metadata") or {})
             for raw in (
                 provisional,
                 getattr(result, "action_ref", None),
@@ -409,6 +434,21 @@ class RuntimeSessionDriver:
             ):
                 if raw not in (None, ""):
                     self.order_identity[str(raw)] = provisional
+            self.order_metadata[provisional] = {
+                "action_ref": str(getattr(result, "action_ref", "") or ""),
+                "provisional_order_ref": provisional,
+                "final_order_ref": str(getattr(result, "final_order_ref", "") or ""),
+                "intent_id": str(getattr(result, "intent_id", "") or ""),
+                "broker_order_id": str(getattr(result, "broker_order_id", "") or ""),
+                "portfolio_decision_ref": str(getattr(result, "portfolio_decision_ref", "") or ""),
+                "oms_status": str(getattr(result, "oms_status", "") or ""),
+                "event_ref": str(action_metadata.get("event_ref") or ""),
+                "decision_ref": str(action_metadata.get("decision_ref") or ""),
+                "source_artifact_hash": str(action_metadata.get("source_artifact_hash") or ""),
+                "source_fingerprint": str(action_metadata.get("source_fingerprint") or ""),
+                "candidate_hash": str(action_metadata.get("candidate_hash") or ""),
+                "portfolio_policy_hash": str(action_metadata.get("portfolio_policy_hash") or ""),
+            }
 
     def _reconcile_route_results(self, route_results: tuple[Any, ...]) -> list[Any]:
         decisions: list[Any] = []
@@ -510,6 +550,9 @@ class RuntimeSessionDriver:
         if raw_order_id and raw_order_id != provisional:
             metadata.setdefault("broker_order_id", raw_order_id)
             metadata.setdefault("original_order_id", raw_order_id)
+        for key, value in dict(self.order_metadata.get(provisional) or {}).items():
+            if value not in (None, ""):
+                metadata.setdefault(key, value)
         metadata["provisional_order_ref"] = provisional
         if is_dataclass(event):
             return replace(event, order_id=provisional, metadata=metadata)
@@ -648,6 +691,32 @@ def _stable_trade_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _trade_join_metadata(*sources: Mapping[str, Any]) -> dict[str, Any]:
+    fields = (
+        "event_ref",
+        "decision_ref",
+        "action_ref",
+        "portfolio_decision_ref",
+        "provisional_order_ref",
+        "intent_id",
+        "idempotency_key",
+        "broker_order_id",
+        "original_order_id",
+        "source_fingerprint",
+        "candidate_hash",
+        "portfolio_policy_hash",
+        "kis_resource_plan_hash",
+    )
+    result: dict[str, Any] = {}
+    for field_name in fields:
+        for source in reversed(sources):
+            value = dict(source or {}).get(field_name)
+            if value not in (None, ""):
+                result[field_name] = value
+                break
+    return result
+
+
 def _event_ref(strategy_id: str, event_type: str, payload: Mapping[str, Any]) -> str:
     return canonical_json_hash(
         {
@@ -698,13 +767,117 @@ def _no_action_reason_for_bar(descriptor: StrategyRuntimeDescriptor, bar: Market
 
 def _event_stream_row(record_type: str, strategy_id: str, event_type: str, event: object) -> dict[str, Any]:
     payload = _json_value(event)
-    return {
+    row = {
         "record_type": record_type,
         "strategy_id": strategy_id,
         "event_ref": _event_ref(strategy_id, event_type, payload if isinstance(payload, Mapping) else {"event": payload}),
         "timestamp": _event_timestamp(event).isoformat(),
         "event": payload,
     }
+    metadata = dict((payload.get("metadata") if isinstance(payload, Mapping) else {}) or {})
+    for key in (
+        "decision_ref",
+        "action_ref",
+        "portfolio_decision_ref",
+        "provisional_order_ref",
+        "intent_id",
+        "idempotency_key",
+        "broker_order_id",
+        "original_order_id",
+        "source_artifact_hash",
+        "source_fingerprint",
+        "candidate_hash",
+        "portfolio_policy_hash",
+        "kis_resource_plan_hash",
+    ):
+        value = metadata.get(key)
+        if value not in (None, ""):
+            row[key] = value
+    if isinstance(payload, Mapping):
+        for key in ("order_id", "symbol", "side", "qty", "price"):
+            value = payload.get(key)
+            if value not in (None, ""):
+                row[key] = value
+    return row
+
+
+def _portfolio_context_payload(context: PortfolioContextProvider, *, reason: str) -> dict[str, Any]:
+    cash = context.cash_equity()
+    positions = []
+    allocations = []
+    symbol_exposures: dict[str, dict[str, Any]] = {}
+    strategy_exposures: dict[str, dict[str, Any]] = {}
+    sector_exposures: dict[str, dict[str, Any]] = {}
+    for symbol, position in sorted(dict(context.positions or {}).items(), key=lambda item: str(item[0])):
+        key = str(symbol).zfill(6)
+        pos_payload = _position_snapshot_payload(key, position)
+        positions.append(pos_payload)
+        real_qty = max(int(pos_payload.get("real_qty") or 0), 0)
+        avg_price = max(float(pos_payload.get("avg_price") or 0.0), 0.0)
+        notional = real_qty * avg_price
+        sector = str(context.sector_map.get(key, "UNKNOWN") or "UNKNOWN").upper().strip() or "UNKNOWN"
+        symbol_exposures[key] = {
+            "qty": real_qty,
+            "avg_price": avg_price,
+            "notional_krw": notional,
+            "sector": sector,
+            "allocation_drift": int(pos_payload.get("allocation_drift") or 0),
+            "frozen": bool(pos_payload.get("frozen", False)),
+        }
+        sector_row = sector_exposures.setdefault(sector, {"qty": 0, "notional_krw": 0.0, "symbols_count": 0})
+        sector_row["qty"] += real_qty
+        sector_row["notional_krw"] += notional
+        sector_row["symbols_count"] += 1 if real_qty > 0 else 0
+        for strategy_id, allocation in sorted(dict(getattr(position, "allocations", {}) or {}).items()):
+            allocation_payload = {"symbol": key, "strategy_id": str(strategy_id).upper().strip(), **_json_value(allocation)}
+            allocation_qty = max(int(allocation_payload.get("qty") or 0), 0)
+            allocation_price = max(float(allocation_payload.get("cost_basis") or avg_price or 0.0), 0.0)
+            allocation_payload["notional_krw"] = allocation_qty * allocation_price
+            allocation_payload["allocation_drift"] = int(pos_payload.get("allocation_drift") or 0)
+            allocations.append(allocation_payload)
+            strategy_row = strategy_exposures.setdefault(
+                allocation_payload["strategy_id"],
+                {"qty": 0, "notional_krw": 0.0, "symbols_count": 0},
+            )
+            strategy_row["qty"] += allocation_qty
+            strategy_row["notional_krw"] += allocation_qty * allocation_price
+            strategy_row["symbols_count"] += 1 if allocation_qty > 0 else 0
+    exposure = context.portfolio_exposure()
+    return {
+        "record_type": "runtime_portfolio_context",
+        "reason": reason,
+        "account": _json_value(context.account_state),
+        "equity_krw": cash.equity,
+        "buyable_cash_krw": cash.cash,
+        "gross_exposure_krw": exposure.notional,
+        "gross_exposure_pct": exposure.notional / cash.equity if cash.equity > 0 else 0.0,
+        "daily_pnl_krw": float(getattr(context.account_state, "daily_pnl", 0.0) or 0.0),
+        "daily_pnl_pct": float(getattr(context.account_state, "daily_pnl_pct", 0.0) or 0.0),
+        "positions": positions,
+        "allocations": allocations,
+        "positions_count": len(positions),
+        "working_orders_count": sum(int(row.get("working_orders_count") or row.get("working_order_count") or 0) for row in positions),
+        "allocation_drift_count": sum(1 for row in positions if int(row.get("allocation_drift") or 0) != 0 or bool(row.get("frozen", False))),
+        "allocation_count": len(allocations),
+        "sector_exposures": sector_exposures,
+        "strategy_exposures": strategy_exposures,
+        "symbol_exposures": symbol_exposures,
+    }
+
+
+def _position_snapshot_payload(symbol: str, position: Any) -> dict[str, Any]:
+    payload = _json_value(position)
+    data = dict(payload or {}) if isinstance(payload, Mapping) else {"value": payload}
+    data["symbol"] = str(data.get("symbol") or symbol).zfill(6)
+    allocations = dict(data.get("allocations") or {})
+    real_qty = int(data.get("real_qty", data.get("qty", 0)) or 0)
+    total_allocated = sum(int(dict(row or {}).get("qty") or 0) for row in allocations.values() if isinstance(row, Mapping))
+    data["total_allocated_qty"] = total_allocated
+    data["allocation_drift"] = real_qty - total_allocated
+    data["working_orders_count"] = int(data.get("working_order_count", data.get("working_orders_count", 0)) or 0)
+    if "_UNKNOWN_" in allocations:
+        data["unknown_allocation"] = allocations["_UNKNOWN_"]
+    return data
 
 
 def _action_side_from_payload(payload: Mapping[str, Any]) -> str:

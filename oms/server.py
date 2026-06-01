@@ -22,6 +22,16 @@ from .intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, Tim
 from .state import StrategyAllocation
 from .risk import RiskConfig
 from .persistence import OMSPersistence
+try:
+    from instrumentation.src.deployment_logger import DeploymentLogger
+    from instrumentation.src.lineage import context_from_env
+    from instrumentation.src.oms_exporter import OMSEventEmitter
+except Exception:  # pragma: no cover - OMS must run even if telemetry import fails
+    DeploymentLogger = None  # type: ignore
+    OMSEventEmitter = None  # type: ignore
+
+    def context_from_env(**_: Any) -> None:  # type: ignore
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -258,7 +268,21 @@ async def lifespan(app: FastAPI):
     persistence = OMSPersistence(oms_id=oms_id)
     logger.info(f"OMS instance: {oms_id}")
 
-    _oms = OMSCore(api, risk_config=risk_config, persistence=persistence)
+    assistant_event_dir = os.environ.get("ASSISTANT_EVENT_DATA_DIR", "instrumentation/data")
+    lineage = context_from_env(data_source_id="postgres_oms")
+    event_emitter = None
+    if assistant_event_dir.lower() not in {"", "off", "none", "disabled"} and OMSEventEmitter is not None:
+        try:
+            event_emitter = OMSEventEmitter(assistant_event_dir, lineage=lineage)
+            if DeploymentLogger is not None:
+                DeploymentLogger(assistant_event_dir, lineage=lineage).emit_config_snapshot(
+                    risk_config=oms_config,
+                    strategy_registry={"strategy_ids": ["KALCB", "OLR", "PCIM"], "producer": "oms_server"},
+                    environment={"OMS_ID": oms_id, "OMS_CONFIG_PATH": os.environ.get("OMS_CONFIG_PATH", "")},
+                )
+        except Exception:
+            event_emitter = None
+    _oms = OMSCore(api, risk_config=risk_config, persistence=persistence, event_emitter=event_emitter)
     await _oms.start()
 
     logger.info("OMS Server ready")
@@ -504,9 +528,29 @@ async def get_account_state(strategy_id: Optional[str] = None):
 # Risk Controls
 # ---------------------------------------------------------------------------
 
+def _emit_operator_event(oms: OMSCore, action: str, *, symbol: str = "", payload: Optional[Dict[str, Any]] = None) -> None:
+    emitter = getattr(oms, "event_emitter", None)
+    if emitter is None:
+        return
+    try:
+        row = {
+            "action": action,
+            "manual": True,
+            "source": "oms_server",
+            "safe_mode": getattr(oms.risk, "safe_mode", False),
+            "halt_new_entries": getattr(oms.risk, "halt_new_entries", False),
+            **dict(payload or {}),
+        }
+        emitter.emit_reconciliation("RISK_CONTROL_CHANGE", symbol=symbol, payload=row)
+        emitter.emit_portfolio_snapshot(oms, reason=f"risk_control:{action.lower()}")
+    except Exception:
+        pass
+
+
 @app.post("/api/v1/risk/regime")
 async def set_regime(req: RegimeRequest):
     oms = get_oms()
+    previous = oms.risk.config.current_regime
     oms.risk.set_regime(req.regime)
     # Persist regime change immediately
     if oms.persistence:
@@ -523,6 +567,7 @@ async def set_regime(req: RegimeRequest):
             safe_mode=oms.risk.safe_mode,
             regime=req.regime,
         )
+    _emit_operator_event(oms, "SET_REGIME", payload={"before_value": previous, "after_value": req.regime})
     return {"status": "ok", "regime": req.regime}
 
 
@@ -530,16 +575,24 @@ async def set_regime(req: RegimeRequest):
 async def set_vi_cooldown(req: VICooldownRequest):
     oms = get_oms()
     pos = oms.state.get_position(req.symbol)
+    previous = pos.vi_cooldown_until
     pos.vi_cooldown_until = time.time() + req.duration_sec
     # Persist position state immediately
     if oms.persistence:
         await oms.persistence.sync_position(pos)
+    _emit_operator_event(
+        oms,
+        "SET_VI_COOLDOWN",
+        symbol=req.symbol,
+        payload={"before_value": previous, "after_value": pos.vi_cooldown_until, "duration_sec": req.duration_sec},
+    )
     return {"status": "ok"}
 
 
 @app.post("/api/v1/risk/safe-mode")
 async def set_safe_mode(enabled: bool = True):
     oms = get_oms()
+    previous = oms.risk.safe_mode
     oms.risk.safe_mode = enabled
     # Persist safe_mode immediately via heartbeat
     if oms.persistence:
@@ -558,6 +611,7 @@ async def set_safe_mode(enabled: bool = True):
             recon_status="warn" if drift_count > 0 else "ok",
             drift_count=drift_count,
         )
+    _emit_operator_event(oms, "SET_SAFE_MODE", payload={"before_value": previous, "after_value": enabled})
     return {"status": "ok", "safe_mode": enabled}
 
 
@@ -569,6 +623,7 @@ async def set_safe_mode(enabled: bool = True):
 async def flatten_all():
     oms = get_oms()
     await oms.flatten_all()
+    _emit_operator_event(oms, "FLATTEN_ALL")
     return {"status": "ok"}
 
 
@@ -576,33 +631,40 @@ async def flatten_all():
 async def eod_cleanup():
     oms = get_oms()
     await oms.eod_cleanup()
+    _emit_operator_event(oms, "EOD_CLEANUP")
     return {"status": "ok"}
 
 
 @app.post("/api/v1/admin/pause-strategy/{strategy_id}")
 async def pause_strategy(strategy_id: str):
     oms = get_oms()
-    oms.risk._paused_strategies.add(strategy_id.upper())
+    sid = strategy_id.upper()
+    was_paused = sid in oms.risk._paused_strategies
+    oms.risk._paused_strategies.add(sid)
     # Persist paused state
     if oms.persistence:
         await oms.persistence.update_strategy_state(
             strategy_id=strategy_id.upper(),
             mode="PAUSED",
         )
-    return {"status": "ok", "paused": strategy_id.upper()}
+    _emit_operator_event(oms, "PAUSE_STRATEGY", payload={"strategy_id": sid, "before_value": was_paused, "after_value": True})
+    return {"status": "ok", "paused": sid}
 
 
 @app.post("/api/v1/admin/resume-strategy/{strategy_id}")
 async def resume_strategy(strategy_id: str):
     oms = get_oms()
-    oms.risk._paused_strategies.discard(strategy_id.upper())
+    sid = strategy_id.upper()
+    was_paused = sid in oms.risk._paused_strategies
+    oms.risk._paused_strategies.discard(sid)
     # Persist resumed state
     if oms.persistence:
         await oms.persistence.update_strategy_state(
             strategy_id=strategy_id.upper(),
             mode="RUNNING",
         )
-    return {"status": "ok", "resumed": strategy_id.upper()}
+    _emit_operator_event(oms, "RESUME_STRATEGY", payload={"strategy_id": sid, "before_value": was_paused, "after_value": False})
+    return {"status": "ok", "resumed": sid}
 
 
 class ResolveDriftRequest(BaseModel):
@@ -625,10 +687,12 @@ async def resolve_drift(req: ResolveDriftRequest):
         if not req.target_strategy_id:
             raise HTTPException(status_code=400, detail="target_strategy_id required for reassign")
         target_id = req.target_strategy_id.upper()
+        before_value = {"unknown_qty": unknown_alloc.qty, "target_qty": pos.get_allocation(target_id), "frozen": pos.frozen}
         oms.state.update_allocation(req.symbol, target_id, unknown_alloc.qty, cost_basis=pos.avg_price)
         unknown_alloc.qty = 0
         logger.info(f"Reassigned {req.symbol} _UNKNOWN_ to {target_id}")
     elif req.action == "acknowledge":
+        before_value = {"unknown_qty": unknown_alloc.qty, "frozen": pos.frozen}
         unknown_alloc.qty = 0
         logger.info(f"Acknowledged and cleared _UNKNOWN_ for {req.symbol}")
     else:
@@ -654,6 +718,17 @@ async def resolve_drift(req: ResolveDriftRequest):
     if unknown_alloc.qty == 0:
         pos.allocations.pop("_UNKNOWN_", None)
 
+    _emit_operator_event(
+        oms,
+        "RESOLVE_DRIFT",
+        symbol=req.symbol,
+        payload={
+            "drift_action": req.action,
+            "target_strategy_id": req.target_strategy_id.upper() if req.target_strategy_id else "",
+            "before_value": before_value,
+            "after_value": {"drift": pos.allocation_drift(), "frozen": pos.frozen},
+        },
+    )
     return {"status": "ok", "symbol": req.symbol, "frozen": pos.frozen}
 
 
@@ -675,6 +750,18 @@ async def correct_allocation(req: CorrectAllocationRequest):
     if req.new_qty > pos.real_qty:
         raise HTTPException(status_code=400, detail=f"new_qty ({req.new_qty}) > real_qty ({pos.real_qty})")
     result = await oms.correct_allocation(req.symbol, req.strategy_id.upper(), req.new_qty)
+    _emit_operator_event(
+        oms,
+        "CORRECT_ALLOCATION",
+        symbol=req.symbol,
+        payload={
+            "strategy_id": req.strategy_id.upper(),
+            "before_value": result.get("old_qty"),
+            "after_value": result.get("new_qty"),
+            "drift": result.get("drift"),
+            "frozen": result.get("frozen"),
+        },
+    )
     return {"status": "ok", **result}
 
 

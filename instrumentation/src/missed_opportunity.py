@@ -22,7 +22,7 @@ from typing import Any, Optional, List, Dict
 
 from loguru import logger
 
-from .event_metadata import EventMetadata, create_event_metadata
+from .event_metadata import compute_event_id, create_revision_metadata
 from .market_snapshot import MarketSnapshot, MarketSnapshotService
 
 
@@ -62,6 +62,10 @@ class MissedOpportunityEvent:
     """A signal that fired but was not executed."""
     event_metadata: dict
     market_snapshot: dict                  # snapshot at signal time
+    event_type: str = "missed_opportunity"
+    schema_version: str = "missed_opportunity_v2"
+    logical_event_id: str = ""
+    revision: int = 0
 
     bot_id: str = ""
     strategy_id: str = ""
@@ -73,8 +77,11 @@ class MissedOpportunityEvent:
     signal_time: str = ""                  # when the signal fired (KST ISO)
     blocked_by: str = ""                   # which filter or limit blocked it
     block_reason: str = ""                 # additional context on why
+    blocked_scope: str = "strategy_filter"
     blocking_positions: Optional[List[Dict[str, Any]]] = None  # positions that caused rejection
     resource_conflict_type: str = ""       # max_positions, gross_exposure, etc.
+    portfolio_decision_ref: str = ""
+    risk_decision_id: str = ""
 
     hypothetical_entry: float = 0.0  # price used for simulation
 
@@ -268,6 +275,9 @@ class MissedOpportunityLogger:
         filter_decisions: Optional[List[Dict[str, Any]]] = None,
         blocking_positions: Optional[List[Dict[str, Any]]] = None,
         resource_conflict_type: str = "",
+        blocked_scope: str = "",
+        portfolio_decision_ref: str = "",
+        risk_decision_id: str = "",
         experiment_id: Optional[str] = None,
         experiment_variant: Optional[str] = None,
     ) -> MissedOpportunityEvent:
@@ -306,25 +316,39 @@ class MissedOpportunityLogger:
                 assumption_tags.append("no_fees")
             assumption_tags.append(f"{policy.tp_sl_logic}_tp_sl")
 
-            # Deterministic signal hash for idempotency
-            signal_hash = hashlib.sha256(
-                f"{pair}|{side}|{signal_id}|{exch_ts.isoformat()}".encode()
-            ).hexdigest()[:12]
+            strategy_id = strategy_type.upper() if strategy_type else ""
+            logical_event_id = _logical_event_id(
+                strategy_id=strategy_id,
+                pair=pair,
+                side=side,
+                signal_id=signal_id,
+                signal_time=exch_ts,
+                blocked_by=blocked_by,
+                bar_id=bar_id,
+            )
 
-            metadata = create_event_metadata(
+            metadata = create_revision_metadata(
                 bot_id=self.bot_id,
                 event_type="missed_opportunity",
-                payload_key=signal_hash,
+                logical_event_id=logical_event_id,
+                revision=0,
                 exchange_timestamp=exch_ts,
                 data_source_id=self.data_source_id,
                 bar_id=bar_id,
+                schema_version="missed_opportunity_v2",
+                strategy_id=strategy_id,
+                family_id="krx_equity" if strategy_id in {"KALCB", "OLR"} else "krx_pcim_research",
+                portfolio_id="olr_kalcb" if strategy_id in {"KALCB", "OLR"} else "",
+                scope="strategy",
             )
 
             event = MissedOpportunityEvent(
                 event_metadata=metadata.to_dict(),
                 market_snapshot=snapshot.to_dict(),
                 bot_id=self.bot_id,
-                strategy_id=strategy_type.upper() if strategy_type else "",
+                strategy_id=strategy_id,
+                logical_event_id=logical_event_id,
+                revision=0,
                 pair=pair,
                 side=side,
                 signal=signal,
@@ -333,8 +357,11 @@ class MissedOpportunityLogger:
                 signal_time=exch_ts.isoformat(),
                 blocked_by=blocked_by,
                 block_reason=block_reason,
+                blocked_scope=blocked_scope or _blocked_scope(blocked_by, resource_conflict_type),
                 blocking_positions=blocking_positions,
                 resource_conflict_type=resource_conflict_type,
+                portfolio_decision_ref=portfolio_decision_ref,
+                risk_decision_id=risk_decision_id,
                 hypothetical_entry=hyp_entry,
                 simulation_policy=policy.to_dict(),
                 assumption_tags=assumption_tags,
@@ -352,6 +379,7 @@ class MissedOpportunityLogger:
             with self._backfill_lock:
                 self._pending_backfills.append({
                     "event_id": metadata.event_id,
+                    "logical_event_id": logical_event_id,
                     "pair": pair,
                     "side": side,
                     "entry_price": hyp_entry,
@@ -645,33 +673,65 @@ class MissedOpportunityLogger:
     def _update_event(
         self, event_id: str, file_date: str, outcomes: dict, status: str
     ):
-        """Update an existing event in the JSONL file with backfill results."""
+        """Append a new revision with backfill results.
+
+        Previously this method rewrote the original JSONL row. The sidecar
+        deduplicates by event_id, so mutable facts are now represented as
+        append-only revisions with a stable logical_event_id and incremented
+        revision.
+        """
         filepath = self.data_dir / f"missed_{file_date}.jsonl"
         if not filepath.exists():
             return
 
         try:
-            lines = filepath.read_text(encoding="utf-8").strip().split("\n")
-            updated = False
-            new_lines: List[str] = []
-
+            lines = filepath.read_text(encoding="utf-8").splitlines()
+            matches: list[dict[str, Any]] = []
+            logical_id = ""
             for line in lines:
                 if not line.strip():
                     continue
                 try:
                     event = json.loads(line)
                     if event.get("event_metadata", {}).get("event_id") == event_id:
-                        event.update(outcomes)
-                        event["backfill_status"] = status
-                        updated = True
-                    new_lines.append(json.dumps(event, default=str))
+                        logical_id = str(event.get("logical_event_id") or event.get("event_metadata", {}).get("logical_event_id") or "")
+                    if logical_id and (
+                        event.get("logical_event_id") == logical_id
+                        or event.get("event_metadata", {}).get("logical_event_id") == logical_id
+                    ):
+                        matches.append(event)
                 except json.JSONDecodeError:
-                    new_lines.append(line)  # preserve unparseable lines
+                    continue
 
-            if updated:
-                filepath.write_text(
-                    "\n".join(new_lines) + "\n", encoding="utf-8"
-                )
+            if not matches:
+                return
+            base = max(matches, key=lambda row: int(row.get("revision") or row.get("event_metadata", {}).get("revision") or 0))
+            logical_id = str(base.get("logical_event_id") or base.get("event_metadata", {}).get("logical_event_id") or event_id)
+            revision = int(base.get("revision") or base.get("event_metadata", {}).get("revision") or 0) + 1
+            revised = dict(base)
+            revised.update(outcomes)
+            revised["backfill_status"] = status
+            revised["logical_event_id"] = logical_id
+            revised["revision"] = revision
+            event_metadata = dict(revised.get("event_metadata") or {})
+            exchange_ts = _parse_datetime(revised.get("signal_time") or event_metadata.get("exchange_timestamp"))
+            payload_key = f"{logical_id}:rev:{revision}"
+            event_metadata.update(
+                {
+                    "event_id": compute_event_id(self.bot_id, exchange_ts.isoformat(), "missed_opportunity", payload_key),
+                    "bot_id": self.bot_id,
+                    "event_type": "missed_opportunity",
+                    "payload_key": payload_key,
+                    "exchange_timestamp": exchange_ts.isoformat(),
+                    "local_timestamp": datetime.now(timezone.utc).isoformat(),
+                    "logical_event_id": logical_id,
+                    "revision": revision,
+                    "schema_version": "missed_opportunity_v2",
+                }
+            )
+            revised["event_metadata"] = event_metadata
+            with filepath.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(revised, default=str) + "\n")
         except Exception as e:
             self._write_error("update_event", event_id, e)
 
@@ -710,3 +770,44 @@ class MissedOpportunityLogger:
                 )
             except Exception:
                 pass
+
+
+def _logical_event_id(
+    *,
+    strategy_id: str,
+    pair: str,
+    side: str,
+    signal_id: str,
+    signal_time: datetime,
+    blocked_by: str,
+    bar_id: Optional[str],
+) -> str:
+    anchor = bar_id or signal_time.isoformat()
+    return f"{strategy_id or '_UNKNOWN_'}:{str(pair).zfill(6)}:{anchor}:{signal_id}:{side}:{blocked_by}"
+
+
+def _blocked_scope(blocked_by: str, resource_conflict_type: str) -> str:
+    text = f"{blocked_by} {resource_conflict_type}".lower()
+    if "portfolio" in text or "capital" in text or "exposure" in text or "position" in text:
+        return "portfolio_rule"
+    if "risk" in text or "halt" in text or "budget" in text:
+        return "oms_risk"
+    if "resource" in text or "subscription" in text:
+        return "resource_plan"
+    if "market" in text or "data" in text:
+        return "market_data"
+    if "execution" in text or "order" in text:
+        return "execution"
+    return "strategy_filter"
+
+
+def _parse_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if value not in (None, ""):
+        try:
+            parsed = datetime.fromisoformat(str(value))
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc)

@@ -25,6 +25,34 @@ simulation_policies:
     sl_value: 1.5                     # 1.5x ATR stop loss
     max_hold_bars: 200                # ~3.3 hours for event plays
 
+  # KALCB - first-30 breakout/reclaim entries on KRX equities.
+  # Long-only, KRW, no funding; VI/cooldown effects are captured as blockers
+  # when available rather than simulated as crypto-style carrying costs.
+  kalcb:
+    entry_fill_model: next_trade
+    slippage_model: fixed_bps
+    slippage_bps: 5
+    fees_included: true
+    fee_bps: 20
+    tp_sl_logic: atr_based
+    tp_value: 2.0
+    sl_value: 1.0
+    max_hold_bars: 120
+
+  # OLR - close-auction path. The assumed entry is the auction/next trade
+  # proxy, with conservative nonfill/slippage handled by event metadata such
+  # as auction_nonfill_key and auction_adverse_bps when the strategy provides it.
+  olr:
+    entry_fill_model: next_trade
+    slippage_model: fixed_bps
+    slippage_bps: 7
+    fees_included: true
+    fee_bps: 20
+    tp_sl_logic: atr_based
+    tp_value: 1.5
+    sl_value: 1.0
+    max_hold_bars: 390
+
   # Fallback policy for unknown strategy types
   default:
     entry_fill_model: mid

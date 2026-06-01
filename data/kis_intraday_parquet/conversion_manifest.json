@@ -1,0 +1,75 @@
+{
+  "compression": "zstd",
+  "convert_after_download": true,
+  "counts": {
+    "converted": 0,
+    "errors": 0,
+    "skipped": 0,
+    "total": 0
+  },
+  "created_at": "2026-06-01T01:37:51.919262",
+  "download_workers": 4,
+  "files": [],
+  "incremental_manifest": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday\\incremental_manifest.json",
+  "input_dir": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday",
+  "min_file_age_sec": 0.0,
+  "overwrite": true,
+  "parquet_output_dir": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\kis_intraday_parquet",
+  "request_min_interval_sec": 2.0,
+  "skip_up_to_date": true,
+  "source": "update_kis_intraday.py",
+  "symbols": [
+    "000100"
+  ],
+  "timeframes": [
+    "1m",
+    "5m",
+    "15m",
+    "30m",
+    "1h"
+  ],
+  "validation": {
+    "checked": 5,
+    "failures": [],
+    "passed": true,
+    "target_end": "2026-05-29",
+    "timeframes": {
+      "15m": {
+        "checked": 1,
+        "latest_max": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:30:00+09:00",
+        "missing": 0,
+        "stale": 0
+      },
+      "1h": {
+        "checked": 1,
+        "latest_max": "2026-05-29T15:00:00+09:00",
+        "latest_min": "2026-05-29T15:00:00+09:00",
+        "missing": 0,
+        "stale": 0
+      },
+      "1m": {
+        "checked": 1,
+        "latest_max": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:30:00+09:00",
+        "missing": 0,
+        "stale": 0
+      },
+      "30m": {
+        "checked": 1,
+        "latest_max": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:30:00+09:00",
+        "missing": 0,
+        "stale": 0
+      },
+      "5m": {
+        "checked": 1,
+        "latest_max": "2026-05-29T15:30:00+09:00",
+        "latest_min": "2026-05-29T15:30:00+09:00",
+        "missing": 0,
+        "stale": 0
+      }
+    }
+  },
+  "workers": 4
+}

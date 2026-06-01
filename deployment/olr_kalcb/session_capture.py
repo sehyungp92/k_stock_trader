@@ -9,6 +9,13 @@ from typing import Any, Mapping
 
 from .hashing import canonical_json_hash, file_sha256, json_file_hash, jsonl_file_hash
 
+try:
+    from instrumentation.src.lineage import LineageContext
+    from instrumentation.src.runtime_exporter import RuntimeAssistantExporter
+except Exception:  # pragma: no cover - instrumentation must be fail-open
+    LineageContext = Any  # type: ignore
+    RuntimeAssistantExporter = None  # type: ignore
+
 REQUIRED_JSONL = (
     "artifact_generation.jsonl",
     "subscription_events.jsonl",
@@ -68,10 +75,11 @@ class SessionPaths:
 
 
 class PaperSessionRecorder:
-    def __init__(self, root: str | Path, trade_date: date):
+    def __init__(self, root: str | Path, trade_date: date, *, assistant_event_dir: str | Path | None = None, lineage: LineageContext | None = None):
         self.paths = SessionPaths(Path(root), trade_date)
         self._market_bar_rows: dict[str, dict[str, Any]] = {}
         self._market_bars_dirty = False
+        self.assistant_exporter: Any | None = None
         self.paths.root.mkdir(parents=True, exist_ok=True)
         for dirname in REQUIRED_DIRS:
             (self.paths.root / dirname).mkdir(parents=True, exist_ok=True)
@@ -79,6 +87,21 @@ class PaperSessionRecorder:
             (self.paths.root / filename).touch(exist_ok=True)
         self._load_market_bars()
         self._event_sequence = self._load_event_sequence()
+        if assistant_event_dir is not None:
+            self.enable_assistant_export(assistant_event_dir, lineage=lineage)
+
+    def enable_assistant_export(self, data_dir: str | Path, *, lineage: LineageContext | None = None) -> None:
+        if RuntimeAssistantExporter is None:
+            self.assistant_exporter = None
+            return
+        existing = self.assistant_exporter
+        existing_writer = getattr(existing, "writer", None)
+        if existing_writer is not None and Path(getattr(existing_writer, "data_dir", "")) == Path(data_dir) and lineage is None:
+            return
+        try:
+            self.assistant_exporter = RuntimeAssistantExporter(data_dir, lineage=lineage)
+        except Exception:
+            self.assistant_exporter = None
 
     def write_manifest(self, payload: dict[str, Any] | None = None) -> Path:
         self.flush_market_bars()
@@ -92,6 +115,7 @@ class PaperSessionRecorder:
             **dict(payload or {}),
         }
         self.paths.manifest.write_text(json.dumps(manifest, indent=2, sort_keys=True, default=str), encoding="utf-8")
+        self._export_manifest(manifest)
         return self.paths.manifest
 
     def close_session(
@@ -137,6 +161,7 @@ class PaperSessionRecorder:
             raise ValueError(f"unsupported session jsonl file {filename!r}")
         with (self.paths.root / filename).open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, sort_keys=True, default=str) + "\n")
+        self._export_stream_row(filename, payload)
 
     def copy_snapshot(self, source: str | Path, bucket: str) -> Path:
         if bucket not in REQUIRED_DIRS:
@@ -174,7 +199,35 @@ class PaperSessionRecorder:
     def write_resource_plan(self, payload: dict[str, Any]) -> Path:
         path = self.paths.root / KIS_RESOURCE_PLAN_FILE
         path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
+        self._export_resource_plan(payload)
         return path
+
+    def _export_stream_row(self, filename: str, payload: dict[str, Any]) -> None:
+        exporter = self.assistant_exporter
+        if exporter is None:
+            return
+        try:
+            exporter.export_stream_row(filename, payload, session_root=self.paths.root, trade_date=self.paths.trade_date)
+        except Exception:
+            pass
+
+    def _export_manifest(self, manifest: dict[str, Any]) -> None:
+        exporter = self.assistant_exporter
+        if exporter is None:
+            return
+        try:
+            exporter.export_manifest(manifest, session_root=self.paths.root, trade_date=self.paths.trade_date)
+        except Exception:
+            pass
+
+    def _export_resource_plan(self, payload: dict[str, Any]) -> None:
+        exporter = self.assistant_exporter
+        if exporter is None:
+            return
+        try:
+            exporter.export_resource_plan(payload, session_root=self.paths.root, trade_date=self.paths.trade_date)
+        except Exception:
+            pass
 
     def _load_market_bars(self) -> None:
         path = self.paths.root / MARKET_BARS_FILE

@@ -7,7 +7,9 @@ import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from .event_metadata import create_event_metadata
 
 logger = logging.getLogger("instrumentation.indicator_logger")
 
@@ -25,11 +27,20 @@ class IndicatorSnapshot:
     strategy_type: str
     event_id: str = ""
     bar_id: Optional[str] = None
+    event_metadata: dict[str, Any] | None = None
+    schema_version: str = "indicator_snapshot_v1"
+    strategy_id: str = ""
+    family_id: str = ""
+    portfolio_id: str = ""
+    decision_id: str = ""
+    event_ref: str = ""
+    trace_id: str = ""
     context: dict = field(default_factory=dict)  # strategy-specific extra context
 
     def __post_init__(self):
         if not self.event_id:
-            raw = f"{self.bot_id}|{self.timestamp}|indicator_snapshot|{self.pair}:{self.signal_name}"
+            key = f"{self.strategy_id or self.strategy_type}:{self.pair}:{self.bar_id or self.timestamp}:{self.signal_name}"
+            raw = f"{self.bot_id}|{self.timestamp}|indicator_snapshot|{key}"
             self.event_id = hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     def to_dict(self) -> dict:
@@ -55,9 +66,27 @@ class IndicatorLogger:
         exchange_timestamp: Optional[datetime] = None,
         bar_id: Optional[str] = None,
         context: Optional[dict] = None,
+        decision_id: str = "",
+        event_ref: str = "",
     ) -> IndicatorSnapshot:
         ts = exchange_timestamp or datetime.now(timezone.utc)
         ts_str = ts.isoformat() if isinstance(ts, datetime) else str(ts)
+        strategy_id = str(strategy_type or "").upper().strip()
+        metadata = create_event_metadata(
+            bot_id=self._bot_id,
+            event_type="indicator_snapshot",
+            payload_key=f"{strategy_id}:{pair}:{bar_id or ts_str}:{signal_name}",
+            exchange_timestamp=ts,
+            data_source_id="runtime_session",
+            bar_id=bar_id,
+            schema_version="indicator_snapshot_v1",
+            strategy_id=strategy_id,
+            family_id="krx_equity" if strategy_id in {"KALCB", "OLR"} else "",
+            portfolio_id="olr_kalcb" if strategy_id in {"KALCB", "OLR"} else "",
+            decision_id=decision_id,
+            trace_id=event_ref,
+            scope="strategy",
+        ).to_dict()
 
         snapshot = IndicatorSnapshot(
             bot_id=self._bot_id,
@@ -68,7 +97,15 @@ class IndicatorLogger:
             signal_strength=signal_strength,
             decision=decision,
             strategy_type=strategy_type,
+            strategy_id=strategy_id,
             bar_id=bar_id,
+            event_id=metadata["event_id"],
+            event_metadata=metadata,
+            family_id=metadata.get("family_id") or "",
+            portfolio_id=metadata.get("portfolio_id") or "",
+            decision_id=decision_id,
+            event_ref=event_ref,
+            trace_id=event_ref,
             context=context or {},
         )
 

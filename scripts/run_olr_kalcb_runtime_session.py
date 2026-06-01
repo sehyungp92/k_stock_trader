@@ -65,7 +65,7 @@ def _run_preflight(args: argparse.Namespace) -> int:
     manifest_check = check_manifest(_resolve_path(args.baseline_manifest))
     recorder = None
     if mode in EXECUTION_MODES and getattr(args, "session_root", None):
-        recorder = PaperSessionRecorder(_session_root(args, trade_date), trade_date)
+        recorder = _new_session_recorder(args, trade_date)
     plan = _prepare_plan(args, trade_date, mode=mode, recorder=recorder)
     payload = {
         "command": "preflight",
@@ -79,7 +79,7 @@ def _run_preflight(args: argparse.Namespace) -> int:
 
 def _run_dry_run_bars(args: argparse.Namespace) -> int:
     trade_date = date.fromisoformat(args.trade_date)
-    recorder = PaperSessionRecorder(_session_root(args, trade_date), trade_date)
+    recorder = _new_session_recorder(args, trade_date)
     plan = _prepare_plan(args, trade_date, mode="dry_run", recorder=recorder)
     if not plan.ready_to_start:
         payload = {"command": "dry-run-bars", "passed": False, "runtime_plan": _plan_output(plan, full=bool(args.full_plan))}
@@ -122,7 +122,7 @@ def _run_dry_run_bars(args: argparse.Namespace) -> int:
 def _run_watch_bars(args: argparse.Namespace) -> int:
     trade_date = date.fromisoformat(args.trade_date)
     mode = str(args.mode)
-    recorder = PaperSessionRecorder(_session_root(args, trade_date), trade_date)
+    recorder = _new_session_recorder(args, trade_date)
     oms_client = _make_cli_oms_client(args, mode)
     try:
         plan = _prepare_plan(args, trade_date, mode=mode, recorder=recorder, oms_client=oms_client)
@@ -498,6 +498,7 @@ def _prepare_plan(
         sector_map=sector_map,
         initial_account_state=initial_account_state,
         initial_positions=initial_positions,
+        assistant_event_dir=_assistant_event_dir(args) if recorder is not None else None,
     )
 
 
@@ -621,6 +622,23 @@ def _session_root(args: argparse.Namespace, trade_date: date) -> Path:
     return _resolve_path(DEFAULT_SESSION_ROOT / trade_date.isoformat())
 
 
+def _new_session_recorder(args: argparse.Namespace, trade_date: date) -> PaperSessionRecorder:
+    return PaperSessionRecorder(
+        _session_root(args, trade_date),
+        trade_date,
+        assistant_event_dir=_assistant_event_dir(args),
+    )
+
+
+def _assistant_event_dir(args: argparse.Namespace) -> Path | None:
+    raw = getattr(args, "assistant_event_data_dir", None)
+    if raw is None:
+        raw = os.environ.get("ASSISTANT_EVENT_DATA_DIR", "instrumentation/data")
+    if str(raw).strip().lower() in {"", "off", "none", "disabled"}:
+        return None
+    return _resolve_path(raw)
+
+
 def _resolve_path(path: str | Path) -> Path:
     resolved = Path(path)
     return resolved if resolved.is_absolute() else REPO_ROOT / resolved
@@ -680,6 +698,11 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--fixture-health-ok", action="store_true", help="Dry-run fixture rehearsal only; not promotional evidence.")
     parser.add_argument("--full-plan", action="store_true", help="Include full runtime plan detail, including the complete sector map.")
     parser.add_argument("--output-json", help="Optional path to save the command result JSON.")
+    parser.add_argument(
+        "--assistant-event-data-dir",
+        default=os.environ.get("ASSISTANT_EVENT_DATA_DIR", "instrumentation/data"),
+        help="Canonical assistant telemetry directory; use 'off' to disable local export.",
+    )
 
 
 def _add_market_data_args(parser: argparse.ArgumentParser) -> None:

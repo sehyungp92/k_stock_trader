@@ -31,29 +31,17 @@ try:
 except ImportError:
     requests = None  # graceful degradation if requests not installed
 
+from .event_contract import DIR_TO_EVENT_TYPE, event_priority
+from .event_envelope import wrap_for_relay
+
 
 logger = logging.getLogger("sidecar")
 
 # Map data subdirectory names to event types for the relay envelope
-_DIR_TO_EVENT_TYPE = {
-    "trades": "trade",
-    "missed": "missed_opportunity",
-    "errors": "error",
-    "scores": "process_quality",
-    "daily": "daily_snapshot",
-    "snapshots": "market_snapshot",
-    "exit_movements": "exit_movement",
-    "heartbeats": "heartbeat",
-    "bot_errors": "bot_error",
-    "orders": "order",
-    # Phase 2B mappings:
-    "indicators": "indicator_snapshot",
-    "filter_decisions": "filter_decision",
-    "orderbook": "orderbook_context",
-    "config_changes": "parameter_change",
-}
+_DIR_TO_EVENT_TYPE = dict(DIR_TO_EVENT_TYPE)
 
-# Priority mapping for relay event triage
+# Backwards-compatible public priority labels. Relay wrapping uses the
+# canonical numeric priority from event_contract.
 _EVENT_TYPE_PRIORITY = {
     "bot_error": "high",
     "trade": "normal",
@@ -69,12 +57,26 @@ _EVENT_TYPE_PRIORITY = {
     "filter_decision": "low",
     "orderbook_context": "low",
     "parameter_change": "normal",
+    "decision_event": "low",
+    "strategy_action": "low",
+    "portfolio_rule": "normal",
+    "risk_decision": "normal",
+    "oms_intent": "normal",
+    "fill": "normal",
+    "position_snapshot": "low",
+    "allocation_snapshot": "low",
+    "portfolio_snapshot": "low",
+    "resource_plan": "low",
+    "market_data_subscription": "low",
+    "reconciliation_event": "low",
+    "config_snapshot": "low",
+    "deployment": "low",
 }
 _BOT_ERROR_SEVERITY_PRIORITY = {
-    "critical": "critical",
-    "error": "critical",
-    "warning": "high",
-    "info": "normal",
+    "critical": 0,
+    "error": 0,
+    "warning": 1,
+    "info": 4,
 }
 
 
@@ -157,14 +159,16 @@ class Sidecar:
                 continue
 
             if subdir == "daily":
-                # Daily snapshots are single JSON files, not JSONL
+                for f in sorted(dir_path.glob("*.jsonl")):
+                    files.append((f, event_type))
+                # Legacy daily snapshots are single JSON files.
                 for f in sorted(dir_path.glob("daily_*.json")):
                     files.append((f, event_type))
             else:
                 for f in sorted(dir_path.glob("*.jsonl")):
                     files.append((f, event_type))
 
-        return files
+        return sorted(files, key=lambda item: (event_priority(item[1]), str(item[0])))
 
     def _read_unsent_events(self, filepath: Path, event_type: str) -> List[dict]:
         """Read events from a file that haven't been sent yet.
@@ -221,38 +225,7 @@ class Sidecar:
         The event_id and exchange_timestamp are extracted from the event's
         embedded metadata, or generated from available fields.
         """
-        # Extract event_id from embedded metadata
-        metadata = raw_event.get("event_metadata", {})
-        event_id = metadata.get("event_id", "")
-
-        # Extract exchange_timestamp from metadata or top-level fields
-        exchange_ts = (
-            metadata.get("exchange_timestamp", "")
-            or raw_event.get("entry_time", "")
-            or raw_event.get("timestamp", "")
-            or datetime.now(timezone.utc).isoformat()
-        )
-
-        # If no event_id found, generate a deterministic one
-        if not event_id:
-            # Use bot_id + timestamp + event_type + a distinguishing key
-            key = raw_event.get("trade_id", raw_event.get("date", raw_event.get("snapshot_id", "")))
-            raw_str = f"{self.bot_id}|{exchange_ts}|{event_type}|{key}"
-            event_id = hashlib.sha256(raw_str.encode()).hexdigest()[:16]
-
-        priority = _EVENT_TYPE_PRIORITY.get(event_type, "normal")
-        if event_type == "bot_error":
-            severity = raw_event.get("severity", "").lower()
-            priority = _BOT_ERROR_SEVERITY_PRIORITY.get(severity, priority)
-
-        return {
-            "event_id": event_id,
-            "bot_id": self.bot_id,
-            "event_type": event_type,
-            "priority": priority,
-            "payload": json.dumps(raw_event, default=str),
-            "exchange_timestamp": exchange_ts,
-        }
+        return wrap_for_relay(raw_event, event_type, bot_id=self.bot_id, serialize_payload=True)
 
     # --- Signing ---
 

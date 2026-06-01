@@ -73,6 +73,20 @@ DRIFT_TOLERANCE = 0  # shares
 BROKER_MISSING_GRACE_CYCLES = 2
 
 
+def _allocation_payload(symbol: str, allocation: StrategyAllocation | None) -> Dict:
+    if allocation is None:
+        return {"symbol": str(symbol).zfill(6), "strategy_id": "", "qty": 0, "cost_basis": 0.0}
+    return {
+        "symbol": str(symbol).zfill(6),
+        "strategy_id": allocation.strategy_id,
+        "qty": allocation.qty,
+        "cost_basis": allocation.cost_basis,
+        "entry_ts": allocation.entry_ts.isoformat() if getattr(allocation.entry_ts, "isoformat", None) else allocation.entry_ts,
+        "soft_stop_px": allocation.soft_stop_px,
+        "time_stop_ts": allocation.time_stop_ts,
+    }
+
+
 class OMSCore:
     """
     OMS Core: Central order management system.
@@ -91,6 +105,7 @@ class OMSCore:
         risk_config: Optional[RiskConfig] = None,
         idempotency_store: Optional[IdempotencyStore] = None,
         persistence: Optional[OMSPersistence] = None,
+        event_emitter: Optional[object] = None,
     ):
         self.state = StateStore()
         self.risk = RiskGateway(
@@ -102,6 +117,7 @@ class OMSCore:
         self.planner = OrderPlanner()
         self.adapter = KISExecutionAdapter(kis_api)
         self.persistence = persistence
+        self.event_emitter = event_emitter
 
         self._idem = idempotency_store or InMemoryIdempotencyStore()
         self._reconcile_task: Optional[asyncio.Task] = None
@@ -120,6 +136,7 @@ class OMSCore:
         cached = self._idem.get(intent.idempotency_key)
         if cached is not None:
             logger.debug(f"Duplicate intent: {intent.idempotency_key}")
+            self._emit_intent(intent, cached, phase="duplicate")
             return cached
 
         # 2. Validate (includes expiry enforcement)
@@ -143,6 +160,7 @@ class OMSCore:
 
         # 2. Risk check
         risk_result = self.risk.check(intent)
+        self._emit_risk_decision(intent, risk_result)
 
         if risk_result.decision == RiskDecision.REJECT:
             self._release_lock_if_entry(intent)
@@ -393,6 +411,12 @@ class OMSCore:
             idempotency_key=intent.idempotency_key,
         )
         self.state.add_working_order(plan.symbol, wo)
+        self._emit_order_event(
+            wo,
+            "ORDER_SUBMITTED",
+            payload={"status_after": "WORKING", "order_submitted_at": order_submitted_at},
+            intent=intent,
+        )
 
         # Persist order
         if self.persistence:
@@ -414,9 +438,13 @@ class OMSCore:
     # Fill handling
     # ------------------------------------------------------------------
 
-    async def _apply_fill(self, wo: WorkingOrder, fill_qty: int, intent: Optional[Intent] = None) -> None:
+    async def _apply_fill(self, wo: WorkingOrder, fill_qty: int, intent: Optional[Intent] = None, *, inferred: bool = False) -> None:
         """Apply fill to allocation. real_qty is updated from broker sync only."""
         qty_delta = fill_qty if wo.side == "BUY" else -fill_qty
+        fill_ts = datetime.now()
+        exec_id = f"{wo.order_id}:{wo.filled_qty + fill_qty}"
+        before_pos = self.state.get_position(wo.symbol)
+        before_alloc = _allocation_payload(wo.symbol, before_pos.allocations.get(wo.strategy_id))
 
         # Record realized P&L for sell fills
         fill_realized_pnl = 0.0
@@ -444,14 +472,35 @@ class OMSCore:
             self.risk.on_sector_fill(wo.symbol, fill_qty, wo.price)
         else:
             self.risk.on_sector_close(wo.symbol, fill_qty, wo.price)
+        after_pos = self.state.get_position(wo.symbol)
+        after_alloc = _allocation_payload(wo.symbol, after_pos.allocations.get(wo.strategy_id))
+        self._emit_fill(
+            wo,
+            fill_qty,
+            intent=intent,
+            inferred=inferred,
+            payload={
+                "kis_exec_id": exec_id,
+                "fill_ts": fill_ts.isoformat(),
+                "filled_qty_before": wo.filled_qty,
+                "filled_qty_after": wo.filled_qty + fill_qty,
+                "order_qty": wo.qty,
+                "commission": None,
+                "tax": None,
+                "previous_allocation": before_alloc,
+                "new_allocation": after_alloc,
+                "realized_pnl": fill_realized_pnl,
+            },
+        )
+        self._emit_position_snapshot("fill_applied")
+        self._emit_allocation_snapshot("fill_applied")
+        self._emit_portfolio_snapshot("fill_applied")
 
         # Note: real_qty updated from broker position sync in _reconcile to avoid double-credit
         logger.info(f"Fill applied: {wo.symbol} {wo.side} {fill_qty} for {wo.strategy_id}")
 
         # Persist fill and allocation
         if self.persistence:
-            exec_id = f"{wo.order_id}:{wo.filled_qty + fill_qty}"
-            fill_ts = datetime.now()
             resolved_intent_id = intent.intent_id if intent else wo.intent_id
             await self.persistence.record_fill(
                 kis_exec_id=exec_id, order_id=wo.order_id,
@@ -538,6 +587,30 @@ class OMSCore:
                     )
         self.state.remove_working_order(wo.symbol, wo.order_id)
         self.state.release_entry_lock(wo.symbol, wo.strategy_id)
+        self._emit_order_event(
+            wo,
+            event_type,
+            payload={
+                "payload": payload or {},
+                "status_before": prev_status.name,
+                "status_after": final_status.name,
+                "filled_qty": wo.filled_qty,
+                "order_qty": wo.qty,
+            },
+        )
+        self._emit_reconciliation(
+            "ORDER_TERMINAL",
+            symbol=wo.symbol,
+            payload={
+                "action": event_type,
+                "order_id": wo.order_id,
+                "strategy_id": wo.strategy_id,
+                "side": wo.side,
+                "before_value": {"status": prev_status.name, "filled_qty": wo.filled_qty},
+                "after_value": {"status": final_status.name, "filled_qty": wo.filled_qty},
+                "reason": dict(payload or {}).get("reason", event_type),
+            },
+        )
         if self.persistence:
             await self.persistence.record_order_event(
                 event_type,
@@ -625,6 +698,18 @@ class OMSCore:
                             f"Working order missing from broker snapshot: {wo.symbol} "
                             f"{wo.order_id} ({wo.missing_from_broker_count} cycle(s))"
                         )
+                        self._emit_reconciliation(
+                            "WORKING_ORDER_MISSING",
+                            symbol=wo.symbol,
+                            payload={
+                                "order_id": wo.order_id,
+                                "strategy_id": wo.strategy_id,
+                                "side": wo.side,
+                                "filled_qty": wo.filled_qty,
+                                "order_qty": wo.qty,
+                                "missing_cycles": wo.missing_from_broker_count,
+                            },
+                        )
 
         return broker_by_id
 
@@ -649,8 +734,21 @@ class OMSCore:
                             f"Inferred fill for missing order {wo.order_id}: "
                             f"{wo.symbol} {wo.side} +{inferred_fill}"
                         )
-                        await self._apply_fill(wo, inferred_fill)
+                        await self._apply_fill(wo, inferred_fill, inferred=True)
                         wo.filled_qty += inferred_fill
+                        self._emit_reconciliation(
+                            "INFERRED_FILL",
+                            symbol=wo.symbol,
+                            payload={
+                                "order_id": wo.order_id,
+                                "strategy_id": wo.strategy_id,
+                                "side": wo.side,
+                                "fill_qty": inferred_fill,
+                                "filled_qty": wo.filled_qty,
+                                "order_qty": wo.qty,
+                                "missing_cycles": wo.missing_from_broker_count,
+                            },
+                        )
                         if wo.side == "BUY":
                             buy_delta -= inferred_fill
                         else:
@@ -846,6 +944,11 @@ class OMSCore:
                     if pos.real_qty != new_qty or pos.avg_price != new_avg_price:
                         logger.info(f"Reconcile {symbol}: {pos.real_qty} -> {new_qty}")
                         self.state.update_position(symbol, real_qty=new_qty, avg_price=new_avg_price)
+                        self._emit_reconciliation(
+                            "POSITION_SYNC",
+                            symbol=symbol,
+                            payload={"before_value": {"real_qty": old_qty}, "after_value": {"real_qty": new_qty}},
+                        )
                         if self.persistence:
                             await self.persistence.sync_position(pos)
                             await self.persistence.log_recon(
@@ -873,6 +976,9 @@ class OMSCore:
                 if wo.side == "BUY" and self._remaining_qty(wo) > 0
             ]
             self.risk.reconcile_sector_exposure(sector_positions, working_entry_orders)
+            self._emit_position_snapshot("reconcile")
+            self._emit_allocation_snapshot("reconcile")
+            self._emit_portfolio_snapshot("reconcile")
 
         # 5. Update buyable cash (only every 6th cycle — ~30s at 5s interval)
         if cycle_count % 6 == 0:
@@ -961,6 +1067,7 @@ class OMSCore:
                 recon_status="warn" if drift_count > 0 else "ok",
                 drift_count=drift_count,
             )
+        self._emit_heartbeat("reconcile")
 
     async def _check_allocation_drift(self) -> None:
         """
@@ -985,6 +1092,19 @@ class OMSCore:
                         pos.frozen = False
                         pos.allocations.pop(UNKNOWN_STRATEGY, None)
                         logger.info(f"Unfroze {symbol}: drift resolved")
+                        self._emit_reconciliation(
+                            "ALLOCATION_DRIFT",
+                            symbol=symbol,
+                            payload={
+                                "action": "UNFROZEN",
+                                "reason": "drift_resolved",
+                                "drift": drift,
+                                "frozen_before": True,
+                                "frozen_after": False,
+                            },
+                        )
+                        self._emit_position_snapshot("drift_unfrozen")
+                        self._emit_allocation_snapshot("drift_unfrozen")
                         if self.persistence:
                             await self.persistence.sync_position(pos)
                             await self.persistence.log_recon(
@@ -1013,6 +1133,19 @@ class OMSCore:
                     f"ZERO-POSITION CLEANUP {symbol}: broker holds 0 shares, "
                     f"cleared allocations {cleared}, unfrozen={was_frozen}"
                 )
+                self._emit_reconciliation(
+                    "ALLOCATION_DRIFT",
+                    symbol=symbol,
+                    payload={
+                        "action": "ZERO_POSITION_CLEANUP",
+                        "reason": "broker_zero_position",
+                        "before_value": {"allocations": cleared, "frozen": was_frozen},
+                        "after_value": {"allocations": {}, "frozen": False},
+                        "drift": drift,
+                    },
+                )
+                self._emit_position_snapshot("zero_position_cleanup")
+                self._emit_allocation_snapshot("zero_position_cleanup")
                 if self.persistence:
                     await self.persistence.sync_position(pos)
                     await self.persistence.log_recon(
@@ -1040,6 +1173,20 @@ class OMSCore:
                         f"RECOVERED frozen negative drift {symbol}: "
                         f"{strat_id} allocation {old_qty} -> {alloc.qty}"
                     )
+                    self._emit_reconciliation(
+                        "ALLOCATION_DRIFT",
+                        symbol=symbol,
+                        payload={
+                            "action": "AUTO_CORRECTED_FROZEN",
+                            "reason": "single_strategy_negative_drift",
+                            "strategy_id": strat_id,
+                            "before_value": {"alloc_qty": old_qty, "frozen": True},
+                            "after_value": {"alloc_qty": alloc.qty, "frozen": False},
+                            "drift": drift,
+                        },
+                    )
+                    self._emit_position_snapshot("drift_auto_corrected_frozen")
+                    self._emit_allocation_snapshot("drift_auto_corrected_frozen")
                     if self.persistence:
                         await self.persistence.sync_allocation(symbol, alloc)
                         await self.persistence.sync_position(pos)
@@ -1067,6 +1214,20 @@ class OMSCore:
                     pos.allocations[UNKNOWN_STRATEGY] = StrategyAllocation(strategy_id=UNKNOWN_STRATEGY)
                 pos.allocations[UNKNOWN_STRATEGY].qty += drift
                 pos.frozen = True
+                self._emit_reconciliation(
+                    "ALLOCATION_DRIFT",
+                    symbol=symbol,
+                    payload={
+                        "action": "ASSIGNED_UNKNOWN",
+                        "reason": "positive_drift",
+                        "strategy_ids": list(non_unknown),
+                        "before_value": {"total_allocated": pos.total_allocated() - drift, "frozen": False},
+                        "after_value": {"total_allocated": pos.total_allocated(), "frozen": True},
+                        "drift": drift,
+                    },
+                )
+                self._emit_position_snapshot("drift_assigned_unknown")
+                self._emit_allocation_snapshot("drift_assigned_unknown")
                 if self.persistence:
                     await self.persistence.sync_allocation(symbol, pos.allocations[UNKNOWN_STRATEGY])
                     await self.persistence.sync_position(pos)
@@ -1094,6 +1255,20 @@ class OMSCore:
                             f"Drift persists after auto-correction {symbol}: "
                             f"drift={pos.allocation_drift()} — freezing"
                         )
+                    self._emit_reconciliation(
+                        "ALLOCATION_DRIFT",
+                        symbol=symbol,
+                        payload={
+                            "action": "AUTO_CORRECTED",
+                            "reason": "single_strategy_negative_drift",
+                            "strategy_id": strat_id,
+                            "before_value": {"alloc_qty": old_qty},
+                            "after_value": {"alloc_qty": alloc.qty, "frozen": pos.frozen},
+                            "drift": drift,
+                        },
+                    )
+                    self._emit_position_snapshot("drift_auto_corrected")
+                    self._emit_allocation_snapshot("drift_auto_corrected")
                     if self.persistence:
                         await self.persistence.sync_allocation(symbol, alloc)
                         await self.persistence.sync_position(pos)
@@ -1112,6 +1287,20 @@ class OMSCore:
                         f"alloc={pos.total_allocated()} strategies={list(non_unknown.keys())} "
                         f"— manual correction required"
                     )
+                    self._emit_reconciliation(
+                        "ALLOCATION_DRIFT",
+                        symbol=symbol,
+                        payload={
+                            "action": "NEGATIVE_DRIFT_FROZEN",
+                            "reason": "multi_strategy_negative_drift",
+                            "strategy_ids": list(non_unknown),
+                            "before_value": {"total_allocated": pos.total_allocated()},
+                            "after_value": {"real_qty": pos.real_qty, "drift": drift, "frozen": True},
+                            "drift": drift,
+                        },
+                    )
+                    self._emit_position_snapshot("drift_frozen")
+                    self._emit_allocation_snapshot("drift_frozen")
                     if self.persistence:
                         await self.persistence.sync_position(pos)
                         await self.persistence.log_recon(
@@ -1125,6 +1314,112 @@ class OMSCore:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _emit_deployment(self, status: str) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_deployment(
+                status,
+                {
+                    "portfolio_id": "olr_kalcb",
+                    "strategy_ids": sorted(self.risk.config.strategy_budgets.keys()),
+                    "safe_mode": self.risk.safe_mode,
+                    "halt_new_entries": self.risk.halt_new_entries,
+                },
+            )
+        except Exception:
+            pass
+
+    def _emit_intent(self, intent: Intent, result: IntentResult, *, phase: str) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_intent(intent, result, phase=phase)
+        except Exception:
+            pass
+
+    def _emit_risk_decision(self, intent: Intent, risk_result) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_risk_decision(intent, risk_result, trace=list(getattr(risk_result, "trace", []) or []))
+        except Exception:
+            pass
+
+    def _emit_order_event(self, wo: WorkingOrder, event_type: str, *, payload: Optional[Dict] = None, intent: Optional[Intent] = None) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_order_event(wo, event_type, payload=payload or {}, intent=intent)
+        except Exception:
+            pass
+
+    def _emit_fill(
+        self,
+        wo: WorkingOrder,
+        fill_qty: int,
+        *,
+        intent: Optional[Intent] = None,
+        inferred: bool = False,
+        payload: Optional[Dict] = None,
+    ) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_fill(wo, fill_qty, intent=intent, inferred=inferred, extra=payload or {})
+        except Exception:
+            pass
+
+    def _emit_reconciliation(self, event_type: str, *, symbol: str = "", payload: Optional[Dict] = None) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_reconciliation(event_type, symbol=symbol, payload=payload or {})
+        except Exception:
+            pass
+
+    def _emit_position_snapshot(self, reason: str) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_position_snapshot(self.state, reason=reason)
+        except Exception:
+            pass
+
+    def _emit_allocation_snapshot(self, reason: str) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_allocation_snapshot(self.state, reason=reason)
+        except Exception:
+            pass
+
+    def _emit_portfolio_snapshot(self, reason: str) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_portfolio_snapshot(self, reason=reason)
+        except Exception:
+            pass
+
+    def _emit_heartbeat(self, reason: str) -> None:
+        emitter = self.event_emitter
+        if emitter is None:
+            return
+        try:
+            emitter.emit_heartbeat(self, reason=reason)
+        except Exception:
+            pass
 
     def _release_lock_if_entry(self, intent: Intent) -> None:
         """Release entry lock if this was an ENTER intent."""
@@ -1182,6 +1477,7 @@ class OMSCore:
         # Persist intent
         if self.persistence:
             await self.persistence.record_intent(intent, result)
+        self._emit_intent(intent, result, phase="finalized")
 
         return result
 
@@ -1251,6 +1547,21 @@ class OMSCore:
                 if self.persistence:
                     await self.persistence.sync_position(pos)
 
+        self._emit_reconciliation(
+            "ALLOCATION_DRIFT",
+            symbol=symbol,
+            payload={
+                "action": "ADMIN_CORRECTED",
+                "manual": True,
+                "strategy_id": strategy_id,
+                "before_value": {"alloc_qty": old_qty},
+                "after_value": {"alloc_qty": new_qty, "drift": pos.allocation_drift(), "frozen": pos.frozen},
+                "drift": pos.allocation_drift(),
+            },
+        )
+        self._emit_position_snapshot("admin_correct_allocation")
+        self._emit_allocation_snapshot("admin_correct_allocation")
+        self._emit_portfolio_snapshot("admin_correct_allocation")
         return {
             "symbol": symbol, "strategy_id": strategy_id,
             "old_qty": old_qty, "new_qty": new_qty,
@@ -1309,10 +1620,14 @@ class OMSCore:
         self._rejection_counts.clear()
         self._idem.clear()
         self.adapter.reset()
+        self._emit_position_snapshot("eod_cleanup")
+        self._emit_allocation_snapshot("eod_cleanup")
+        self._emit_portfolio_snapshot("eod_cleanup")
         logger.info("EOD cleanup complete")
 
     async def start(self) -> None:
         """Initialize OMS: connect persistence, load state, start reconciliation."""
+        self._emit_deployment("starting")
         # Connect to database
         if self.persistence:
             await self.persistence.connect()
@@ -1334,6 +1649,7 @@ class OMSCore:
 
         # Start reconciliation loop
         await self.start_reconciliation_loop()
+        self._emit_deployment("started")
         logger.info("OMS started")
 
     async def _load_persisted_state(self) -> None:
@@ -1376,6 +1692,10 @@ class OMSCore:
 
     async def shutdown(self) -> None:
         """Graceful shutdown."""
+        self._emit_deployment("shutdown")
+        self._emit_position_snapshot("shutdown")
+        self._emit_allocation_snapshot("shutdown")
+        self._emit_portfolio_snapshot("shutdown")
         if self._reconcile_task:
             self._reconcile_task.cancel()
         if self.persistence:
