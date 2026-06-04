@@ -9,14 +9,18 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
-import yaml
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from loguru import logger
 
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env
+from .config_loader import (
+    build_risk_config as _build_risk_config,
+    effective_risk_config_payload,
+    load_oms_config_with_source,
+)
 from .oms_core import OMSCore
 from .intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, TimeHorizon, IntentConstraints, RiskPayload
 from .state import StrategyAllocation
@@ -26,9 +30,11 @@ try:
     from instrumentation.src.deployment_logger import DeploymentLogger
     from instrumentation.src.lineage import context_from_env
     from instrumentation.src.oms_exporter import OMSEventEmitter
+    from instrumentation.src.runtime_lineage import load_runtime_deployment_lineage
 except Exception:  # pragma: no cover - OMS must run even if telemetry import fails
     DeploymentLogger = None  # type: ignore
     OMSEventEmitter = None  # type: ignore
+    load_runtime_deployment_lineage = None  # type: ignore
 
     def context_from_env(**_: Any) -> None:  # type: ignore
         return None
@@ -48,31 +54,16 @@ def load_oms_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         Configuration dictionary. Empty dict if no config found.
     """
-    # Default search paths
-    search_paths = [
-        config_path,
-        os.environ.get("OMS_CONFIG_PATH"),
-        "config/oms_config.yaml",
-        "../config/oms_config.yaml",
-        Path(__file__).parent.parent / "config" / "oms_config.yaml",
-    ]
-
-    for path in search_paths:
-        if path is None:
-            continue
-
-        path = Path(path)
-        if path.exists():
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    config = yaml.safe_load(f) or {}
-                logger.info(f"Loaded OMS config from {path}")
-                return config
-            except Exception as e:
-                logger.warning(f"Failed to load config from {path}: {e}")
-
-    logger.info("No OMS config file found, using defaults")
-    return {}
+    try:
+        config, source = load_oms_config_with_source(config_path)
+    except Exception as exc:
+        logger.warning(f"Failed to load OMS config: {exc}")
+        return {}
+    if source is not None:
+        logger.info(f"Loaded OMS config from {source}")
+    else:
+        logger.info("No OMS config file found, using defaults")
+    return config
 
 
 def build_risk_config(config: Dict[str, Any]) -> RiskConfig:
@@ -85,28 +76,7 @@ def build_risk_config(config: Dict[str, Any]) -> RiskConfig:
     Returns:
         RiskConfig with values from config (or defaults if not specified)
     """
-    risk_section = config.get("risk", {})
-    regime_caps = config.get("regime_exposure_caps", {})
-    strategy_budgets = config.get("strategy_budgets")
-
-    return RiskConfig(
-        # Daily circuit breakers
-        daily_loss_warn_pct=risk_section.get("daily_loss_warn_pct", 0.02),
-        daily_loss_halt_pct=risk_section.get("daily_loss_halt_pct", 0.03),
-        # Exposure limits
-        max_gross_exposure_pct=risk_section.get("max_gross_exposure_pct", 0.80),
-        max_net_exposure_pct=risk_section.get("max_net_exposure_pct", 0.60),
-        max_position_pct=risk_section.get("max_position_pct", 0.15),
-        max_positions_count=risk_section.get("max_positions_count", 10),
-        max_sector_pct=risk_section.get("max_sector_pct", 0.30),
-        # Strategy budgets
-        strategy_budgets=strategy_budgets,
-        # Microstructure
-        max_spread_bps=risk_section.get("max_spread_bps", 50.0),
-        vi_cooldown_sec=risk_section.get("vi_cooldown_sec", 600.0),
-        # Regime caps
-        regime_exposure_caps=regime_caps if regime_caps else None,
-    )
+    return _build_risk_config(config)
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +221,15 @@ async def lifespan(app: FastAPI):
     logger.info("OMS Server starting...")
 
     # Load OMS configuration from file
-    oms_config = load_oms_config()
+    try:
+        oms_config, oms_config_source = load_oms_config_with_source()
+    except Exception as exc:
+        logger.warning(f"Failed to load OMS config: {exc}")
+        oms_config, oms_config_source = {}, None
+    if oms_config_source is not None:
+        logger.info(f"Loaded OMS config from {oms_config_source}")
+    else:
+        logger.info("No OMS config file found, using defaults")
     risk_config = build_risk_config(oms_config)
 
     if oms_config.get("strategy_budgets"):
@@ -269,17 +247,19 @@ async def lifespan(app: FastAPI):
     logger.info(f"OMS instance: {oms_id}")
 
     assistant_event_dir = os.environ.get("ASSISTANT_EVENT_DATA_DIR", "instrumentation/data")
-    lineage = context_from_env(data_source_id="postgres_oms")
+    lineage = _runtime_deployment_lineage(context_from_env(data_source_id="postgres_oms"), assistant_event_dir)
     event_emitter = None
     if assistant_event_dir.lower() not in {"", "off", "none", "disabled"} and OMSEventEmitter is not None:
         try:
             event_emitter = OMSEventEmitter(assistant_event_dir, lineage=lineage)
             if DeploymentLogger is not None:
-                DeploymentLogger(assistant_event_dir, lineage=lineage).emit_config_snapshot(
-                    risk_config=oms_config,
+                snapshot_event = DeploymentLogger(assistant_event_dir, lineage=lineage).emit_config_snapshot(
+                    risk_config=effective_risk_config_payload(oms_config),
                     strategy_registry={"strategy_ids": ["KALCB", "OLR", "PCIM"], "producer": "oms_server"},
+                    source_files=[oms_config_source] if oms_config_source is not None else (),
                     environment={"OMS_ID": oms_id, "OMS_CONFIG_PATH": os.environ.get("OMS_CONFIG_PATH", "")},
                 )
+                _apply_config_snapshot_lineage(event_emitter, snapshot_event)
         except Exception:
             event_emitter = None
     _oms = OMSCore(api, risk_config=risk_config, persistence=persistence, event_emitter=event_emitter)
@@ -290,6 +270,61 @@ async def lifespan(app: FastAPI):
 
     logger.info("OMS Server shutting down...")
     await _oms.shutdown()
+
+
+def _apply_config_snapshot_lineage(event_emitter: Any, snapshot_event: Mapping[str, Any] | None) -> None:
+    if event_emitter is None or not isinstance(snapshot_event, Mapping):
+        return
+    payload = snapshot_event.get("payload")
+    if not isinstance(payload, Mapping):
+        return
+    updater = getattr(event_emitter, "update_lineage", None)
+    if not callable(updater):
+        return
+    current = getattr(event_emitter, "lineage", None)
+    updater(**_lineage_missing_overrides(current, payload))
+
+
+def _runtime_deployment_lineage(lineage: Any, assistant_event_dir: str | Path) -> Any:
+    if lineage is None or load_runtime_deployment_lineage is None:
+        return lineage
+    try:
+        payload = load_runtime_deployment_lineage(assistant_event_dir)
+    except Exception:
+        return lineage
+    if not payload:
+        return lineage
+    return lineage.with_overrides(**_lineage_authoritative_overrides(payload))
+
+
+def _lineage_missing_overrides(lineage: Any, payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        field: value
+        for field, value in _lineage_authoritative_overrides(payload).items()
+        if not getattr(lineage, field, "")
+    }
+
+
+def _lineage_authoritative_overrides(payload: Mapping[str, Any]) -> dict[str, Any]:
+    fields = (
+        "deployment_id",
+        "strategy_version",
+        "config_version",
+        "portfolio_config_version",
+        "risk_config_version",
+        "allocation_version",
+        "strategy_registry_version",
+        "kis_resource_plan_hash",
+        "portfolio_id",
+        "account_alias",
+        "portfolio_policy_hash",
+        "code_sha",
+    )
+    return {
+        field: payload.get(field)
+        for field in fields
+        if payload.get(field) not in (None, "")
+    }
 
 
 # ---------------------------------------------------------------------------

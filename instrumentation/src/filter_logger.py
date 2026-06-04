@@ -7,9 +7,10 @@ import logging
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from .event_metadata import create_event_metadata
+from .lineage import LineageContext
 
 logger = logging.getLogger("instrumentation.filter_logger")
 
@@ -41,6 +42,16 @@ class FilterDecisionEvent:
     threshold_operator: str = ">="
     distance_to_threshold: Optional[float] = None
     input_refs: list[str] | None = None
+    account_alias: str = ""
+    strategy_version: str = ""
+    config_version: str = ""
+    portfolio_config_version: str = ""
+    risk_config_version: str = ""
+    allocation_version: str = ""
+    strategy_registry_version: str = ""
+    deployment_id: str = ""
+    parameter_set_id: str = ""
+    code_sha: str = ""
 
     def __post_init__(self):
         if not self.event_id:
@@ -67,10 +78,11 @@ class FilterDecisionEvent:
 class FilterLogger:
     """Writes filter decision events to daily JSONL files."""
 
-    def __init__(self, data_dir: str | Path, bot_id: str) -> None:
+    def __init__(self, data_dir: str | Path, bot_id: str, *, lineage: LineageContext | Mapping[str, Any] | None = None) -> None:
         self._data_dir = Path(data_dir) / "filter_decisions"
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._bot_id = bot_id
+        self._lineage = lineage
 
     def log_decision(
         self,
@@ -89,6 +101,7 @@ class FilterLogger:
         filter_group: str = "entry",
         threshold_operator: str = ">=",
         input_refs: Optional[list[str]] = None,
+        lineage: LineageContext | Mapping[str, Any] | None = None,
     ) -> FilterDecisionEvent:
         ts = exchange_timestamp or datetime.now(timezone.utc)
         ts_str = ts.isoformat() if isinstance(ts, datetime) else str(ts)
@@ -102,6 +115,7 @@ class FilterLogger:
             data_source_id="runtime_session",
             bar_id=bar_id,
             schema_version="filter_decision_v1",
+            lineage=lineage or self._lineage,
             strategy_id=strategy_id,
             family_id="krx_equity" if strategy_id in {"KALCB", "OLR"} else "",
             portfolio_id="olr_kalcb" if strategy_id in {"KALCB", "OLR"} else "",
@@ -133,6 +147,7 @@ class FilterLogger:
             threshold_operator=threshold_operator,
             distance_to_threshold=None if threshold == 0.0 else actual_value - threshold,
             input_refs=input_refs or [],
+            **_lineage_fields(metadata),
         )
 
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -144,3 +159,19 @@ class FilterLogger:
             logger.debug("Failed to write filter decision: %s", e)
 
         return event
+
+
+def _lineage_fields(metadata: Mapping[str, Any]) -> dict[str, str]:
+    keys = (
+        "account_alias",
+        "strategy_version",
+        "config_version",
+        "portfolio_config_version",
+        "risk_config_version",
+        "allocation_version",
+        "strategy_registry_version",
+        "deployment_id",
+        "parameter_set_id",
+        "code_sha",
+    )
+    return {key: str(metadata.get(key) or "") for key in keys}

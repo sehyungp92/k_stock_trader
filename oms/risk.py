@@ -194,10 +194,20 @@ class RiskGateway:
 
         # Block entries if equity not yet loaded
         if intent.intent_type == IntentType.ENTER and self.state.equity <= 0:
-            return RiskResult(
+            result = RiskResult(
                 RiskDecision.DEFER,
                 "Equity not yet loaded — reconciliation pending"
             )
+            trace.append(
+                self._trace_row(
+                    "equity_loaded",
+                    intent,
+                    result,
+                    thresholds={"minimum_equity": 0.0},
+                    observed={"equity": self.state.equity},
+                )
+            )
+            return self._with_trace(result, trace)
 
         # 1. Global hard blocks
         result = self._check_global_blocks(intent)

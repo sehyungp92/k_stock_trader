@@ -73,6 +73,7 @@ def wrap_for_relay(
 
     raw = dict(raw_event or {})
     metadata = dict(raw.get("event_metadata") or {})
+    payload_object = raw.get("payload") if isinstance(raw.get("payload"), Mapping) else {}
     event_type = str(raw.get("event_type") or metadata.get("event_type") or event_type)
     event_id = str(raw.get("event_id") or metadata.get("event_id") or "")
     exchange_ts = str(
@@ -106,6 +107,8 @@ def wrap_for_relay(
         value = raw.get(field)
         if value in (None, ""):
             value = metadata.get(field)
+        if value in (None, ""):
+            value = payload_object.get(field)
         if value not in (None, ""):
             envelope[field] = value
     return envelope
@@ -116,6 +119,8 @@ def _is_canonical(raw: Mapping[str, Any]) -> bool:
 
 
 def _payload_key(raw: Mapping[str, Any]) -> str:
+    metadata = raw.get("event_metadata") if isinstance(raw.get("event_metadata"), Mapping) else {}
+    payload_object = raw.get("payload") if isinstance(raw.get("payload"), Mapping) else {}
     for key in (
         "payload_key",
         "trade_id",
@@ -131,6 +136,10 @@ def _payload_key(raw: Mapping[str, Any]) -> str:
         "date",
     ):
         value = raw.get(key)
+        if value in (None, ""):
+            value = metadata.get(key)
+        if value in (None, ""):
+            value = payload_object.get(key)
         if value not in (None, ""):
             return str(value)
     return json.dumps(raw, sort_keys=True, default=str)[:256]

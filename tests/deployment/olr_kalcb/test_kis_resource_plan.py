@@ -353,7 +353,7 @@ def test_combined_session_enables_olr_final_without_recreating_runtime(tmp_path)
     )
     olr_store = OLRArtifactStore(tmp_path / "olr")
     olr_store.save_snapshot(_olr_snapshot(trade_date, OLR_STAGE1_ARTIFACT_STAGE, olr_cfg, count=1), artifact_stage=OLR_STAGE1_ARTIFACT_STAGE)
-    recorder = PaperSessionRecorder(tmp_path / "session", trade_date)
+    recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
     plan = prepare_runtime_session(
         ("KALCB", "OLR"),
         trade_date=trade_date,
@@ -379,6 +379,23 @@ def test_combined_session_enables_olr_final_without_recreating_runtime(tmp_path)
     assert plan.ready_for_olr_start is True
     assert manifest["kis_resource_plan_hash"] == plan.kis_resource_plan.plan_hash
     assert any(row["stage"] == OLR_FINAL_ARTIFACT_STAGE for row in manifest["staged_artifacts"])
+    resource_rows = [
+        json.loads(line)
+        for path in (tmp_path / "assistant" / "resource_plans").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    deployment_rows = [
+        json.loads(line)
+        for path in (tmp_path / "assistant" / "deployments").glob("*.jsonl")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    final_resource = next(row for row in resource_rows if row["payload"]["plan_hash"] == plan.kis_resource_plan.plan_hash)
+    final_deployment = next(row for row in deployment_rows if row["payload"]["kis_resource_plan_hash"] == plan.kis_resource_plan.plan_hash)
+    assert final_resource["deployment_id"] == final_deployment["deployment_id"]
+    assert final_resource["strategy_registry_version"] == final_deployment["strategy_registry_version"]
+    assert final_resource["lineage_gap"] is False
     result = asyncio.run(plan.handle_bar(_bar("100001", trade_date, time(14, 36))))
     assert [item.strategy_id for item in result] == ["OLR"]
 

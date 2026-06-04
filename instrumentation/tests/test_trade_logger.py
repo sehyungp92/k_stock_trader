@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+from instrumentation.src.lineage import LineageContext
 from instrumentation.src.trade_logger import TradeLogger, TradeEvent
 from instrumentation.src.market_snapshot import MarketSnapshot, MarketSnapshotService
 
@@ -239,3 +240,96 @@ class TestTradeLogger:
         assert trade.event_metadata
         assert "event_id" in trade.event_metadata
         assert "bot_id" in trade.event_metadata
+
+    def test_entry_and_exit_preserve_lineage_and_join_keys(self):
+        lineage = LineageContext(
+            strategy_id="KALCB",
+            deployment_id="deploy-unit",
+            code_sha="abc123",
+            strategy_version="strategy-unit",
+            config_version="cfg-unit",
+            portfolio_config_version="portfolio-unit",
+            risk_config_version="risk-unit",
+            allocation_version="allocation-unit",
+            strategy_registry_version="registry-unit",
+            parameter_set_id="params-unit",
+            experiment_id="experiment-unit",
+            variant_id="variant-unit",
+            kis_resource_plan_hash="plan-unit",
+            portfolio_policy_hash="policy-unit",
+        )
+        logger = TradeLogger(self.config, self.snap_service, lineage=lineage)
+
+        entry = logger.log_entry(
+            trade_id="t1",
+            pair="005930",
+            side="LONG",
+            entry_price=50000,
+            position_size=10,
+            position_size_quote=500000,
+            entry_signal="test",
+            entry_signal_id="test",
+            entry_signal_strength=0.5,
+            active_filters=[],
+            passed_filters=[],
+            strategy_params={
+                "artifact_hash": "artifact-unit",
+                "source_fingerprint": "source-unit",
+                "candidate_hash": "candidate-unit",
+            },
+            join_keys={
+                "event_ref": "event-1",
+                "decision_ref": "decision-1",
+                "action_ref": "action-1",
+                "intent_id": "intent-1",
+                "oms_order_id": "oms-order-1",
+                "entry_order_event_refs": ["order-entry-1"],
+            },
+        )
+        assert entry.strategy_id == "KALCB"
+        assert entry.strategy_version == "strategy-unit"
+        assert entry.config_version == "cfg-unit"
+        assert entry.portfolio_config_version == "portfolio-unit"
+        assert entry.risk_config_version == "risk-unit"
+        assert entry.allocation_version == "allocation-unit"
+        assert entry.deployment_id == "deploy-unit"
+        assert entry.param_set_id == "params-unit"
+        assert entry.event_ref == "event-1"
+        assert entry.decision_ref == "decision-1"
+        assert entry.action_ref == "action-1"
+        assert entry.intent_id == "intent-1"
+        assert entry.oms_order_id == "oms-order-1"
+        assert entry.entry_order_event_refs == ["order-entry-1"]
+        assert entry.artifact_hash == "artifact-unit"
+        assert entry.source_fingerprint == "source-unit"
+        assert entry.candidate_hash == "candidate-unit"
+
+        exit_event = logger.log_exit(
+            trade_id="t1",
+            exit_price=51000,
+            exit_reason="TAKE_PROFIT",
+            join_keys={
+                "exit_fill_id": "fill-exit-1",
+                "exit_order_event_refs": ["order-exit-1"],
+            },
+        )
+
+        assert exit_event is not None
+        assert exit_event.strategy_version == "strategy-unit"
+        assert exit_event.config_version == "cfg-unit"
+        assert exit_event.deployment_id == "deploy-unit"
+        assert exit_event.event_metadata["strategy_version"] == "strategy-unit"
+        assert exit_event.event_metadata["config_version"] == "cfg-unit"
+        assert exit_event.event_ref == "event-1"
+        assert exit_event.decision_ref == "decision-1"
+        assert exit_event.action_ref == "action-1"
+        assert exit_event.exit_fill_id == "fill-exit-1"
+        assert exit_event.exit_order_event_refs == ["order-exit-1"]
+
+        rows = [
+            json.loads(line)
+            for path in Path(self.tmpdir).joinpath("trades").glob("*.jsonl")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        ]
+        assert rows[-1]["strategy_version"] == "strategy-unit"
+        assert rows[-1]["event_metadata"]["deployment_id"] == "deploy-unit"

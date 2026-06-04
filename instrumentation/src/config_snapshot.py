@@ -10,6 +10,16 @@ from typing import Any, Mapping, Sequence
 from .lineage import LineageContext, deployment_id_for, redact_mapping, stable_hash
 
 
+CONFIG_VERSION_FIELDS = (
+    "config_version",
+    "portfolio_config_version",
+    "risk_config_version",
+    "allocation_version",
+    "strategy_registry_version",
+    "kis_resource_plan_hash",
+)
+
+
 def file_hash(path: str | Path) -> str:
     import hashlib
 
@@ -42,7 +52,7 @@ def effective_config_snapshot(
     registry_redacted, registry_redacted_keys = redact_mapping(dict(strategy_registry or {}))
     resource_redacted, resource_redacted_keys = redact_mapping(dict(resource_plan or {}))
     env_redacted, env_redacted_keys = redact_mapping(dict(environment or {}))
-    versions = {
+    computed_versions = {
         "config_version": stable_hash(strategies_redacted),
         "portfolio_config_version": stable_hash(portfolio_redacted),
         "risk_config_version": stable_hash(risk_redacted),
@@ -50,6 +60,12 @@ def effective_config_snapshot(
         "strategy_registry_version": stable_hash(registry_redacted),
         "kis_resource_plan_hash": str(resource_redacted.get("plan_hash") or stable_hash(resource_redacted)) if resource_redacted else "",
     }
+    versions = dict(computed_versions)
+    if lineage is not None:
+        for field in CONFIG_VERSION_FIELDS:
+            value = str(getattr(lineage, field, "") or "")
+            if value:
+                versions[field] = value
     active_strategy_budget_status = _active_strategy_budget_status(registry_redacted, risk_redacted)
     source_rows = [
         {"path": str(path), "sha256": file_hash(path)}
@@ -60,7 +76,7 @@ def effective_config_snapshot(
         if lineage is not None and lineage.deployment_id
         else deployment_id_for({"versions": versions, "sources": source_rows})
     )
-    return {
+    snapshot = {
         "record_type": "config_snapshot",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "deployment_id": deployment_id,
@@ -90,6 +106,9 @@ def effective_config_snapshot(
         ),
         "active_strategy_budget_status": active_strategy_budget_status,
     }
+    if computed_versions != versions:
+        snapshot["computed_versions"] = computed_versions
+    return snapshot
 
 
 def snapshot_json(payload: Mapping[str, Any]) -> str:

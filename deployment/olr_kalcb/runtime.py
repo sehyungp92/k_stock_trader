@@ -18,6 +18,7 @@ from strategy_olr.research import final_candidate_config_fingerprint as olr_fina
 
 from .action_router import RoutedOMSAdapter, RuntimeActionRouter
 from .coordinator import StrategyRuntimeDescriptor, create_strategy_descriptor
+from .deployment_metadata import emit_deployment_metadata
 from .dry_run_oms import RecordingOMSClient
 from .hashing import canonical_json_hash, file_sha256
 from .kis_resource_plan import (
@@ -30,6 +31,12 @@ from .portfolio_context import PortfolioContextProvider, _coerce_account, _coerc
 from .readiness import DEFAULT_ARTIFACT_ROOTS, ArtifactReadinessFailure, load_strategy_artifact, required_stage_for, validate_strategy_artifacts
 from .session_capture import PaperSessionRecorder
 from .session_driver import RuntimeSessionDriver, handle_combined_bar
+
+try:
+    from instrumentation.src.lineage import LineageContext, get_code_sha
+except Exception:  # pragma: no cover - instrumentation must be fail-open
+    LineageContext = None  # type: ignore[assignment]
+    get_code_sha = None  # type: ignore[assignment]
 
 ARTIFACT_ONLY_MODES = {"artifact_only", "artifact_only_stage1"}
 EXECUTION_MODES = {"dry_run", "paper", "live"}
@@ -134,6 +141,10 @@ class RuntimeSessionPlan:
     kis_resource_plan: KISResourcePlan | None = None
     kis_resource_plan_path: str | None = None
     strategy_configs: dict[str, KALCBConfig | OLRConfig] | None = None
+    deployment_metadata_path: str | None = None
+    deployment_metadata_contract_path: str | None = None
+    deployment_metadata_environment: str | None = None
+    runtime_entrypoint: str | None = None
 
     @property
     def ready_to_start(self) -> bool:
@@ -308,6 +319,7 @@ class RuntimeSessionPlan:
             resource_plan=resource_plan,
             resource_plan_path=resource_plan_path,
         )
+        _emit_runtime_deployment_metadata(self)
         return driver
 
     async def handle_bar(self, bar: Any, *, target_strategy_ids: Sequence[str] | None = None) -> tuple[Any, ...]:
@@ -398,6 +410,7 @@ class RuntimeSessionPlan:
             "kis_resource_plan_hash": self.kis_resource_plan.plan_hash if self.kis_resource_plan is not None else "",
             "kis_resource_plan_path": self.kis_resource_plan_path or "",
             "kis_resource_plan": self.kis_resource_plan.to_json_dict() if self.kis_resource_plan is not None else None,
+            "deployment_metadata_path": self.deployment_metadata_path or "",
             "has_action_router": self.action_router is not None,
             "has_session_recorder": self.session_recorder is not None,
             "closeout_capable": _closeout_capable(self.session_recorder),
@@ -424,6 +437,10 @@ def prepare_runtime_session(
     initial_positions: Any | None = None,
     initial_strategy_states: Mapping[str, Any] | None = None,
     assistant_event_dir: str | Path | None = None,
+    deployment_metadata_path: str | Path | None = None,
+    deployment_metadata_contract_path: str | Path | None = None,
+    deployment_metadata_environment: str | None = None,
+    runtime_entrypoint: str | None = None,
 ) -> RuntimeSessionPlan:
     mode_name = _normalize_mode(mode)
     sids = tuple(dict.fromkeys(_normalize_strategy_id(strategy_id) for strategy_id in strategy_ids))
@@ -489,7 +506,7 @@ def prepare_runtime_session(
         enable_export = getattr(session_recorder, "enable_assistant_export", None)
         if callable(enable_export):
             try:
-                enable_export(assistant_event_dir)
+                enable_export(assistant_event_dir, lineage=_runtime_assistant_lineage())
             except Exception:
                 pass
     if kis_resource_plan is not None and session_recorder is not None:
@@ -578,6 +595,7 @@ def prepare_runtime_session(
             approved_config_fingerprints=config_fingerprints,
             olr_final_required=olr_final_required,
         ) if session_recorder is not None else ()
+        risk_config_payload, risk_config_source = _runtime_risk_config_payload()
         if session_recorder is not None:
             session_recorder.write_manifest(
                 {
@@ -588,6 +606,8 @@ def prepare_runtime_session(
                     "portfolio_policy_config": asdict(portfolio.config) if portfolio is not None else None,
                     "portfolio_policy_hash": portfolio.policy_hash if portfolio is not None else None,
                     "sector_map": dict(context_sector_map),
+                    "risk_config": risk_config_payload,
+                    "risk_config_source": risk_config_source,
                     "staged_artifacts": staged_artifacts,
                     "kis_resource_plan_hash": kis_resource_plan.plan_hash if kis_resource_plan is not None else "",
                     "kis_resource_plan_path": resource_plan_path,
@@ -625,7 +645,7 @@ def prepare_runtime_session(
                     mode=mode_name,
                 )
     preflight = _with_runtime_driver_check(preflight, mode_name, bool(drivers))
-    return RuntimeSessionPlan(
+    plan = RuntimeSessionPlan(
         mode=mode_name,
         trade_date=trade_date,
         artifacts=artifacts,
@@ -644,7 +664,13 @@ def prepare_runtime_session(
         kis_resource_plan=kis_resource_plan,
         kis_resource_plan_path=resource_plan_path,
         strategy_configs=dict(configs),
+        deployment_metadata_path=str(deployment_metadata_path or "") if _deployment_metadata_enabled(deployment_metadata_path) else "",
+        deployment_metadata_contract_path=str(deployment_metadata_contract_path or ""),
+        deployment_metadata_environment=deployment_metadata_environment or "",
+        runtime_entrypoint=runtime_entrypoint or "",
     )
+    _emit_runtime_deployment_metadata(plan)
+    return plan
 
 
 def run_runtime_preflight(
@@ -1090,6 +1116,139 @@ def _rewrite_runtime_manifest_for_enablement(
     )
 
 
+def _emit_runtime_deployment_metadata(plan: RuntimeSessionPlan) -> None:
+    if not plan.deployment_metadata_path or plan.mode not in {"paper", "live"} or not plan.ready_to_start:
+        return
+    strategy_ids = _deployment_metadata_strategy_ids(plan)
+    try:
+        emit_deployment_metadata(
+            plan.deployment_metadata_path,
+            repo_root=_repo_root(),
+            contract_path=plan.deployment_metadata_contract_path or None,
+            mode=plan.mode,
+            strategy_ids=strategy_ids,
+            strategy_configs=_filter_mapping(plan.strategy_config_summaries or {}, strategy_ids),
+            portfolio_policy_config=plan.portfolio_policy_config or {},
+            strategy_artifacts=_filter_mapping(plan.artifacts, strategy_ids),
+            initial_positions=_runtime_manifest_value(plan.session_recorder, "initial_positions", {}),
+            kis_resource_plan_hash=plan.kis_resource_plan.plan_hash if plan.kis_resource_plan is not None else "",
+            deployment_id=_runtime_deployment_id(plan),
+            runtime_started_at_utc=_runtime_manifest_timestamp(plan.session_recorder),
+            runtime_entrypoint=plan.runtime_entrypoint or "deployment.olr_kalcb.runtime:prepare_runtime_session",
+            runtime_instance_id=_runtime_instance_id(plan),
+            emission_environment=plan.deployment_metadata_environment or "",
+        )
+    except Exception as exc:
+        _record_deployment_metadata_error(plan, exc)
+
+
+def _runtime_deployment_id(plan: RuntimeSessionPlan) -> str:
+    exporter = getattr(plan.session_recorder, "assistant_exporter", None)
+    lineage = getattr(exporter, "current_lineage", None) or getattr(exporter, "base_lineage", None)
+    return str(getattr(lineage, "deployment_id", "") or "")
+
+
+def _runtime_assistant_lineage() -> Any | None:
+    if LineageContext is None:
+        return None
+    try:
+        code_sha = get_code_sha(_repo_root()) if callable(get_code_sha) else ""
+        return LineageContext(code_sha=code_sha)
+    except Exception:
+        return None
+
+
+def _runtime_instance_id(plan: RuntimeSessionPlan) -> str:
+    recorder = plan.session_recorder
+    if recorder is None:
+        return ""
+    try:
+        return f"runtime:{canonical_json_hash({'session_root': str(recorder.paths.root), 'started_at': _runtime_manifest_timestamp(recorder)})[:16]}"
+    except Exception:
+        return ""
+
+
+def _record_deployment_metadata_error(plan: RuntimeSessionPlan, exc: Exception) -> None:
+    exporter = getattr(plan.session_recorder, "assistant_exporter", None)
+    writer = getattr(exporter, "writer", None)
+    if writer is None:
+        return
+    try:
+        writer.write(
+            "bot_error",
+            {
+                "record_type": "deployment_metadata_error",
+                "component": "deployment_metadata",
+                "severity": "warning",
+                "mode": plan.mode,
+                "deployment_metadata_path": plan.deployment_metadata_path or "",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+            payload_key=f"deployment_metadata:{plan.deployment_metadata_path or ''}:{type(exc).__name__}",
+            exchange_timestamp=datetime.now(timezone.utc),
+            lineage=getattr(exporter, "current_lineage", None),
+            scope="portfolio",
+        )
+    except Exception:
+        return
+
+
+def _deployment_metadata_strategy_ids(plan: RuntimeSessionPlan) -> tuple[str, ...]:
+    active = tuple(str(strategy_id).upper().strip() for strategy_id in (plan.descriptors or {}) if str(strategy_id).strip())
+    if active:
+        return active
+    return tuple(str(strategy_id).upper().strip() for strategy_id in (plan.strategy_config_summaries or plan.artifacts) if str(strategy_id).strip())
+
+
+def _filter_mapping(mapping: Mapping[str, Any], strategy_ids: Sequence[str]) -> dict[str, Any]:
+    wanted = {str(strategy_id).upper().strip() for strategy_id in strategy_ids}
+    return {
+        str(key).upper().strip(): value
+        for key, value in dict(mapping or {}).items()
+        if str(key).upper().strip() in wanted
+    }
+
+
+def _runtime_risk_config_payload() -> tuple[dict[str, Any], str]:
+    try:
+        from oms.config_loader import load_effective_risk_config_payload
+
+        payload, source = load_effective_risk_config_payload()
+        return payload, str(source or "")
+    except Exception:
+        try:
+            from oms.risk import RiskConfig
+
+            return asdict(RiskConfig()), ""
+        except Exception:
+            return {}, ""
+
+
+def _runtime_manifest_timestamp(recorder: PaperSessionRecorder | None) -> str:
+    generated_at = _runtime_manifest_value(recorder, "generated_at", "")
+    if generated_at:
+        return str(generated_at)
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _runtime_manifest_value(recorder: PaperSessionRecorder | None, key: str, default: Any = None) -> Any:
+    if recorder is None:
+        return default
+    manifest_path = recorder.paths.manifest
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8") or "{}")
+            return manifest.get(key, default)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return default
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
 def _record_resource_route_suppression(
     recorder: PaperSessionRecorder | None,
     plan: KISResourcePlan | None,
@@ -1157,6 +1316,10 @@ def _execution_oms_available(mode: str, client: Any | None) -> bool:
 
 def _closeout_capable(recorder: Any | None) -> bool:
     return callable(getattr(recorder, "close_session", None))
+
+
+def _deployment_metadata_enabled(path: str | Path | None) -> bool:
+    return str(path or "").strip().lower() not in {"", "off", "none", "disabled"}
 
 
 def _artifact_failure_detail(failures: Sequence[ArtifactReadinessFailure]) -> str:

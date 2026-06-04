@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 from instrumentation.src.filter_logger import FilterLogger, FilterDecisionEvent
+from instrumentation.src.lineage import LineageContext
 
 
 class TestFilterDecisionEvent:
@@ -93,3 +94,36 @@ class TestFilterLogger:
         d2 = json.loads(lines[1])
         assert d1["passed"] is True
         assert d2["passed"] is False
+
+    def test_filter_event_carries_full_lineage(self):
+        lineage = LineageContext(
+            strategy_id="KALCB",
+            deployment_id="deploy-unit",
+            code_sha="abc123",
+            strategy_version="strategy-unit",
+            config_version="cfg-unit",
+            portfolio_config_version="portfolio-unit",
+            risk_config_version="risk-unit",
+            allocation_version="allocation-unit",
+            strategy_registry_version="registry-unit",
+        )
+        lg = FilterLogger(data_dir=self.tmpdir, bot_id="test_bot", lineage=lineage)
+        event = lg.log_decision(
+            pair="005930",
+            filter_name="spread_gate",
+            passed=False,
+            threshold=50.0,
+            actual_value=75.0,
+            strategy_type="KALCB",
+            event_ref="event-unit",
+            decision_id="decision-unit",
+            input_refs=["spread_bps"],
+        )
+
+        assert event.deployment_id == "deploy-unit"
+        assert event.strategy_version == "strategy-unit"
+        assert event.config_version == "cfg-unit"
+        data = json.loads(next(Path(self.tmpdir).joinpath("filter_decisions").glob("*.jsonl")).read_text().strip())
+        assert data["deployment_id"] == "deploy-unit"
+        assert data["risk_config_version"] == "risk-unit"
+        assert data["event_metadata"]["deployment_id"] == "deploy-unit"

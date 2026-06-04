@@ -4,9 +4,12 @@ import asyncio
 import inspect
 import json
 from datetime import date, datetime, time, timezone, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import deployment.olr_kalcb.runtime as runtime_module
 from deployment.olr_kalcb.coordinator import create_strategy_descriptor, create_strategy_descriptors
 from deployment.olr_kalcb.hashing import canonical_json_hash
 from deployment.olr_kalcb.readiness import load_strategy_artifact
@@ -406,7 +409,7 @@ def test_runtime_paper_plan_requires_and_records_initial_replay_state(tmp_path):
             sector_map=sector_map,
         )
     )
-    recorder = PaperSessionRecorder(tmp_path / "session", trade_date)
+    recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
     health_checks = {
         "dry_run_gate_passed": True,
         "market_session_open": True,
@@ -467,7 +470,7 @@ def test_runtime_paper_plan_seeds_portfolio_context_from_initial_state(tmp_path)
             sector_map=sector_map,
         )
     )
-    recorder = PaperSessionRecorder(tmp_path / "session", trade_date)
+    recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
     health_checks = {
         "dry_run_gate_passed": True,
         "market_session_open": True,
@@ -503,6 +506,148 @@ def test_runtime_paper_plan_seeds_portfolio_context_from_initial_state(tmp_path)
     context = plan.drivers["KALCB"].portfolio_context
     assert context.cash_equity().cash == 900_000.0
     assert context.strategy_exposure("KALCB", "005930").qty == 2
+
+
+def test_runtime_paper_plan_emits_approval_metadata_when_requested(tmp_path, monkeypatch):
+    calls: list[tuple[object, dict]] = []
+
+    def fake_emit(output_path, **kwargs):
+        calls.append((output_path, kwargs))
+        return {"deployment_id": "deploy-unit"}
+
+    monkeypatch.setattr(runtime_module, "emit_deployment_metadata", fake_emit)
+    trade_date = date(2026, 2, 2)
+    kalcb_payload = {"kalcb.session.ws_budget": 3}
+    sector_map = {"005930": "UNKNOWN"}
+    config_manifest = _write_runtime_config_manifest(tmp_path, kalcb_payload=kalcb_payload, olr_payload={})
+    KALCBArtifactStore(tmp_path / "kalcb").save_snapshot(
+        _kalcb_snapshot(
+            trade_date,
+            metadata={
+                "candidate_config_hash": kalcb_candidate_config_fingerprint(
+                    KALCBConfig.from_mapping(kalcb_payload),
+                    kalcb_payload,
+                    sector_map,
+                )
+            },
+            sector_map=sector_map,
+        )
+    )
+    recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
+    health_checks = {
+        "dry_run_gate_passed": True,
+        "market_session_open": True,
+        "kis_auth_ok": True,
+        "market_data_ok": True,
+        "account_ok": True,
+        "order_route_enabled": True,
+        "risk_limits_loaded": True,
+        "kill_switch_ready": True,
+        "paper_trading_approved": True,
+    }
+
+    plan = prepare_runtime_session(
+        ("KALCB",),
+        trade_date=trade_date,
+        mode="paper",
+        artifact_roots={"KALCB": tmp_path / "kalcb"},
+        health_checks=health_checks,
+        oms_client=_SubmitOnlyOMS(),
+        session_recorder=recorder,
+        strategy_config_source=config_manifest,
+        sector_map=sector_map,
+        initial_account_state={"equity": 1_000_000.0, "buyable_cash": 1_000_000.0},
+        initial_positions={
+            "005930": {
+                "real_qty": 2,
+                "avg_price": 100.0,
+                "allocations": {"KALCB": {"qty": 2, "cost_basis": 100.0}},
+            }
+        },
+        deployment_metadata_path=tmp_path / "deployment_metadata.json",
+        deployment_metadata_contract_path=tmp_path / "strategy_plugin_contract.json",
+        deployment_metadata_environment="paper_vps",
+        runtime_entrypoint="unit:paper",
+    )
+
+    assert plan.ready_to_start is True
+    assert len(calls) == 1
+    output_path, kwargs = calls[0]
+    assert Path(output_path) == tmp_path / "deployment_metadata.json"
+    assert Path(kwargs["contract_path"]) == tmp_path / "strategy_plugin_contract.json"
+    assert kwargs["mode"] == "paper"
+    assert kwargs["strategy_ids"] == ("KALCB",)
+    assert kwargs["strategy_configs"]["KALCB"]["uses_defaults"] is False
+    assert kwargs["strategy_artifacts"]["KALCB"].artifact_hash
+    assert kwargs["initial_positions"]["005930"]["allocations"]["KALCB"]["qty"] == 2
+    assert kwargs["kis_resource_plan_hash"] == plan.kis_resource_plan.plan_hash
+    assert kwargs["deployment_id"].startswith("deploy:")
+    assert kwargs["runtime_instance_id"].startswith("runtime:")
+    assert kwargs["runtime_entrypoint"] == "unit:paper"
+    assert kwargs["emission_environment"] == "paper_vps"
+    manifest = json.loads(recorder.paths.manifest.read_text(encoding="utf-8"))
+    assert Path(manifest["risk_config_source"]).name == "oms_config.yaml"
+    assert manifest["risk_config"]["max_positions_count"] == 15
+    assert manifest["risk_config"]["strategy_budgets"]["PCIM"]["max_risk_pct"] == 0.025
+
+
+def test_runtime_deployment_metadata_uses_active_executable_descriptors(monkeypatch):
+    calls: list[dict] = []
+
+    def fake_emit(_output_path, **kwargs):
+        calls.append(kwargs)
+        return {"deployment_id": "deploy-unit"}
+
+    monkeypatch.setattr(runtime_module, "emit_deployment_metadata", fake_emit)
+    plan = SimpleNamespace(
+        deployment_metadata_path="deployment_metadata.json",
+        deployment_metadata_contract_path="strategy_plugin_contract.json",
+        deployment_metadata_environment="paper_vps",
+        mode="paper",
+        ready_to_start=True,
+        descriptors={"KALCB": object()},
+        strategy_config_summaries={"KALCB": {"enabled": True}, "OLR": {"stage": "stage1"}},
+        portfolio_policy_config={"max_gross_exposure_pct": 0.5},
+        artifacts={"KALCB": object(), "OLR": object()},
+        kis_resource_plan=SimpleNamespace(plan_hash="plan-unit"),
+        session_recorder=None,
+        runtime_entrypoint="unit:entrypoint",
+    )
+
+    runtime_module._emit_runtime_deployment_metadata(plan)
+
+    assert calls[0]["strategy_ids"] == ("KALCB",)
+    assert calls[0]["strategy_configs"].keys() == {"KALCB"}
+    assert calls[0]["strategy_artifacts"].keys() == {"KALCB"}
+
+
+def test_runtime_deployment_metadata_fail_open(monkeypatch):
+    calls = 0
+
+    def fake_emit(_output_path, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("metadata unavailable")
+
+    monkeypatch.setattr(runtime_module, "emit_deployment_metadata", fake_emit)
+    plan = SimpleNamespace(
+        deployment_metadata_path="deployment_metadata.json",
+        deployment_metadata_contract_path="missing_contract.json",
+        deployment_metadata_environment="paper_vps",
+        mode="paper",
+        ready_to_start=True,
+        descriptors={"KALCB": object()},
+        strategy_config_summaries={"KALCB": {"enabled": True}},
+        portfolio_policy_config={},
+        artifacts={"KALCB": object()},
+        kis_resource_plan=SimpleNamespace(plan_hash="plan-unit"),
+        session_recorder=None,
+        runtime_entrypoint="unit:entrypoint",
+    )
+
+    runtime_module._emit_runtime_deployment_metadata(plan)
+
+    assert calls == 1
 
 
 def test_runtime_dry_run_plan_starts_descriptors_after_preflight(tmp_path):

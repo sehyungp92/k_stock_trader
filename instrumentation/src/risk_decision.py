@@ -8,7 +8,12 @@ from enum import Enum
 from typing import Any, Mapping
 
 
-def build_risk_decision_payload(intent: Any, risk_result: Any) -> dict[str, Any]:
+def build_risk_decision_payload(
+    intent: Any,
+    risk_result: Any,
+    *,
+    current_state_summary: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "record_type": "risk_decision",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -23,6 +28,7 @@ def build_risk_decision_payload(intent: Any, risk_result: Any) -> dict[str, Any]
         "cooldown_sec": getattr(risk_result, "cooldown_sec", None),
         "blocking_positions": getattr(risk_result, "blocking_positions", None),
         "resource_conflict_type": getattr(risk_result, "resource_conflict_type", None),
+        "current_state_summary": _json_value(current_state_summary or {}),
         "trace": _json_value(getattr(risk_result, "trace", []) or []),
     }
 

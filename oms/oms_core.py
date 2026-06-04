@@ -5,6 +5,7 @@ OMS Core: Main orchestrator that ties everything together.
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date, datetime
+from types import SimpleNamespace
 from typing import Dict, List, Optional
 import asyncio
 import time
@@ -85,6 +86,14 @@ def _allocation_payload(symbol: str, allocation: StrategyAllocation | None) -> D
         "soft_stop_px": allocation.soft_stop_px,
         "time_stop_ts": allocation.time_stop_ts,
     }
+
+
+def _intent_order_side(intent: Intent) -> str:
+    if intent.intent_type == IntentType.ENTER:
+        return "BUY"
+    if intent.intent_type in {IntentType.EXIT, IntentType.REDUCE}:
+        return "SELL"
+    return ""
 
 
 class OMSCore:
@@ -1346,7 +1355,12 @@ class OMSCore:
         if emitter is None:
             return
         try:
-            emitter.emit_risk_decision(intent, risk_result, trace=list(getattr(risk_result, "trace", []) or []))
+            emitter.emit_risk_decision(intent, risk_result, trace=list(getattr(risk_result, "trace", []) or []), oms=self)
+        except TypeError:
+            try:
+                emitter.emit_risk_decision(intent, risk_result, trace=list(getattr(risk_result, "trace", []) or []))
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -1478,8 +1492,45 @@ class OMSCore:
         if self.persistence:
             await self.persistence.record_intent(intent, result)
         self._emit_intent(intent, result, phase="finalized")
+        self._emit_pre_order_terminal_event(intent, result)
 
         return result
+
+    def _emit_pre_order_terminal_event(self, intent: Intent, result: IntentResult) -> None:
+        if result.order_id or result.status not in {IntentStatus.REJECTED, IntentStatus.DEFERRED, IntentStatus.CANCELLED}:
+            return
+        event_type = {
+            IntentStatus.REJECTED: "ORDER_REJECTED",
+            IntentStatus.DEFERRED: "ORDER_DEFERRED",
+            IntentStatus.CANCELLED: "ORDER_CANCELLED",
+        }[result.status]
+        qty = intent.desired_qty if intent.desired_qty is not None else intent.target_qty
+        order = SimpleNamespace(
+            order_id=str(getattr(intent, "metadata", {}).get("provisional_order_ref") or f"preorder:{intent.intent_id}"),
+            oms_order_id="",
+            symbol=intent.symbol,
+            side=_intent_order_side(intent),
+            qty=qty,
+            filled_qty=0,
+            price=getattr(intent.risk_payload, "entry_px", None) or getattr(intent.constraints, "limit_price", None),
+            strategy_id=intent.strategy_id,
+            intent_id=intent.intent_id,
+            idempotency_key=intent.idempotency_key,
+        )
+        self._emit_order_event(
+            order,
+            event_type,
+            payload={
+                "status_after": result.status.name,
+                "reason": result.message,
+                "pre_working_order": True,
+                "cooldown_until": result.cooldown_until,
+                "blocking_positions": result.blocking_positions,
+                "resource_conflict_type": result.resource_conflict_type,
+                "oms_received_at": result.oms_received_at,
+            },
+            intent=intent,
+        )
 
     async def flatten_all(self) -> None:
         """Emergency flatten all positions via intent pipeline."""

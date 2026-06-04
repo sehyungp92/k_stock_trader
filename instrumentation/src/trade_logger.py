@@ -16,9 +16,10 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from .event_metadata import create_event_metadata
+from .lineage import LineageContext
 from .market_snapshot import MarketSnapshotService
 from .session import classify_session_type
 
@@ -196,11 +197,12 @@ class TradeLogger:
     Errors are written to ``<data_dir>/errors/instrumentation_errors_YYYY-MM-DD.jsonl``.
     """
 
-    def __init__(self, config: Dict[str, Any], snapshot_service) -> None:
+    def __init__(self, config: Dict[str, Any], snapshot_service, *, lineage: LineageContext | Mapping[str, Any] | None = None) -> None:
         self.bot_id: str = config.get("bot_id", "k_stock_trader")
         self.data_dir: Path = Path(config.get("data_dir", "instrumentation/data"))
         self.data_source_id: str = config.get("data_source_id", "kis_rest")
         self.snapshot_service = snapshot_service
+        self._lineage = lineage or config.get("lineage")
         self._open_trades: Dict[str, TradeEvent] = {}
 
         try:
@@ -239,6 +241,8 @@ class TradeLogger:
         execution_timeline: Optional[Dict[str, Any]] = None,
         bot_id: str = "",
         strategy_id: str = "",
+        lineage: LineageContext | Mapping[str, Any] | None = None,
+        join_keys: Optional[Mapping[str, Any]] = None,
     ) -> TradeEvent:
         """Record a trade entry event. Returns a TradeEvent (possibly degraded on error)."""
         try:
@@ -266,6 +270,11 @@ class TradeLogger:
                     abs(entry_price - expected_entry_price) / expected_entry_price * 10000, 2
                 )
 
+            effective_lineage = lineage or self._lineage
+            sid = str(strategy_id or _lineage_value(effective_lineage, "strategy_id") or "").upper().strip()
+            family_id = "krx_equity" if sid in {"KALCB", "OLR"} else None
+            portfolio_id = "olr_kalcb" if sid in {"KALCB", "OLR"} else None
+
             # Build metadata
             try:
                 metadata = create_event_metadata(
@@ -276,9 +285,10 @@ class TradeLogger:
                     data_source_id=self.data_source_id,
                     bar_id=bar_id,
                     schema_version="trade_event_v2",
-                    strategy_id=strategy_id,
-                    family_id="krx_equity" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
-                    portfolio_id="olr_kalcb" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+                    lineage=effective_lineage,
+                    strategy_id=sid or None,
+                    family_id=family_id,
+                    portfolio_id=portfolio_id,
                     parameter_set_id=param_set_id,
                     experiment_id=experiment_id,
                     variant_id=experiment_variant,
@@ -294,10 +304,10 @@ class TradeLogger:
             trade = TradeEvent(
                 trade_id=trade_id,
                 event_metadata=metadata,
-                bot_id=bot_id,
-                strategy_id=strategy_id,
-                family_id="krx_equity" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
-                portfolio_id="olr_kalcb" if str(strategy_id).upper() in {"KALCB", "OLR"} else "",
+                bot_id=bot_id or str(metadata.get("bot_id") or self.bot_id),
+                strategy_id=sid,
+                family_id=str(metadata.get("family_id") or family_id or ""),
+                portfolio_id=str(metadata.get("portfolio_id") or portfolio_id or ""),
                 parameter_set_id=param_set_id or "",
                 bar_id=bar_id or "",
                 artifact_hash=str((strategy_params or {}).get("artifact_hash") or (strategy_params or {}).get("source_artifact_hash") or ""),
@@ -329,6 +339,8 @@ class TradeLogger:
                 filter_decisions=filter_decisions or [],
                 stage="entry",
             )
+            _apply_lineage_fields(trade, metadata)
+            _apply_join_fields(trade, {**dict(strategy_params or {}), **dict(join_keys or {})})
 
             if portfolio_state:
                 trade.portfolio_state_at_entry = portfolio_state
@@ -338,10 +350,13 @@ class TradeLogger:
                 trade.drawdown_tier = drawdown_context.get("drawdown_tier")
                 trade.drawdown_size_mult = drawdown_context.get("drawdown_size_mult")
 
-            trade.experiment_id = experiment_id
-            trade.experiment_variant = experiment_variant
-            trade.variant_id = experiment_variant or ""
-            trade.param_set_id = param_set_id
+            if experiment_id is not None:
+                trade.experiment_id = experiment_id
+            if experiment_variant is not None:
+                trade.experiment_variant = experiment_variant
+                trade.variant_id = experiment_variant
+            if param_set_id is not None:
+                trade.param_set_id = param_set_id
             trade.execution_timeline = execution_timeline
             trade.session_type = classify_session_type(datetime.now(timezone.utc))
 
@@ -363,6 +378,8 @@ class TradeLogger:
         expected_exit_price: Optional[float] = None,
         exit_latency_ms: Optional[int] = None,
         mfe_mae_context: Optional[Dict[str, Any]] = None,
+        lineage: LineageContext | Mapping[str, Any] | None = None,
+        join_keys: Optional[Mapping[str, Any]] = None,
     ) -> Optional[TradeEvent]:
         """Record a trade exit event. Returns updated TradeEvent or None on error."""
         try:
@@ -401,15 +418,28 @@ class TradeLogger:
 
             # Update metadata
             try:
+                effective_lineage = lineage or self._lineage or _trade_lineage_mapping(trade)
                 trade.event_metadata = create_event_metadata(
                     bot_id=self.bot_id,
                     event_type="trade",
                     payload_key=f"{trade_id}_exit",
                     exchange_timestamp=exch_ts,
                     data_source_id=self.data_source_id,
+                    bar_id=trade.bar_id or None,
+                    schema_version="trade_event_v2",
+                    lineage=effective_lineage,
+                    strategy_id=trade.strategy_id or None,
+                    family_id=trade.family_id or None,
+                    portfolio_id=trade.portfolio_id or None,
+                    parameter_set_id=trade.parameter_set_id or trade.param_set_id,
+                    experiment_id=trade.experiment_id,
+                    variant_id=trade.variant_id or trade.experiment_variant,
+                    scope="strategy",
                 ).to_dict()
+                _apply_lineage_fields(trade, trade.event_metadata)
             except Exception:
                 pass
+            _apply_join_fields(trade, join_keys or {})
 
             trade.exit_snapshot = exit_snapshot_dict
             trade.exit_time = exch_ts.isoformat()
@@ -477,3 +507,106 @@ class TradeLogger:
                 f.write(json.dumps(entry) + "\n")
         except Exception:
             pass
+
+
+_IDENTITY_FIELDS = (
+    "bot_id",
+    "strategy_id",
+    "family_id",
+    "portfolio_id",
+    "account_alias",
+)
+
+_LINEAGE_FIELDS = (
+    "strategy_version",
+    "config_version",
+    "portfolio_config_version",
+    "risk_config_version",
+    "allocation_version",
+    "strategy_registry_version",
+    "deployment_id",
+    "parameter_set_id",
+    "experiment_id",
+    "variant_id",
+    "code_sha",
+)
+
+_JOIN_FIELDS = (
+    "bar_id",
+    "trace_id",
+    "decision_id",
+    "event_ref",
+    "decision_ref",
+    "action_ref",
+    "provisional_order_ref",
+    "portfolio_decision_ref",
+    "intent_id",
+    "idempotency_key",
+    "oms_order_id",
+    "kis_order_id",
+    "kis_order_date",
+    "entry_fill_id",
+    "exit_fill_id",
+    "entry_kis_exec_id",
+    "exit_kis_exec_id",
+    "artifact_hash",
+    "source_fingerprint",
+    "candidate_hash",
+    "kis_resource_plan_hash",
+    "portfolio_policy_hash",
+    "market",
+    "krx_trade_date",
+)
+
+_LIST_JOIN_FIELDS = ("entry_order_event_refs", "exit_order_event_refs")
+
+
+def _lineage_value(lineage: LineageContext | Mapping[str, Any] | None, field_name: str) -> Any:
+    if isinstance(lineage, LineageContext):
+        return getattr(lineage, field_name, "")
+    if isinstance(lineage, Mapping):
+        return lineage.get(field_name, "")
+    return ""
+
+
+def _apply_lineage_fields(trade: TradeEvent, metadata: Mapping[str, Any]) -> None:
+    for field_name in (*_IDENTITY_FIELDS, *_LINEAGE_FIELDS):
+        value = metadata.get(field_name)
+        if value not in (None, "") and hasattr(trade, field_name):
+            setattr(trade, field_name, value)
+    if metadata.get("parameter_set_id") and not trade.param_set_id:
+        trade.param_set_id = str(metadata["parameter_set_id"])
+    if metadata.get("variant_id") and not trade.experiment_variant:
+        trade.experiment_variant = str(metadata["variant_id"])
+
+
+def _apply_join_fields(trade: TradeEvent, payload: Mapping[str, Any] | None) -> None:
+    if not isinstance(payload, Mapping):
+        return
+    for field_name in _JOIN_FIELDS:
+        value = payload.get(field_name)
+        if value not in (None, "") and hasattr(trade, field_name):
+            setattr(trade, field_name, str(value))
+    for field_name in _LIST_JOIN_FIELDS:
+        value = payload.get(field_name)
+        if value not in (None, "") and hasattr(trade, field_name):
+            setattr(trade, field_name, _string_list(value))
+
+
+def _trade_lineage_mapping(trade: TradeEvent) -> dict[str, Any]:
+    return {
+        field_name: value
+        for field_name in (*_IDENTITY_FIELDS, *_LINEAGE_FIELDS)
+        for value in (getattr(trade, field_name, ""),)
+        if value not in (None, "")
+    }
+
+
+def _string_list(raw: Any) -> list[str]:
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, str):
+        return [raw]
+    if isinstance(raw, (list, tuple, set)):
+        return [str(item) for item in raw if item not in (None, "")]
+    return [str(raw)]

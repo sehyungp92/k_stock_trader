@@ -12,13 +12,17 @@ from .event_writer import JSONLEventWriter
 from .allocation_snapshot import build_allocation_snapshot
 from .lineage import LineageContext, context_from_oms, stable_hash
 from .portfolio_snapshot import build_portfolio_snapshot
-from .position_snapshot import build_position_snapshot
+from .position_snapshot import build_position_snapshot, position_payloads
 
 
 class OMSEventEmitter:
     def __init__(self, data_dir: str | Path = "instrumentation/data", *, lineage: LineageContext | None = None) -> None:
         self.lineage = lineage or context_from_oms({}, data_source_id="postgres_oms")
         self.writer = JSONLEventWriter(data_dir, lineage=self.lineage)
+
+    def update_lineage(self, **overrides: Any) -> None:
+        self.lineage = self.lineage.with_overrides(**overrides)
+        self.writer.lineage = self.lineage
 
     def emit_deployment(self, status: str, payload: Mapping[str, Any] | None = None) -> None:
         row = {"record_type": "oms_deployment", "status": status, "timestamp": _now(), **dict(payload or {})}
@@ -38,7 +42,15 @@ class OMSEventEmitter:
             row.update(_result_join_keys(result))
         self._write("oms_intent", row, payload_key=f"{row.get('intent_id', '')}:{phase}:{row.get('status', '')}", intent=intent, scope="oms")
 
-    def emit_risk_decision(self, intent: Any, risk_result: Any, *, trace: list[dict[str, Any]] | None = None) -> None:
+    def emit_risk_decision(
+        self,
+        intent: Any,
+        risk_result: Any,
+        *,
+        trace: list[dict[str, Any]] | None = None,
+        oms: Any | None = None,
+        state_summary: Mapping[str, Any] | None = None,
+    ) -> None:
         row = {
             "record_type": "risk_decision",
             "timestamp": _now(),
@@ -50,6 +62,7 @@ class OMSEventEmitter:
             "blocking_positions": getattr(risk_result, "blocking_positions", None),
             "resource_conflict_type": getattr(risk_result, "resource_conflict_type", None),
             "trace": trace if trace is not None else list(getattr(risk_result, "trace", []) or []),
+            "current_state_summary": _risk_state_summary(oms, intent=intent, state_summary=state_summary),
             **_intent_join_keys(intent),
         }
         self._write("risk_decision", row, payload_key=f"{row.get('intent_id', '')}:{row['decision']}:{stable_hash(row.get('trace') or [])}", intent=intent, scope="oms")
@@ -123,14 +136,42 @@ class OMSEventEmitter:
 
     def _write(self, event_type: str, payload: Mapping[str, Any], *, payload_key: str, intent: Any | None = None, scope: str = "oms") -> None:
         lineage = context_from_oms(payload, strategy_id=str(getattr(intent, "strategy_id", "") or payload.get("strategy_id") or ""), data_source_id="postgres_oms").with_overrides(
+            family_id=self.lineage.family_id,
+            portfolio_id=self.lineage.portfolio_id,
+            account_alias=self.lineage.account_alias,
             deployment_id=self.lineage.deployment_id,
+            strategy_version=self.lineage.strategy_version,
+            config_version=self.lineage.config_version,
             code_sha=self.lineage.code_sha,
             portfolio_config_version=self.lineage.portfolio_config_version,
             risk_config_version=self.lineage.risk_config_version,
             allocation_version=self.lineage.allocation_version,
             strategy_registry_version=self.lineage.strategy_registry_version,
+            kis_resource_plan_hash=self.lineage.kis_resource_plan_hash,
+            portfolio_policy_hash=self.lineage.portfolio_policy_hash,
         )
         self.writer.write(event_type, payload, payload_key=payload_key, lineage=lineage, scope=scope)
+
+
+def _risk_state_summary(oms: Any | None, *, intent: Any | None = None, state_summary: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    if isinstance(state_summary, Mapping) and state_summary:
+        return dict(state_summary)
+    if oms is None:
+        return {}
+    try:
+        summary = build_portfolio_snapshot(oms, portfolio_id=getattr(getattr(oms, "event_emitter", None), "lineage", LineageContext()).portfolio_id, reason="risk_decision")
+    except Exception:
+        summary = {}
+    try:
+        symbol = str(getattr(intent, "symbol", "") or "").zfill(6)
+        if symbol.strip("0"):
+            for position in position_payloads(getattr(oms, "state", None)):
+                if str(position.get("symbol") or "").zfill(6) == symbol:
+                    summary["intent_symbol_position"] = position
+                    break
+    except Exception:
+        pass
+    return summary
 
 
 def _intent_payload(intent: Any) -> dict[str, Any]:

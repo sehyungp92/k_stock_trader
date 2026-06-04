@@ -499,6 +499,10 @@ def _prepare_plan(
         initial_account_state=initial_account_state,
         initial_positions=initial_positions,
         assistant_event_dir=_assistant_event_dir(args) if recorder is not None else None,
+        deployment_metadata_path=getattr(args, "deployment_metadata_json", None),
+        deployment_metadata_contract_path=getattr(args, "strategy_plugin_contract", None),
+        deployment_metadata_environment=getattr(args, "deployment_metadata_environment", None),
+        runtime_entrypoint=f"scripts/run_olr_kalcb_runtime_session.py:{args.command}",
     )
 
 
@@ -702,6 +706,21 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
         "--assistant-event-data-dir",
         default=os.environ.get("ASSISTANT_EVENT_DATA_DIR", "instrumentation/data"),
         help="Canonical assistant telemetry directory; use 'off' to disable local export.",
+    )
+    parser.add_argument(
+        "--deployment-metadata-json",
+        default=os.environ.get("OLR_KALCB_DEPLOYMENT_METADATA_PATH"),
+        help="Optional approval-grade deployment_metadata.json output path for paper/live VPS runs.",
+    )
+    parser.add_argument(
+        "--strategy-plugin-contract",
+        default=os.environ.get("OLR_KALCB_STRATEGY_PLUGIN_CONTRACT"),
+        help="Strategy plugin contract JSON whose SHA256 is recorded in deployment metadata.",
+    )
+    parser.add_argument(
+        "--deployment-metadata-environment",
+        default=os.environ.get("OLR_KALCB_DEPLOYMENT_METADATA_ENV"),
+        help="Optional deployment metadata environment: live_bot, vps, paper_vps, or production_vps.",
     )
 
 

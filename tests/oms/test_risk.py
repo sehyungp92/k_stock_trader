@@ -73,6 +73,25 @@ class TestRiskGatewayGlobalBlocks:
         assert result.decision == RiskDecision.DEFER
         assert "safe mode" in result.reason.lower()
 
+    def test_equity_not_loaded_defer_has_trace(self, risk_config):
+        """The early equity guard must still produce risk trace evidence."""
+        state = StateStore()
+        gateway = RiskGateway(state, risk_config)
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="ALPHA",
+            symbol="005930",
+            desired_qty=100,
+            risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+        )
+
+        result = gateway.check(intent)
+
+        assert result.decision == RiskDecision.DEFER
+        assert result.trace
+        assert result.trace[0]["rule"] == "equity_loaded"
+        assert result.trace[0]["observed"]["equity"] == 0.0
+
     def test_flatten_blocks_entries(self, gateway, enter_intent):
         """Test flatten mode blocks entries."""
         gateway.flatten_in_progress = True

@@ -12,6 +12,22 @@ from oms.intent import Intent, IntentConstraints, IntentType, IntentStatus, Inte
 from oms.adapter import BrokerQueryResult
 
 
+class _CapturingOMSEmitter:
+    def __init__(self):
+        self.intents = []
+        self.risks = []
+        self.order_events = []
+
+    def emit_intent(self, intent, result, *, phase):
+        self.intents.append((intent, result, phase))
+
+    def emit_risk_decision(self, intent, risk_result, *, trace):
+        self.risks.append((intent, risk_result, list(trace)))
+
+    def emit_order_event(self, order, event_type, *, payload, intent):
+        self.order_events.append((order, event_type, dict(payload), intent))
+
+
 class TestInMemoryIdempotencyStore:
     """Tests for InMemoryIdempotencyStore."""
 
@@ -187,6 +203,33 @@ class TestOMSCoreProcessIntent:
 
         assert result.status == IntentStatus.DEFERRED
         assert "safe mode" in result.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_risk_rejection_emits_pre_order_lifecycle_event(self, oms):
+        """Risk blocks before working-order creation still emit order evidence."""
+        emitter = _CapturingOMSEmitter()
+        oms.event_emitter = emitter
+        oms.risk.safe_mode = True
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="ALPHA",
+            symbol="005930",
+            desired_qty=100,
+            risk_payload=RiskPayload(entry_px=72000, stop_px=71000),
+            metadata={"provisional_order_ref": "ALPHA:event:action:0"},
+        )
+
+        result = await oms.submit_intent(intent)
+
+        assert result.status == IntentStatus.DEFERRED
+        assert emitter.order_events
+        order, event_type, payload, event_intent = emitter.order_events[-1]
+        assert event_type == "ORDER_DEFERRED"
+        assert payload["status_after"] == "DEFERRED"
+        assert payload["pre_working_order"] is True
+        assert order.order_id == "ALPHA:event:action:0"
+        assert order.intent_id == intent.intent_id
+        assert event_intent is intent
 
     @pytest.mark.asyncio
     async def test_arbitration_defer(self, oms):

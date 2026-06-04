@@ -94,10 +94,14 @@ class LineageContext:
 
     def monthly_lineage_gaps(self, *, scope: str = "strategy") -> tuple[str, ...]:
         required = ["deployment_id", "code_sha"]
-        if scope in {"strategy", "family"}:
+        if scope == "strategy":
             required.extend(["strategy_id", "family_id", "strategy_version", "config_version"])
+        if scope == "family":
+            required.extend(["family_id", "strategy_version", "config_version"])
         if scope in {"portfolio", "oms", "family"}:
             required.extend(["portfolio_id", "portfolio_config_version", "risk_config_version", "allocation_version"])
+        if scope == "oms" and self.strategy_id and self.strategy_id != "_UNKNOWN_":
+            required.extend(["strategy_version", "config_version"])
         return tuple(field_name for field_name in dict.fromkeys(required) if not getattr(self, field_name, ""))
 
 

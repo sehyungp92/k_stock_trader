@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from instrumentation.src.indicator_logger import IndicatorLogger, IndicatorSnapshot
+from instrumentation.src.lineage import LineageContext
 
 
 class TestIndicatorSnapshot:
@@ -116,3 +117,35 @@ class TestIndicatorLogger:
             decision="enter", strategy_type="beta",
         )
         assert "vwap" in beta.indicators
+
+    def test_indicator_snapshot_carries_full_lineage(self):
+        lineage = LineageContext(
+            strategy_id="OLR",
+            deployment_id="deploy-unit",
+            code_sha="abc123",
+            strategy_version="strategy-unit",
+            config_version="cfg-unit",
+            portfolio_config_version="portfolio-unit",
+            risk_config_version="risk-unit",
+            allocation_version="allocation-unit",
+            strategy_registry_version="registry-unit",
+        )
+        lg = IndicatorLogger(data_dir=self.tmpdir, bot_id="test_bot", lineage=lineage)
+        snap = lg.log_snapshot(
+            pair="005930",
+            indicators={"vwap_ret": 0.012, "range_atr": 1.4},
+            signal_name="olr_afternoon",
+            signal_strength=0.7,
+            decision="enter",
+            strategy_type="OLR",
+            event_ref="event-unit",
+            decision_id="decision-unit",
+        )
+
+        assert snap.deployment_id == "deploy-unit"
+        assert snap.strategy_version == "strategy-unit"
+        assert snap.config_version == "cfg-unit"
+        data = json.loads(next(Path(self.tmpdir).joinpath("indicators").glob("*.jsonl")).read_text().strip())
+        assert data["deployment_id"] == "deploy-unit"
+        assert data["risk_config_version"] == "risk-unit"
+        assert data["event_metadata"]["deployment_id"] == "deploy-unit"
