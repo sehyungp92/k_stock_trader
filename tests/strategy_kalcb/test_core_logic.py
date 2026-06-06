@@ -11,9 +11,9 @@ from strategy_common.events import TradeOutcome
 from strategy_common.market import MarketBar
 from backtests.strategies.kalcb.runner import _collapse_exit_legs, _trade_net_r
 from strategy_kalcb.config import KALCBConfig
-from strategy_kalcb.core.core_models import KALCBFillEvent
+from strategy_kalcb.core.core_models import KALCBFillEvent, KALCBOrderUpdateEvent
 from strategy_kalcb.core.core_models import KALCBPortfolioView
-from strategy_kalcb.core.logic import on_kalcb_fill, on_kalcb_timer, step_kalcb_core
+from strategy_kalcb.core.logic import on_kalcb_fill, on_kalcb_order_update, on_kalcb_timer, step_kalcb_core
 from strategy_kalcb.core.serializers import restore_state, snapshot_state
 from strategy_kalcb.core.state import KALCBPositionState, KALCBState, SymbolStage
 from strategy_kalcb.models import EntryType
@@ -1278,6 +1278,56 @@ def test_entry_route_session_trade_cap_blocks_later_symbols():
     assert second_result is not None
     assert not second_result.actions
     assert second_result.decisions[-1].reason == "entry_route_session_limit"
+
+
+def test_entry_route_session_trade_cap_refunds_retryable_route_defer():
+    trade_date = date(2026, 1, 5)
+    state = KALCBState()
+    cfg = KALCBConfig.from_mapping(
+        {
+            "kalcb.entry.routes": [
+                {"name": "first30_capped", "mode": "first30_open", "priority": 0, "max_session_trades": 1}
+            ],
+            "kalcb.entry.rvol_threshold": 0.0,
+            "kalcb.entry.cpr_threshold": 0.0,
+            "kalcb.entry.momentum_score_min": 0,
+            "kalcb.entry.entry_score_blocklist": [],
+        }
+    )
+    snapshot = KALCBDailySnapshot(
+        trade_date=trade_date,
+        source_fingerprint="unit",
+        generated_at=datetime(2026, 1, 5, tzinfo=KST),
+        candidates=(_candidate_for_symbol(trade_date, "005930"), _candidate_for_symbol(trade_date, "000660")),
+    )
+    portfolio = KALCBPortfolioView(cash=1_000_000.0)
+
+    first_result = None
+    for bar in _or_bars(trade_date)[:6]:
+        first_result = step_kalcb_core(state, bar, cfg, snapshot, portfolio)
+    assert first_result is not None and first_result.actions
+    first_action = first_result.actions[0]
+
+    on_kalcb_order_update(
+        state,
+        KALCBOrderUpdateEvent(
+            order_id="route-reject:1",
+            symbol="005930",
+            status="DEFERRED",
+            timestamp=datetime(2026, 1, 5, 9, 31, tzinfo=KST),
+            role="ENTRY",
+            reason="OMS unreachable",
+            metadata=dict(first_action.metadata),
+        ),
+    )
+
+    second_result = None
+    for bar in [replace(item, symbol="000660") for item in _or_bars(trade_date)[:6]]:
+        second_result = step_kalcb_core(state, bar, cfg, snapshot, portfolio)
+
+    assert second_result is not None
+    assert second_result.actions
+    assert second_result.actions[0].metadata["entry_route_session_count_before"] == 0
 
 
 def test_secondary_entry_route_can_trigger_after_primary_anchor_rejects():

@@ -5,12 +5,14 @@ import shutil
 import asyncio
 import importlib.util
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
-from oms_client.client import AccountState, AllocationInfo, PositionInfo
+from oms.intent import IntentResult, IntentStatus
+from oms_client.client import AccountState, AllocationInfo, PositionInfo, WorkingOrderInfo
 from deployment.olr_kalcb.action_router import RuntimeActionRouter
 from deployment.olr_kalcb.dry_run_oms import RecordingOMSClient
 from deployment.olr_kalcb.hashing import canonical_json_hash
@@ -329,6 +331,35 @@ def test_router_buy_blocks_missing_or_zero_account_state(tmp_path):
     assert rows[0]["reason_code"] == "missing_or_zero_account_state"
 
 
+def test_router_pre_submit_intent_does_not_claim_broker_submission(tmp_path):
+    class RejectingOMS(RecordingOMSClient):
+        async def submit_intent(self, intent):
+            return IntentResult(intent.intent_id, IntentStatus.REJECTED, message="unit reject")
+
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RejectingOMS(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=False)
+    context = PortfolioContextProvider(oms)
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+
+    asyncio.run(
+        router.route_actions(
+            (SubmitEntry("KALCB", "005930", 1, "LIMIT", 100.0, None, "reject"),),
+            portfolio_context=context,
+            event_ref="event-reject",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    intent_row = _jsonl(tmp_path / "session" / "oms_intents.jsonl")[0]
+    result_row = _jsonl(tmp_path / "session" / "order_events.jsonl")[0]
+    assert intent_row["intended_broker_submit"] is True
+    assert intent_row["actually_submitted_to_broker"] is False
+    assert intent_row["submitted_to_broker"] is False
+    assert result_row["status"] == "REJECTED"
+    assert result_row["actually_submitted_to_broker"] is False
+
+
 def test_router_uses_provider_sector_map_when_action_metadata_lacks_sector(tmp_path):
     recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
     oms = RecordingOMSClient(recorder)
@@ -351,6 +382,308 @@ def test_router_uses_provider_sector_map_when_action_metadata_lacks_sector(tmp_p
     assert results[0].blocked is True
     assert row["sector"] == "SEMIS"
     assert row["reason_code"] == "capital_or_exposure_limit"
+
+
+def test_portfolio_context_counts_oms_working_buy_exposure_after_restart(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms, sector_map={"005930": "SEMIS"})
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+    context.positions = {
+        "005930": PositionInfo(
+            symbol="005930",
+            real_qty=0,
+            avg_price=0.0,
+            allocations={},
+            working_orders=[
+                WorkingOrderInfo(
+                    order_id="ORD-WORKING",
+                    symbol="005930",
+                    side="BUY",
+                    qty=10,
+                    filled_qty=4,
+                    remaining_qty=6,
+                    price=100.0,
+                    status="WORKING",
+                    strategy_id="KALCB",
+                )
+            ],
+        )
+    }
+
+    strategy_exposure = context.strategy_exposure("KALCB", "005930")
+    symbol_exposure = context.symbol_exposure("005930")
+    portfolio_exposure = context.portfolio_exposure()
+    sector_exposure = context.sector_exposure("SEMIS")
+    duplicate = asyncio.run(
+        router.route_actions(
+            (SubmitEntry("OLR", "005930", 1, "LIMIT", 100.0, None, "duplicate_after_restart"),),
+            portfolio_context=context,
+            event_ref="event-working",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    assert strategy_exposure.qty == 6
+    assert strategy_exposure.notional == 600.0
+    assert symbol_exposure.qty == 6
+    assert portfolio_exposure.notional == 600.0
+    assert sector_exposure.notional == 600.0
+    assert duplicate[0].blocked is True
+    assert duplicate[0].portfolio_reason_code == "duplicate_symbol_conflict"
+
+
+def test_router_rehydrates_pending_buy_reservations_from_working_orders(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms, sector_map={"005930": "SEMIS"})
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+    order = WorkingOrderInfo(
+        order_id="ORD-WORKING",
+        symbol="005930",
+        side="BUY",
+        qty=10,
+        filled_qty=4,
+        remaining_qty=6,
+        price=100.0,
+        status="WORKING",
+        strategy_id="KALCB",
+        intent_id="intent-1",
+        idempotency_key="idem-1",
+    )
+
+    evidence = router.rehydrate_pending_reservations([order], source="oms_positions", portfolio_context=context)
+    duplicate = asyncio.run(
+        router.route_actions(
+            (SubmitEntry("OLR", "005930", 1, "LIMIT", 100.0, None, "duplicate_after_rehydrate"),),
+            portfolio_context=context,
+            event_ref="event-rehydrate",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    reservation = next(iter(router.pending_reservations.values()))
+    rows = _jsonl(tmp_path / "session" / "portfolio_arbitration.jsonl")
+    assert evidence["record_type"] == "pending_reservations_rehydrated"
+    assert evidence["working_orders"][0]["remaining_qty"] == 6
+    assert reservation.qty == 6
+    assert reservation.notional == 600.0
+    assert reservation.provenance == "rehydrated:oms_positions"
+    assert duplicate[0].blocked is True
+    assert duplicate[0].portfolio_reason_code == "duplicate_symbol_conflict"
+    assert rows[0]["rehydrated_pending_notional"] == 600.0
+
+
+def test_router_counts_rehydrated_context_working_buy_exposure_exactly_once(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    policy = PortfolioArbitrationPolicy(
+        PortfolioPolicyConfig(max_gross_notional=700.0, max_symbol_notional=700.0, max_sector_notional=700.0)
+    )
+    router = RuntimeActionRouter(recorder, oms, policy, portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms, sector_map={"005930": "SEMIS", "035420": "INTERNET"})
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+    order = WorkingOrderInfo(
+        order_id="ORD-WORKING",
+        symbol="005930",
+        side="BUY",
+        qty=10,
+        filled_qty=4,
+        remaining_qty=6,
+        price=100.0,
+        status="WORKING",
+        strategy_id="KALCB",
+        intent_id="intent-1",
+        idempotency_key="idem-1",
+    )
+    context.positions = {
+        "005930": PositionInfo(
+            symbol="005930",
+            real_qty=0,
+            avg_price=0.0,
+            allocations={},
+            working_orders=[order],
+        )
+    }
+
+    router.rehydrate_pending_reservations([order], source="oms_positions", portfolio_context=context)
+    result = asyncio.run(
+        router.route_actions(
+            (SubmitEntry("OLR", "035420", 1, "LIMIT", 100.0, None, "accepted_if_working_counted_once"),),
+            portfolio_context=context,
+            event_ref="event-exact-once",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    assert context.portfolio_exposure().notional == 600.0
+    assert router.rehydrated_pending_notional == 600.0
+    assert result[0].accepted is True
+    assert result[0].portfolio_reason_code == "accepted"
+
+
+def test_router_excludes_terminal_working_orders_from_rehydration(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms)
+
+    router.rehydrate_pending_reservations(
+        [
+            WorkingOrderInfo("ORD-CANCELLED", "005930", "BUY", qty=10, remaining_qty=10, price=100.0, status="CANCELLED", strategy_id="KALCB"),
+            WorkingOrderInfo("ORD-FILLED", "000660", "BUY", qty=10, remaining_qty=0, price=100.0, status="FILLED", strategy_id="KALCB"),
+        ],
+        source="oms_positions",
+        portfolio_context=context,
+    )
+
+    assert router.pending_reservations == {}
+
+
+def test_router_missing_working_order_price_fails_closed(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms)
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+
+    router.rehydrate_pending_reservations(
+        [WorkingOrderInfo("ORD-NOPRICE", "005930", "BUY", qty=10, remaining_qty=10, price=0.0, status="WORKING", strategy_id="KALCB")],
+        source="oms_positions",
+        portfolio_context=context,
+    )
+    result = asyncio.run(
+        router.route_actions(
+            (SubmitEntry("OLR", "000660", 1, "LIMIT", 100.0, None, "blocked_by_degraded_context"),),
+            portfolio_context=context,
+            event_ref="event-missing-price",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    assert router.portfolio_context_degraded is True
+    assert result[0].blocked is True
+    assert result[0].portfolio_reason_code == "working_order_price_missing"
+
+
+def test_router_missing_working_order_price_does_not_use_position_avg_price(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms)
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+    missing_price_order = WorkingOrderInfo(
+        "ORD-NOPRICE",
+        "005930",
+        "BUY",
+        qty=10,
+        remaining_qty=10,
+        price=0.0,
+        status="WORKING",
+        strategy_id="KALCB",
+    )
+    context.positions = {
+        "005930": PositionInfo(
+            symbol="005930",
+            real_qty=10,
+            avg_price=100.0,
+            allocations={},
+            working_orders=[missing_price_order],
+        )
+    }
+
+    evidence = router.rehydrate_pending_reservations(
+        [missing_price_order],
+        source="oms_positions",
+        portfolio_context=context,
+    )
+    result = asyncio.run(
+        router.route_actions(
+            (SubmitEntry("OLR", "000660", 1, "LIMIT", 100.0, None, "blocked_by_missing_working_price"),),
+            portfolio_context=context,
+            event_ref="event-missing-price-with-cost-basis",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    assert evidence["degraded"] is True
+    assert evidence["degraded_reason"] == "working_order_price_missing"
+    assert evidence["rehydrated_pending_notional"] == 0.0
+    assert router.pending_reservations == {}
+    assert context.portfolio_exposure().notional == 1_000.0
+    assert result[0].blocked is True
+    assert result[0].portfolio_reason_code == "working_order_price_missing"
+
+
+def test_router_preserves_rehydrated_reservations_when_oms_refresh_fails(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms)
+    context.account_state = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
+    order = WorkingOrderInfo(
+        order_id="ORD-WORKING",
+        symbol="005930",
+        side="BUY",
+        qty=10,
+        remaining_qty=6,
+        price=100.0,
+        status="WORKING",
+        strategy_id="KALCB",
+    )
+
+    router.rehydrate_pending_reservations([order], source="oms_positions", portfolio_context=context)
+    context.last_refresh_ts = time.time()
+    context.last_refresh_ok = False
+    context.last_refresh_error = "oms_context_unavailable"
+
+    evidence = router.rehydrate_pending_reservations([], source="oms_positions", portfolio_context=context)
+    result = asyncio.run(
+        router.route_actions(
+            (SubmitEntry("OLR", "000660", 1, "LIMIT", 100.0, None, "blocked_by_stale_context"),),
+            portfolio_context=context,
+            event_ref="event-stale-context",
+            event_timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+        )
+    )
+
+    reservation = next(iter(router.pending_reservations.values()))
+    assert evidence["preserved_existing_reservations"] is True
+    assert evidence["rehydrated_pending_notional"] == 600.0
+    assert reservation.reservation_id.startswith("rehydrated:oms_positions:")
+    assert router.portfolio_context_degraded is True
+    assert result[0].blocked is True
+    assert result[0].portfolio_reason_code == "oms_context_unavailable"
+
+
+def test_router_rehydrated_reservation_releases_by_aliases(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    router = RuntimeActionRouter(recorder, oms, PortfolioArbitrationPolicy(), portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms)
+    order = WorkingOrderInfo(
+        order_id="ORD-WORKING",
+        symbol="005930",
+        side="BUY",
+        qty=10,
+        remaining_qty=10,
+        price=100.0,
+        status="WORKING",
+        strategy_id="KALCB",
+        intent_id="intent-1",
+        idempotency_key="idem-1",
+        submit_ref="submit-1",
+    )
+
+    router.rehydrate_pending_reservations([order], source="oms_positions", portfolio_context=context)
+
+    assert router.release_order_ref("intent-1", qty=4) is True
+    reservation = next(iter(router.pending_reservations.values()))
+    assert reservation.qty == 6
+    assert router.release_order_ref("idem-1") is True
+    assert router.pending_reservations == {}
 
 
 def test_router_admitted_exposure_persists_until_released(tmp_path):
@@ -849,6 +1182,53 @@ def test_replay_input_loader_requires_explicit_config_account_and_positions(tmp_
         loader.initial_account_state()
     with pytest.raises(ValueError, match="initial positions"):
         loader.initial_positions()
+
+
+def test_replay_input_loader_reads_rehydrated_working_order_snapshot(tmp_path):
+    session = tmp_path / "2026-02-02"
+    session.mkdir()
+    (session / "session_manifest.json").write_text(json.dumps({"trade_date": "2026-02-02"}), encoding="utf-8")
+    (session / "portfolio_arbitration.jsonl").write_text(
+        json.dumps(
+            {
+                "record_type": "pending_reservations_rehydrated",
+                "working_orders": [
+                    {
+                        "strategy_id": "KALCB",
+                        "symbol": "005930",
+                        "side": "BUY",
+                        "remaining_qty": 6,
+                        "price": 100.0,
+                        "status": "WORKING",
+                        "sector": "SEMIS",
+                        "intent_id": "intent-1",
+                        "idempotency_key": "idem-1",
+                        "missing_price": False,
+                    }
+                ],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    orders = ReplayInputLoader(session).initial_working_orders()
+
+    assert orders == [
+        {
+            "strategy_id": "KALCB",
+            "symbol": "005930",
+            "side": "BUY",
+            "remaining_qty": 6,
+            "price": 100.0,
+            "status": "WORKING",
+            "sector": "SEMIS",
+            "intent_id": "intent-1",
+            "idempotency_key": "idem-1",
+            "missing_price": False,
+        }
+    ]
 
 
 def test_replay_input_loader_unwraps_optimized_config_mutations(tmp_path):

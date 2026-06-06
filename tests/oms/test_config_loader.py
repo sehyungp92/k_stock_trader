@@ -7,8 +7,15 @@ from instrumentation.src.deployment_logger import DeploymentLogger
 from instrumentation.src.lineage import LineageContext, context_from_env, stable_hash
 from instrumentation.src.oms_exporter import OMSEventEmitter
 from instrumentation.src.runtime_lineage import write_runtime_deployment_lineage
-from oms.config_loader import effective_risk_config_payload, load_oms_config
-from oms.server import _apply_config_snapshot_lineage, _runtime_deployment_lineage
+from oms.config_loader import (
+    configured_active_strategy_ids,
+    effective_risk_config_payload,
+    load_oms_config,
+    load_oms_sector_map,
+    missing_strategy_budgets,
+)
+from oms.risk import RiskConfig
+from oms.server import IntentRequest, _apply_config_snapshot_lineage, _runtime_deployment_lineage
 
 
 def test_effective_risk_config_payload_uses_oms_yaml_limits():
@@ -17,8 +24,44 @@ def test_effective_risk_config_payload_uses_oms_yaml_limits():
     assert payload["daily_loss_warn_pct"] == 0.03
     assert payload["daily_loss_halt_pct"] == 0.05
     assert payload["max_positions_count"] == 15
+    assert configured_active_strategy_ids(load_oms_config()) == ("KALCB", "OLR")
+    assert payload["strategy_budgets"]["KALCB"]["max_positions"] == 4
+    assert payload["strategy_budgets"]["OLR"]["max_positions"] == 4
     assert payload["strategy_budgets"]["PCIM"]["max_positions"] == 8
     assert payload["strategy_budgets"]["PCIM"]["max_risk_pct"] == 0.025
+    assert payload["unknown_sector_policy"] == "block"
+    assert payload["require_durable_stops"] is True
+    assert payload["default_stop_protection_mode"] == "oms_watcher"
+    assert payload["allow_synthetic_stop_only"] is False
+
+
+def test_oms_config_has_budgets_for_active_strategies():
+    config = load_oms_config()
+    active = configured_active_strategy_ids(config)
+
+    assert missing_strategy_budgets(RiskConfig(strategy_budgets=config["strategy_budgets"]), active) == ()
+
+
+def test_oms_sector_map_loads_approved_default():
+    sector_map, source = load_oms_sector_map(load_oms_config())
+
+    assert source is not None
+    assert source.name == "sector_map.yaml"
+    assert sector_map["005930"] == "SEMICONDUCTORS"
+
+
+def test_intent_request_preserves_caller_idempotency_identifiers():
+    request = IntentRequest(
+        intent_id="intent-client",
+        idempotency_key="idem-client",
+        intent_type="ENTER",
+        strategy_id="KALCB",
+        symbol="005930",
+        desired_qty=10,
+    )
+
+    assert request.intent_id == "intent-client"
+    assert request.idempotency_key == "idem-client"
 
 
 def test_oms_server_applies_config_snapshot_lineage_to_emitter(tmp_path):

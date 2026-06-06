@@ -5,8 +5,11 @@ from datetime import date, datetime, timedelta
 from strategy_common.clock import KST
 from strategy_common.market import MarketBar
 from strategy_olr.config import OLRConfig
+from strategy_olr.core.core_models import OLROrderUpdateEvent, OLRPortfolioView
+from strategy_olr.core.logic import on_olr_order_update, step_olr_core
+from strategy_olr.core.state import OLRState
 from strategy_olr.execution import OLREntryPlan, OLRExitPlan, simulate_olr_trade
-from strategy_olr.models import OLRDailyCandidate
+from strategy_olr.models import OLRDailyCandidate, OLRDailySnapshot
 
 
 def test_olr_completed_bar_entry_fills_next_bar_after_1430() -> None:
@@ -87,6 +90,58 @@ def test_olr_close_auction_proxy_respects_bounded_limit_nonfill() -> None:
     )
 
     assert outcome is None
+
+
+def test_olr_retries_entry_after_deferred_route_update() -> None:
+    trade_date = date(2026, 2, 2)
+    state = OLRState()
+    config = OLRConfig.from_mapping(
+        {
+            "olr.overnight.slot_count": 1,
+            "olr.allocation.min_selected": 1,
+            "olr.trade_plan.entry": {"name": "decision", "mode": "decision_next_open"},
+        }
+    )
+    snapshot = OLRDailySnapshot(
+        trade_date=trade_date,
+        candidates=(_candidate("005930", trade_date),),
+        source_fingerprint="retry-deferred",
+        generated_at=datetime.combine(trade_date, datetime.min.time(), tzinfo=KST).replace(hour=8, minute=50),
+    )
+    portfolio = OLRPortfolioView(cash=1_000_000.0, equity=1_000_000.0)
+    first = step_olr_core(
+        state,
+        _bar("005930", trade_date, 14, 30, 100.0, 101.0, 99.0, 100.0),
+        config,
+        snapshot,
+        portfolio,
+    )
+    assert len(first.actions) == 1
+    assert state.symbol_state("005930").entry_attempted is True
+
+    on_olr_order_update(
+        state,
+        OLROrderUpdateEvent(
+            order_id="prov-entry",
+            symbol="005930",
+            status="DEFERRED",
+            timestamp=datetime.combine(trade_date, datetime.min.time(), tzinfo=KST).replace(hour=14, minute=31),
+            side="BUY",
+            reason="Equity not yet loaded - reconciliation pending",
+        ),
+        config,
+    )
+    assert state.symbol_state("005930").entry_attempted is False
+
+    second = step_olr_core(
+        state,
+        _bar("005930", trade_date, 14, 35, 100.0, 101.0, 99.0, 100.5),
+        config,
+        snapshot,
+        portfolio,
+    )
+
+    assert len(second.actions) == 1
 
 
 def test_olr_mfe_fade_exit_waits_for_profit_then_exits_next_bar() -> None:

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from oms_client.client import AccountState, AllocationInfo, PositionInfo
+from oms_client.client import AccountState, AllocationInfo, PositionInfo, WorkingOrderInfo
 
 from deployment.olr_kalcb.action_router import RuntimeActionRouter
 from deployment.olr_kalcb.coordinator import StrategyRuntimeDescriptor
@@ -58,6 +58,31 @@ def test_offline_replay_rebuilds_positive_action_session(tmp_path):
 
     assert len(_jsonl(session / "strategy_actions.jsonl")) == 1
     assert _jsonl(session / "portfolio_arbitration.jsonl")[0]["decision"] == "accepted"
+    assert report["paper_gate_passed"] is True
+
+
+def test_offline_replay_preserves_startup_working_order_snapshot_parity(tmp_path):
+    session = _captured_olr_session(
+        tmp_path,
+        decision_time=time(14, 30),
+        include_fill=False,
+        startup_working_order=True,
+    )
+
+    rebuild_offline_replay_from_session(session)
+    report = replay_paper_session(session)
+
+    live_portfolio = _jsonl(session / "portfolio_arbitration.jsonl")
+    offline_portfolio = _jsonl(session / "offline_replay" / "portfolio_arbitration.jsonl")
+    replay_manifest = json.loads((session / "offline_replay" / "replay_manifest.json").read_text(encoding="utf-8"))
+
+    assert live_portfolio[0]["record_type"] == "pending_reservations_rehydrated"
+    assert live_portfolio[0]["working_orders"][0]["remaining_qty"] == 6
+    assert live_portfolio[-1]["decision"] == "blocked"
+    assert live_portfolio[-1]["reason_code"] == "duplicate_symbol_conflict"
+    assert offline_portfolio == live_portfolio
+    assert replay_manifest["startup_working_order_count"] == 1
+    assert replay_manifest["startup_working_order_source"] == "oms_positions"
     assert report["paper_gate_passed"] is True
 
 
@@ -605,6 +630,7 @@ def _captured_olr_session(
     include_fill: bool,
     include_non_candidate_bar: bool = False,
     include_exit_fill: bool = False,
+    startup_working_order: bool = False,
 ) -> Path:
     trade_date = date(2026, 2, 2)
     session = tmp_path / "session"
@@ -614,6 +640,31 @@ def _captured_olr_session(
     config = OLRConfig()
     account = AccountState(equity=1_000_000.0, buyable_cash=1_000_000.0)
     initial_account_state = asdict(account)
+    initial_positions = {}
+    if startup_working_order:
+        initial_positions = {
+            "005930": PositionInfo(
+                symbol="005930",
+                real_qty=0,
+                avg_price=100.0,
+                allocations={},
+                working_orders=[
+                    WorkingOrderInfo(
+                        order_id="ORD-WORKING",
+                        symbol="005930",
+                        side="BUY",
+                        qty=10,
+                        filled_qty=4,
+                        remaining_qty=6,
+                        price=100.0,
+                        status="WORKING",
+                        strategy_id="KALCB",
+                        intent_id="intent-working",
+                        idempotency_key="idem-working",
+                    )
+                ],
+            )
+        }
     policy_config = PortfolioPolicyConfig()
     policy = PortfolioArbitrationPolicy(policy_config)
     sector_map = {"005930": "SEMIS"}
@@ -657,7 +708,7 @@ def _captured_olr_session(
         volume=1000.0,
         is_completed=True,
     )
-    oms = RecordingOMSClient(recorder, account_state=account)
+    oms = RecordingOMSClient(recorder, account_state=account, positions=dict(initial_positions))
     router = RuntimeActionRouter(
         recorder=recorder,
         oms_client=oms,
@@ -725,6 +776,7 @@ def _captured_olr_session(
     manifest = _session_manifest(
         config=config,
         initial_account_state=initial_account_state,
+        initial_positions={symbol: asdict(position) for symbol, position in initial_positions.items()},
         policy_config=policy_config,
         policy=policy,
         sector_map=sector_map,

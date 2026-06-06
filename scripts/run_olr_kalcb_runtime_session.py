@@ -10,6 +10,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen
 from zoneinfo import ZoneInfo
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -24,7 +25,7 @@ from deployment.olr_kalcb.market_data_coordinator import KISMarketDataCoordinato
 from deployment.olr_kalcb.portfolio import PortfolioPolicyConfig
 from deployment.olr_kalcb.readiness import DEFAULT_ARTIFACT_ROOTS
 from deployment.olr_kalcb.replay import replay_paper_session
-from deployment.olr_kalcb.runtime import EXECUTION_MODES, prepare_runtime_session
+from deployment.olr_kalcb.runtime import EXECUTION_MODES, OMS_HEALTH_PAYLOAD_KEYS, prepare_runtime_session
 from deployment.olr_kalcb.session_capture import PaperSessionRecorder, market_bar_hash
 from strategy_olr.artifact_store import OLR_FINAL_ARTIFACT_STAGE, OLRArtifactStore
 
@@ -482,6 +483,7 @@ def _prepare_plan(
     sector_map = _load_sector_map(args.sector_map)
     portfolio_policy = _load_portfolio_policy(args.portfolio_policy)
     health_checks = _load_health_checks(args.health_checks_json, mode=mode, fixture_health_ok=bool(args.fixture_health_ok))
+    health_checks = _with_oms_health_payload(health_checks, args, mode=mode)
     initial_account_state = _load_mapping(args.account_state_json, required=False) if args.account_state_json else None
     initial_positions = _load_mapping(args.positions_json, required=False) if args.positions_json else None
     return prepare_runtime_session(
@@ -582,6 +584,35 @@ def _load_health_checks(path: str | Path | None, *, mode: str, fixture_health_ok
                 "detail": "fixture-only operator override; not paper/live promotional evidence",
             }
     return checks
+
+
+def _with_oms_health_payload(checks: Mapping[str, Any], args: argparse.Namespace, *, mode: str) -> dict[str, Any]:
+    augmented = dict(checks or {})
+    if str(mode or "").lower() not in {"paper", "live"}:
+        return augmented
+    if any(key in augmented for key in OMS_HEALTH_PAYLOAD_KEYS):
+        return augmented
+    try:
+        augmented["oms_health_payload"] = _fetch_oms_health_payload(_oms_health_url(args))
+    except Exception as exc:
+        augmented["oms_health_payload_error"] = str(exc)
+    return augmented
+
+
+def _oms_health_url(args: argparse.Namespace) -> str:
+    base = str(getattr(args, "oms_url", None) or os.environ.get("OMS_URL") or "http://oms:8000").rstrip("/")
+    if base.endswith("/health"):
+        return base
+    return f"{base}/health"
+
+
+def _fetch_oms_health_payload(url: str) -> dict[str, Any]:
+    with urlopen(url, timeout=5) as response:
+        text = response.read().decode("utf-8")
+    payload = json.loads(text or "{}")
+    if not isinstance(payload, Mapping):
+        raise ValueError("OMS /health response must be a JSON object")
+    return dict(payload)
 
 
 def _artifact_roots(args: argparse.Namespace) -> dict[str, Path] | None:

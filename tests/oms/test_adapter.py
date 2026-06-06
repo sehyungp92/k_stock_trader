@@ -320,6 +320,40 @@ class TestKISExecutionAdapterRetry:
         assert call_count == 1
 
     @pytest.mark.asyncio
+    async def test_retry_binding_flag_fails_closed_on_multiple_unknown_matches(self):
+        """Even when the experimental binding flag is enabled, ambiguous matches must not fresh-submit."""
+        mock_api = MagicMock()
+        mock_api.place_market_buy.side_effect = [
+            Exception("temporary broker failure"),
+            OrderResult(success=True, order_id="ORD-FRESH"),
+        ]
+        adapter = KISExecutionAdapter(mock_api)
+        adapter.retry_bind_open_order_on_ambiguous_submit = True
+        adapter._is_order_session_open = MagicMock(return_value=True)
+        adapter.get_orders = AsyncMock(
+            return_value=BrokerQueryResult(
+                ok=True,
+                data=[
+                    BrokerOrder("ORD-1", "005930", "BUY", 100, 0, 100.0, "WORKING", "09:00:01"),
+                    BrokerOrder("ORD-2", "005930", "BUY", 100, 0, 100.0, "WORKING", "09:00:02"),
+                ],
+            )
+        )
+
+        result = await adapter.submit_order(
+            symbol="005930",
+            side="BUY",
+            qty=100,
+            order_type="MARKET",
+            max_retries=2,
+        )
+
+        assert result.success is False
+        assert result.error == AdapterError.TEMP_ERROR
+        assert "Ambiguous retry match" in result.message
+        assert mock_api.place_market_buy.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_max_retries_exhausted(self):
         """Test failure when max retries exhausted."""
         mock_api = MagicMock()
@@ -442,6 +476,69 @@ class TestKISExecutionAdapterGetOrders:
         assert result.data[0].side == "BUY"
         assert result.data[0].filled_qty == 50
         assert result.data[1].side == "SELL"
+
+    @pytest.mark.asyncio
+    async def test_get_orders_normalizes_adapter_reconciliation_evidence(self, mock_api):
+        """KIS dataframe rows must expose reconciliation evidence through BrokerOrder."""
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "pdno": ["005930"],
+                "ord_qty": [10],
+                "psbl_qty": [10],
+                "ord_unpr": [72000],
+                "sll_buy_dvsn_cd": ["02"],
+                "ord_tmd": ["093001"],
+                "ord_dt": ["20260605"],
+                "ord_gno_brno": ["001"],
+                "ord_dvsn": ["00"],
+                "submit_ref": ["OMS-submit-ref"],
+            },
+            index=["ORD-KIS"],
+        )
+        mock_api.get_orders.return_value = df
+        adapter = KISExecutionAdapter(mock_api)
+
+        result = await adapter.get_orders()
+
+        assert result.ok is True
+        assert len(result.data) == 1
+        order = result.data[0]
+        assert order.order_id == "ORD-KIS"
+        assert order.symbol == "005930"
+        assert order.side == "BUY"
+        assert order.qty == 10
+        assert order.filled_qty == 0
+        assert order.price == 72000.0
+        assert order.created_at == "2026-06-05T09:30:01+09:00"
+        assert order.created_ts is not None
+        assert order.order_type == "LIMIT"
+        assert order.submit_ref == "OMS-submit-ref"
+
+    @pytest.mark.asyncio
+    async def test_get_orders_unknown_side_is_absent_evidence_not_buy(self, mock_api):
+        import pandas as pd
+
+        df = pd.DataFrame(
+            {
+                "pdno": ["005930", "000660"],
+                "ord_qty": [10, 20],
+                "psbl_qty": [10, 20],
+                "ord_unpr": [72000, 130000],
+                "sll_buy_dvsn_cd": ["", "99"],
+                "ord_tmd": ["093001", "093002"],
+                "ord_dt": ["20260605", "20260605"],
+            },
+            index=["ORD-MISSING-SIDE", "ORD-UNKNOWN-SIDE"],
+        )
+        mock_api.get_orders.return_value = df
+        adapter = KISExecutionAdapter(mock_api)
+
+        result = await adapter.get_orders()
+
+        assert result.ok is True
+        assert [order.side for order in result.data] == ["", ""]
 
     @pytest.mark.asyncio
     async def test_get_orders_empty(self, adapter, mock_api):
@@ -824,3 +921,24 @@ class TestMarketClosedGuard:
         assert result.error == AdapterError.REJECTED_INVALID
         assert "Market closed" in result.message
         mock_api.place_market_buy.assert_not_called()
+
+
+class TestStopCapabilities:
+    def test_native_stop_support_is_unverified_by_default(self):
+        adapter = KISExecutionAdapter(MagicMock())
+
+        snapshot = adapter.stop_capabilities_snapshot()
+
+        assert adapter.supports_native_stop("005930") is False
+        assert snapshot["broker_native_stop_verified_at"] is None
+        assert snapshot["broker_native_stop_status"] == "unverified"
+
+    @pytest.mark.asyncio
+    async def test_submit_stop_order_fails_closed_when_unverified(self):
+        adapter = KISExecutionAdapter(MagicMock())
+
+        result = await adapter.submit_stop_order(symbol="005930", side="SELL", qty=10, stop_price=95.0)
+
+        assert result.success is False
+        assert result.error == AdapterError.REJECTED_INVALID
+        assert "not paper-verified" in result.message

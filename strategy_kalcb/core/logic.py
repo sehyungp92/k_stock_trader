@@ -264,12 +264,20 @@ def on_kalcb_order_update(state: KALCBState, update: KALCBOrderUpdateEvent) -> K
     status = update.status.upper()
     terminal = status in {"BLOCKED", "REJECTED", "CANCELLED", "DEFERRED", "EXPIRED"}
     role_meta = state.order_roles.pop(str(update.order_id), {}) if terminal else dict(state.order_roles.get(str(update.order_id), {}))
-    role = str(update.role or role_meta.get("order_role") or (update.metadata or {}).get("order_role") or "").upper()
+    metadata = {**dict(role_meta), **dict(update.metadata)}
+    role = str(update.role or metadata.get("order_role") or "").upper()
     if terminal and update.order_id == symbol_state.pending_entry_order_id:
         symbol_state.pending_entry_order_id = ""
         symbol_state.pending_entry_metadata.clear()
         symbol_state.stage = SymbolStage.WATCHING
         symbol_state.rejected_reason = status.lower()
+    if terminal and _is_retryable_entry_update(update, status, metadata) and symbol_state.position is None:
+        symbol_state.entry_attempted = False
+        symbol_state.pending_entry_order_id = ""
+        symbol_state.pending_entry_metadata.clear()
+        symbol_state.stage = SymbolStage.WATCHING
+        symbol_state.rejected_reason = status.lower()
+        _decrement_entry_route_session_count(state, str(metadata.get("entry_route") or ""))
     position = symbol_state.position
     if terminal and position is not None:
         if role in {"TP", "PARTIAL"} or position.partial_order_id == str(update.order_id):
@@ -287,10 +295,40 @@ def on_kalcb_order_update(state: KALCBState, update: KALCBOrderUpdateEvent) -> K
                 symbol=update.symbol,
                 decision_code="order_update",
                 reason=status.lower(),
-                metadata={"order_id": update.order_id, "role": role, **dict(role_meta), **dict(update.metadata)},
+                metadata={"order_id": update.order_id, "role": role, **metadata},
             )
         ],
     )
+
+
+def _is_retryable_entry_update(update: KALCBOrderUpdateEvent, status: str, metadata: dict[str, Any]) -> bool:
+    role = str(update.role or metadata.get("order_role") or "").upper().strip()
+    if role and role not in {"ENTRY", "BUY"}:
+        return False
+    if status == "DEFERRED":
+        return True
+    reason_text = " ".join(
+        str(value or "")
+        for value in (
+            update.reason,
+            metadata.get("message"),
+            metadata.get("reason"),
+            metadata.get("oms_status"),
+            metadata.get("portfolio_reason_code"),
+            metadata.get("resource_conflict_type"),
+        )
+    ).lower()
+    retryable_markers = (
+        "oms unreachable",
+        "oms error 503",
+        "timeout",
+        "temporar",
+        "missing_or_zero_account_state",
+        "equity not yet loaded",
+        "price unavailable",
+        "reconciliation pending",
+    )
+    return status in {"REJECTED", "BLOCKED"} and any(marker in reason_text for marker in retryable_markers)
 
 
 def on_kalcb_timer(state: KALCBState, timestamp: datetime, config: KALCBConfig) -> KALCBCoreResult:
@@ -2232,6 +2270,16 @@ def _increment_entry_route_session_count(state: KALCBState, route_name: str) -> 
         counts = {}
         state.meta["entry_route_session_counts"] = counts
     counts[route] = _entry_route_session_count(state, route) + 1
+
+
+def _decrement_entry_route_session_count(state: KALCBState, route_name: str) -> None:
+    route = str(route_name or "")
+    if not route:
+        return
+    counts = state.meta.get("entry_route_session_counts")
+    if not isinstance(counts, dict):
+        return
+    counts[route] = max(_entry_route_session_count(state, route) - 1, 0)
 
 
 def _known_sector(sector: str) -> bool:

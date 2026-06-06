@@ -44,7 +44,10 @@ class WorkingOrder:
     branch: str = ""  # KRX order branch for cancel/revise
     intent_id: Optional[str] = None
     idempotency_key: Optional[str] = None
+    submit_ref: Optional[str] = None
     oms_order_id: Optional[str] = None
+    risk_stop_px: Optional[float] = None
+    risk_hard_stop_px: Optional[float] = None
     missing_from_broker_count: int = 0
 
 

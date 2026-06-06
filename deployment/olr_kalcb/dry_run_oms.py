@@ -39,14 +39,25 @@ def intent_to_json_dict(
     *,
     dry_run: bool = True,
     submitted_to_broker: bool = False,
+    intended_broker_submit: bool | None = None,
+    actually_submitted_to_broker: bool | None = None,
+    oms_status: str = "",
+    broker_order_id: str = "",
     record_type: str | None = None,
 ) -> dict[str, Any]:
     metadata = dict(intent.metadata or {})
+    intended_submit = bool((not dry_run) if intended_broker_submit is None else intended_broker_submit)
+    actual_submit = bool(submitted_to_broker if actually_submitted_to_broker is None else actually_submitted_to_broker)
     return {
         "record_type": record_type or ("dry_run_oms_intent" if dry_run else "oms_intent"),
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "dry_run": bool(dry_run),
-        "submitted_to_broker": bool(submitted_to_broker),
+        "intended_broker_submit": intended_submit,
+        "broker_submit_possible": intended_submit,
+        "actually_submitted_to_broker": actual_submit,
+        "submitted_to_broker": actual_submit,
+        "oms_status": str(oms_status or ""),
+        "broker_order_id": str(broker_order_id or ""),
         "intent_id": intent.intent_id,
         "idempotency_key": intent.idempotency_key,
         "intent_type": intent.intent_type.name,

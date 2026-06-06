@@ -3,7 +3,7 @@
 from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 from loguru import logger
 
 try:
@@ -12,6 +12,79 @@ except ImportError:
     aiohttp = None
 
 from oms.intent import Intent, IntentResult, IntentStatus
+
+
+_READY_HEALTH_STATES = {"ok", "ready", "healthy"}
+_ACCEPTABLE_OMS_STATUS = _READY_HEALTH_STATES | {"warn"}
+_REQUIRED_STOP_HEALTH_FIELDS = (
+    "unprotected_positions_count",
+    "active_stop_count",
+    "triggered_stop_count",
+    "stop_watcher_price_stale_count",
+)
+_MAX_STOP_WATCHER_AGE_SEC = 60.0
+
+
+def _health_payload_ready(payload: Dict[str, Any]) -> bool:
+    status = str(payload.get("status") or "").lower().strip()
+    if not status:
+        return False
+    if status in {"error", "degraded"}:
+        return False
+    if status and status not in _ACCEPTABLE_OMS_STATUS:
+        return False
+    stop_status = str(payload.get("stop_protection_status") or "").lower().strip()
+    if not stop_status:
+        return False
+    if stop_status in {"error", "degraded"}:
+        return False
+    if stop_status not in _READY_HEALTH_STATES:
+        return False
+    stop_counts = {
+        field: _required_nonnegative_int(payload, field)
+        for field in _REQUIRED_STOP_HEALTH_FIELDS
+    }
+    if any(value is None for value in stop_counts.values()):
+        return False
+    if stop_counts["unprotected_positions_count"] > 0:
+        return False
+    if stop_counts["stop_watcher_price_stale_count"] > 0:
+        return False
+    if stop_counts["active_stop_count"] > 0:
+        watcher_age = _required_nonnegative_float(payload, "stop_watcher_last_check_age_sec")
+        if watcher_age is None or watcher_age > _MAX_STOP_WATCHER_AGE_SEC:
+            return False
+    idempotency_status = str(
+        payload.get("idempotency_status")
+        or payload.get("idempotency_health")
+        or payload.get("reservation_reconcile_status")
+        or ""
+    ).lower().strip()
+    if not idempotency_status:
+        return False
+    if idempotency_status in {"error", "degraded", "ambiguous"}:
+        return False
+    return idempotency_status in _READY_HEALTH_STATES
+
+
+def _required_nonnegative_int(payload: Dict[str, Any], field: str) -> Optional[int]:
+    if field not in payload or payload.get(field) is None:
+        return None
+    try:
+        value = int(payload[field])
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _required_nonnegative_float(payload: Dict[str, Any], field: str) -> Optional[float]:
+    if field not in payload or payload.get(field) is None:
+        return None
+    try:
+        value = float(payload[field])
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0.0 else None
 
 
 @dataclass
@@ -26,6 +99,34 @@ class AllocationInfo:
 
 
 @dataclass
+class WorkingOrderInfo:
+    """Working order info from OMS."""
+    order_id: str
+    symbol: str
+    side: str
+    qty: int
+    filled_qty: int = 0
+    remaining_qty: int = 0
+    price: float = 0.0
+    order_type: str = ""
+    status: str = ""
+    strategy_id: str = ""
+    intent_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    submit_ref: Optional[str] = None
+    risk_stop_px: Optional[float] = None
+    risk_hard_stop_px: Optional[float] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    submit_ts: Optional[float] = None
+    cancel_after_sec: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.remaining_qty <= 0 and self.qty > self.filled_qty:
+            self.remaining_qty = self.qty - self.filled_qty
+
+
+@dataclass
 class PositionInfo:
     """Position info from OMS."""
     symbol: str
@@ -37,6 +138,11 @@ class PositionInfo:
     entry_lock_until: Optional[float] = None
     frozen: bool = False
     working_order_count: int = 0
+    working_orders: List[WorkingOrderInfo] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.working_orders and self.working_order_count <= 0:
+            self.working_order_count = len(self.working_orders)
 
     def get_allocation(self, strategy_id: str) -> int:
         """Get allocation qty for strategy."""
@@ -95,8 +201,13 @@ class OMSClient:
             try:
                 async with session.get(f"{self.base_url}/health", timeout=aiohttp.ClientTimeout(total=5)) as resp:
                     if resp.status == 200:
-                        logger.info("OMS ready")
-                        return
+                        try:
+                            payload = await resp.json(content_type=None)
+                        except Exception:
+                            payload = {}
+                        if _health_payload_ready(dict(payload or {})):
+                            logger.info("OMS ready")
+                            return
             except Exception:
                 pass
             await asyncio.sleep(1)
@@ -135,6 +246,8 @@ class OMSClient:
     async def submit_intent(self, intent: Intent) -> IntentResult:
         """Submit intent to OMS with retry on transient connection errors."""
         payload = {
+            "intent_id": intent.intent_id,
+            "idempotency_key": intent.idempotency_key,
             "intent_type": intent.intent_type.name,
             "strategy_id": intent.strategy_id,
             "symbol": intent.symbol,
@@ -246,6 +359,13 @@ class OMSClient:
         if data is None:
             return None
         return self._parse_position(symbol, data)
+
+    async def get_working_orders(self) -> Optional[List[WorkingOrderInfo]]:
+        """Get all OMS working orders."""
+        data = await self._get_with_retry(f"{self.base_url}/api/v1/working-orders")
+        if data is None:
+            return None
+        return [self._parse_working_order(row) for row in data]
 
     async def get_allocation(self, symbol: str, strategy_id: str) -> Optional[int]:
         """Get allocation qty for strategy on symbol.
@@ -367,6 +487,33 @@ class OMSClient:
             entry_lock_until=data.get("entry_lock_until"),
             frozen=data.get("frozen", False),
             working_order_count=data.get("working_order_count", 0),
+            working_orders=[self._parse_working_order(row) for row in data.get("working_orders", [])],
+        )
+
+    def _parse_working_order(self, data: dict) -> WorkingOrderInfo:
+        """Parse working order data from OMS response."""
+        qty = int(data.get("qty", 0) or 0)
+        filled_qty = int(data.get("filled_qty", 0) or 0)
+        return WorkingOrderInfo(
+            order_id=str(data.get("order_id") or ""),
+            symbol=str(data.get("symbol") or "").zfill(6),
+            side=str(data.get("side") or "").upper(),
+            qty=qty,
+            filled_qty=filled_qty,
+            remaining_qty=int(data.get("remaining_qty", max(qty - filled_qty, 0)) or 0),
+            price=float(data.get("price", 0.0) or 0.0),
+            order_type=str(data.get("order_type") or ""),
+            status=str(data.get("status") or ""),
+            strategy_id=str(data.get("strategy_id") or "").upper(),
+            intent_id=data.get("intent_id"),
+            idempotency_key=data.get("idempotency_key"),
+            submit_ref=data.get("submit_ref"),
+            risk_stop_px=data.get("risk_stop_px"),
+            risk_hard_stop_px=data.get("risk_hard_stop_px"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+            submit_ts=data.get("submit_ts"),
+            cancel_after_sec=data.get("cancel_after_sec"),
         )
 
     # Convenience property for compatibility with current code patterns

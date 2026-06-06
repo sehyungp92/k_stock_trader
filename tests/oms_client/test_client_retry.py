@@ -4,7 +4,7 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
-from oms_client.client import OMSClient
+from oms_client.client import OMSClient, _health_payload_ready
 from oms.intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, TimeHorizon, IntentConstraints, RiskPayload
 
 
@@ -50,7 +50,39 @@ class TestSubmitIntentRetry:
         result = await client.submit_intent(intent)
         assert result.status == IntentStatus.EXECUTED
         assert mock_session.post.call_count == 1
+        payload = mock_session.post.call_args.kwargs["json"]
+        assert payload["intent_id"] == intent.intent_id
+        assert payload["idempotency_key"] == intent.idempotency_key
         await client.close()
+
+    def test_health_payload_ready_rejects_semantic_degraded_or_unprotected_states(self):
+        healthy_no_active_stops = {
+            "status": "ok",
+            "stop_protection_status": "ok",
+            "unprotected_positions_count": 0,
+            "active_stop_count": 0,
+            "triggered_stop_count": 0,
+            "stop_watcher_price_stale_count": 0,
+            "idempotency_status": "ok",
+        }
+        healthy_active_stops = {
+            **healthy_no_active_stops,
+            "active_stop_count": 1,
+            "stop_watcher_last_check_age_sec": 5.0,
+        }
+        assert _health_payload_ready(healthy_no_active_stops) is True
+        assert _health_payload_ready(healthy_active_stops) is True
+        assert _health_payload_ready({}) is False
+        assert _health_payload_ready({"status": "error"}) is False
+        assert _health_payload_ready({"status": "ok"}) is False
+        assert _health_payload_ready({"status": "ok", "stop_protection_status": "ok"}) is False
+        assert _health_payload_ready({"status": "ok", "stop_protection_status": "ok", "idempotency_status": "ok"}) is False
+        assert _health_payload_ready({**healthy_no_active_stops, "unprotected_positions_count": None}) is False
+        assert _health_payload_ready({**healthy_no_active_stops, "active_stop_count": 1}) is False
+        assert _health_payload_ready({**healthy_active_stops, "stop_watcher_last_check_age_sec": 120.0}) is False
+        assert _health_payload_ready({"status": "ok", "stop_protection_status": "degraded"}) is False
+        assert _health_payload_ready({**healthy_no_active_stops, "unprotected_positions_count": 1}) is False
+        assert _health_payload_ready({**healthy_no_active_stops, "idempotency_status": "ambiguous"}) is False
 
     @pytest.mark.asyncio
     async def test_retries_on_connection_error(self):

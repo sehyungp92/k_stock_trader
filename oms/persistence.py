@@ -11,11 +11,13 @@ from typing import Any, Dict, List, Optional
 import asyncpg
 import json
 import os
+import time
 import uuid
 from loguru import logger
 
 from .intent import Intent, IntentResult, IntentStatus
 from .state import WorkingOrder, SymbolPosition, StrategyAllocation, OrderStatus
+from .stop_protection import ProtectiveStop, StopStatus, stop_from_row
 
 
 class OMSPersistence:
@@ -33,6 +35,7 @@ class OMSPersistence:
         self.consecutive_failures: int = 0
         self.total_failures: int = 0
         self._intents_execution_style_column: Optional[bool] = None
+        self._intents_submit_ref_column: Optional[bool] = None
 
     async def connect(self) -> None:
         """Initialize connection pool."""
@@ -104,11 +107,35 @@ class OMSPersistence:
         )
         return list(columns or [])
 
+    async def _index_exists(self, index_name: str) -> bool:
+        """Return True when the named public index exists."""
+        if not self.pool:
+            return False
+        return bool(
+            await self.pool.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND indexname = $1
+                )
+                """,
+                index_name,
+            )
+        )
+
     async def _intent_execution_style_supported(self) -> bool:
         """Return whether this schema can persist close-auction execution style."""
         if self._intents_execution_style_column is None:
             self._intents_execution_style_column = await self._relation_has_column("intents", "execution_style")
         return bool(self._intents_execution_style_column)
+
+    async def _intent_submission_plan_supported(self) -> bool:
+        """Return whether the idempotency hardening columns are available."""
+        if self._intents_submit_ref_column is None:
+            self._intents_submit_ref_column = await self._relation_has_column("intents", "submit_ref")
+        return bool(self._intents_submit_ref_column)
 
     async def _check_schema_compat(self) -> None:
         """Verify DB has the scoped schema and required dashboard views."""
@@ -142,14 +169,36 @@ class OMSPersistence:
                     "strategy_state primary key",
                     await self._primary_key_columns("strategy_state") == ["oms_id", "strategy_id"],
                 ),
+                ("protective_stops.oms_id", await self._relation_has_column("protective_stops", "oms_id")),
+                ("protective_stops.stop_id", await self._relation_has_column("protective_stops", "stop_id")),
+                ("protective_stops.status", await self._relation_has_column("protective_stops", "status")),
+                ("protective_stops.idempotency_key", await self._relation_has_column("protective_stops", "idempotency_key")),
+                ("protective_stops.triggered_at", await self._relation_has_column("protective_stops", "triggered_at")),
+                ("protective_stops.source_metadata", await self._relation_has_column("protective_stops", "source_metadata")),
+                ("intents.reservation_started_at", await self._relation_has_column("intents", "reservation_started_at")),
+                ("intents.reservation_owner", await self._relation_has_column("intents", "reservation_owner")),
+                ("intents.reservation_reconcile_status", await self._relation_has_column("intents", "reservation_reconcile_status")),
+                ("intents.reservation_reconcile_message", await self._relation_has_column("intents", "reservation_reconcile_message")),
+                ("intents.submit_ref", await self._relation_has_column("intents", "submit_ref")),
+                ("intents.planned_side", await self._relation_has_column("intents", "planned_side")),
+                ("intents.planned_qty", await self._relation_has_column("intents", "planned_qty")),
+                ("intents.planned_order_type", await self._relation_has_column("intents", "planned_order_type")),
+                ("idx_protective_stops_oms_status_updated", await self._index_exists("idx_protective_stops_oms_status_updated")),
+                ("idx_intents_oms_status_created", await self._index_exists("idx_intents_oms_status_created")),
+                ("idx_intents_oms_idempotency", await self._index_exists("idx_intents_oms_idempotency")),
+                ("idx_intents_oms_order_id", await self._index_exists("idx_intents_oms_order_id")),
+                ("idx_orders_oms_status_created", await self._index_exists("idx_orders_oms_status_created")),
+                ("idx_orders_oms_kis_order", await self._index_exists("idx_orders_oms_kis_order")),
             ]
             missing = [name for name, ok in checks if not ok]
             if missing:
                 logger.critical(
-                    "SCHEMA MISMATCH: missing or outdated scoped schema objects: {}. "
+                    "SCHEMA MISMATCH: missing or outdated OMS hardening schema objects: {}. "
                     "Apply migrations: psql $DATABASE_URL -f infra/postgres/init/005_oms_scoping.sql && "
                     "psql $DATABASE_URL -f infra/postgres/init/006_views_oms_scoped.sql && "
-                    "psql $DATABASE_URL -f infra/postgres/init/007_oms_scope_finalize.sql",
+                    "psql $DATABASE_URL -f infra/postgres/init/007_oms_scope_finalize.sql && "
+                    "psql $DATABASE_URL -f infra/postgres/init/008_protective_stops.sql && "
+                    "psql $DATABASE_URL -f infra/postgres/init/009_idempotency_hardening.sql",
                     ", ".join(missing),
                 )
                 await self.pool.close()
@@ -169,6 +218,31 @@ class OMSPersistence:
             return str(uuid.UUID(str(value)))
         except (ValueError, TypeError, AttributeError):
             return None
+
+    @staticmethod
+    def _jsonb_dict(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            return dict(parsed) if isinstance(parsed, dict) else {}
+        return {}
+
+    @staticmethod
+    def _order_meta(order: WorkingOrder) -> str:
+        payload = {
+            "idempotency_key": order.idempotency_key,
+            "submit_ref": order.submit_ref,
+            "branch": order.branch,
+            "submit_ts": order.submit_ts,
+            "working_price": order.price,
+            "risk_stop_px": order.risk_stop_px,
+            "risk_hard_stop_px": order.risk_hard_stop_px,
+        }
+        return json.dumps({k: v for k, v in payload.items() if v not in (None, "")}, sort_keys=True, default=str)
 
     async def _resolve_oms_order_id(self, order_id: Optional[str]) -> Optional[str]:
         """Resolve broker/KIS order IDs back to the OMS UUID primary key."""
@@ -275,6 +349,897 @@ class OMSPersistence:
             self._record_failure()
             logger.error(f"Failed to record intent: {e}")
 
+    @staticmethod
+    def _intent_result_from_row(row: Any) -> IntentResult:
+        try:
+            status = IntentStatus[str(row["status"])]
+        except KeyError:
+            status = IntentStatus.DEFERRED
+        return IntentResult(
+            intent_id=str(row["intent_id"]),
+            status=status,
+            message=str(row["result_message"] or ""),
+            modified_qty=row["modified_qty"],
+            order_id=row["order_id"],
+            cooldown_until=float(row["cooldown_until"]) if row["cooldown_until"] is not None else None,
+        )
+
+    async def reserve_intent(self, intent: Intent) -> Optional[IntentResult]:
+        """Reserve an idempotency key before broker submission.
+
+        Returns None when this process owns the reservation. Returns an
+        existing/fail-closed result when the key has already been reserved.
+        """
+        if not self._is_connected():
+            return IntentResult(
+                intent_id=intent.intent_id,
+                status=IntentStatus.DEFERRED,
+                message="Durable idempotency reservation unavailable; persistence is disconnected",
+            )
+        try:
+            has_execution_style = await self._intent_execution_style_supported()
+            execution_style_column = ", execution_style" if has_execution_style else ""
+            execution_style_value = ", $15" if has_execution_style else ""
+            entry_base = 16 if has_execution_style else 15
+            params = [
+                intent.intent_id,
+                intent.idempotency_key,
+                intent.strategy_id,
+                intent.symbol,
+                intent.intent_type.name,
+                intent.desired_qty,
+                intent.target_qty,
+                intent.urgency.name,
+                intent.time_horizon.name,
+                intent.constraints.max_slippage_bps,
+                intent.constraints.max_spread_bps,
+                intent.constraints.limit_price,
+                intent.constraints.stop_price,
+                intent.constraints.expiry_ts,
+            ]
+            if has_execution_style:
+                params.append(intent.constraints.execution_style)
+            params.extend(
+                [
+                    intent.risk_payload.entry_px,
+                    intent.risk_payload.stop_px,
+                    intent.risk_payload.hard_stop_px,
+                    intent.risk_payload.rationale_code,
+                    intent.risk_payload.confidence,
+                    intent.signal_hash,
+                    IntentStatus.PENDING.name,
+                    "Reserved before broker submission",
+                    self.oms_id,
+                ]
+            )
+            inserted = await self.pool.fetchval(
+                f"""
+                INSERT INTO intents (
+                    intent_id, idempotency_key, strategy_id, symbol,
+                    intent_type, desired_qty, target_qty, urgency, time_horizon,
+                    max_slippage_bps, max_spread_bps, limit_price, stop_price, expiry_ts{execution_style_column},
+                    entry_px, stop_px, hard_stop_px, rationale_code, confidence, signal_hash,
+                    status, result_message, oms_id
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                    to_timestamp($14){execution_style_value}, ${entry_base}, ${entry_base + 1}, ${entry_base + 2}, ${entry_base + 3}, ${entry_base + 4}, ${entry_base + 5},
+                    ${entry_base + 6}, ${entry_base + 7}, ${entry_base + 8}
+                )
+                ON CONFLICT (idempotency_key) DO NOTHING
+                RETURNING intent_id
+                """,
+                *params,
+            )
+            if inserted:
+                await self._mark_intent_reserved(intent)
+                self._record_success()
+                return None
+
+            existing = await self.pool.fetchrow(
+                """
+                SELECT idempotency_key, intent_id, status, result_message,
+                       modified_qty, order_id, EXTRACT(EPOCH FROM cooldown_until) AS cooldown_until
+                FROM intents
+                WHERE idempotency_key = $1
+                LIMIT 1
+                """,
+                intent.idempotency_key,
+            )
+            if existing is None:
+                self._record_failure()
+                return IntentResult(
+                    intent_id=intent.intent_id,
+                    status=IntentStatus.DEFERRED,
+                    message="Durable idempotency reservation conflict could not be reconciled",
+                )
+
+            result = self._intent_result_from_row(existing)
+            if result.status == IntentStatus.PENDING:
+                return IntentResult(
+                    intent_id=result.intent_id,
+                    status=IntentStatus.DEFERRED,
+                    message="Idempotency key is already pending; reconcile before retry",
+                    order_id=result.order_id,
+                )
+            if result.status in {IntentStatus.REJECTED, IntentStatus.DEFERRED, IntentStatus.CANCELLED} and not result.order_id:
+                execution_style_update = ", execution_style = $15" if has_execution_style else ""
+                rereserve_params = [
+                    intent.idempotency_key,
+                    intent.intent_id,
+                    intent.strategy_id,
+                    intent.symbol,
+                    intent.intent_type.name,
+                    intent.desired_qty,
+                    intent.target_qty,
+                    intent.urgency.name,
+                    intent.time_horizon.name,
+                    intent.constraints.max_slippage_bps,
+                    intent.constraints.max_spread_bps,
+                    intent.constraints.limit_price,
+                    intent.constraints.stop_price,
+                    intent.constraints.expiry_ts,
+                ]
+                if has_execution_style:
+                    rereserve_params.append(intent.constraints.execution_style)
+                rereserve_params.extend(
+                    [
+                        intent.risk_payload.entry_px,
+                        intent.risk_payload.stop_px,
+                        intent.risk_payload.hard_stop_px,
+                        intent.risk_payload.rationale_code,
+                        intent.risk_payload.confidence,
+                        intent.signal_hash,
+                        IntentStatus.PENDING.name,
+                        "Reserved before broker submission",
+                        self.oms_id,
+                    ]
+                )
+                await self.pool.execute(
+                    f"""
+                    UPDATE intents
+                    SET intent_id = $2,
+                        strategy_id = $3,
+                        symbol = $4,
+                        intent_type = $5,
+                        desired_qty = $6,
+                        target_qty = $7,
+                        urgency = $8,
+                        time_horizon = $9,
+                        max_slippage_bps = $10,
+                        max_spread_bps = $11,
+                        limit_price = $12,
+                        stop_price = $13,
+                        expiry_ts = to_timestamp($14){execution_style_update},
+                        entry_px = ${entry_base},
+                        stop_px = ${entry_base + 1},
+                        hard_stop_px = ${entry_base + 2},
+                        rationale_code = ${entry_base + 3},
+                        confidence = ${entry_base + 4},
+                        signal_hash = ${entry_base + 5},
+                        status = ${entry_base + 6},
+                        result_message = ${entry_base + 7},
+                        modified_qty = NULL,
+                        order_id = NULL,
+                        cooldown_until = NULL,
+                        processed_at = NULL,
+                        oms_id = ${entry_base + 8}
+                    WHERE idempotency_key = $1
+                    """,
+                    *rereserve_params,
+                )
+                await self._mark_intent_reserved(intent)
+                self._record_success()
+                return None
+            self._record_success()
+            return result
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to reserve intent idempotency key: {e}")
+            return IntentResult(
+                intent_id=intent.intent_id,
+                status=IntentStatus.DEFERRED,
+                message="Durable idempotency reservation failed; retry after persistence recovers",
+            )
+
+    async def load_idempotency_results(self) -> Dict[str, IntentResult]:
+        """Load durable accepted/executed intent outcomes for restart dedupe."""
+        if not self._is_connected():
+            return {}
+        try:
+            rows = await self.pool.fetch(
+                """
+                SELECT DISTINCT ON (idempotency_key)
+                    idempotency_key, intent_id, status, result_message,
+                    modified_qty, order_id, EXTRACT(EPOCH FROM cooldown_until) AS cooldown_until
+                FROM intents
+                WHERE oms_id = $1
+                  AND status IN ('EXECUTED', 'ACCEPTED')
+                ORDER BY idempotency_key, processed_at DESC NULLS LAST, created_at DESC
+                """,
+                self.oms_id,
+            )
+            results: Dict[str, IntentResult] = {}
+            for row in rows:
+                key = str(row["idempotency_key"] or "")
+                if not key:
+                    continue
+                results[key] = self._intent_result_from_row(row)
+            self._record_success()
+            return results
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to load idempotency results: {e}")
+            return {}
+
+    async def _mark_intent_reserved(self, intent: Intent) -> None:
+        """Attach reservation lifecycle metadata when hardening columns exist."""
+        if not self._is_connected():
+            return
+        if not await self._intent_submission_plan_supported():
+            return
+        try:
+            await self.pool.execute(
+                """
+                UPDATE intents
+                SET reservation_started_at = COALESCE(reservation_started_at, NOW()),
+                    reservation_owner = COALESCE(reservation_owner, $2),
+                    reservation_expires_at = COALESCE(reservation_expires_at, NOW() + INTERVAL '10 minutes'),
+                    reservation_reconcile_status = COALESCE(reservation_reconcile_status, 'PENDING'),
+                    reservation_reconcile_message = COALESCE(reservation_reconcile_message, 'Reserved before broker submission')
+                WHERE idempotency_key = $1
+                """,
+                intent.idempotency_key,
+                f"oms:{self.oms_id}",
+            )
+        except Exception as e:
+            logger.debug(f"Intent reservation metadata unavailable: {e}")
+
+    async def update_intent_submission_plan(
+        self,
+        intent: Intent,
+        *,
+        side: str,
+        planned_qty: int,
+        order_type: str,
+        limit_price: Optional[float],
+        stop_price: Optional[float],
+        submit_ref: str,
+    ) -> None:
+        """Persist final broker-submit metadata before any adapter call."""
+        if not self._is_connected():
+            return
+        if not await self._intent_submission_plan_supported():
+            return
+        try:
+            await self.pool.execute(
+                """
+                UPDATE intents
+                SET planned_side = $2,
+                    planned_qty = $3,
+                    planned_order_type = $4,
+                    planned_limit_price = $5,
+                    planned_stop_price = $6,
+                    submit_ref = $7,
+                    reservation_owner = COALESCE(reservation_owner, $8),
+                    reservation_started_at = COALESCE(reservation_started_at, NOW()),
+                    reservation_reconcile_status = 'SUBMITTING',
+                    reservation_reconcile_message = 'Broker submission planned'
+                WHERE idempotency_key = $1
+                  AND oms_id = $9
+                """,
+                intent.idempotency_key,
+                side,
+                int(planned_qty or 0),
+                order_type,
+                limit_price,
+                stop_price,
+                submit_ref,
+                f"oms:{self.oms_id}",
+                self.oms_id,
+            )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to persist intent submission plan: {e}")
+
+    async def list_pending_idempotency(self, stale_after_sec: float = 60.0) -> List[Dict[str, Any]]:
+        """List durable PENDING reservations requiring reconciliation."""
+        if not self._is_connected():
+            return []
+        try:
+            if not await self._intent_submission_plan_supported():
+                rows = await self.pool.fetch(
+                    """
+                    SELECT intent_id, idempotency_key, strategy_id, symbol, intent_type,
+                           desired_qty, target_qty, status, result_message, order_id,
+                           created_at, processed_at,
+                           stop_px, hard_stop_px,
+                           EXTRACT(EPOCH FROM created_at) AS created_ts
+                    FROM intents
+                    WHERE oms_id = $1
+                      AND status = 'PENDING'
+                      AND created_at <= NOW() - ($2::text || ' seconds')::interval
+                    ORDER BY created_at ASC
+                    """,
+                    self.oms_id,
+                    int(stale_after_sec),
+                )
+                self._record_success()
+                return [dict(row) for row in rows]
+            rows = await self.pool.fetch(
+                """
+                SELECT intent_id, idempotency_key, strategy_id, symbol, intent_type,
+                       desired_qty, target_qty, status, result_message, order_id,
+                       created_at, processed_at,
+                       stop_px, hard_stop_px,
+                       EXTRACT(EPOCH FROM created_at) AS created_ts,
+                       submit_ref, planned_side, planned_qty, planned_order_type,
+                       planned_limit_price, planned_stop_price,
+                       reservation_owner, reservation_reconcile_status,
+                       reservation_reconcile_message
+                FROM intents
+                WHERE oms_id = $1
+                  AND (
+                      status = 'PENDING'
+                      OR (
+                          status = 'DEFERRED'
+                          AND order_id IS NOT NULL
+                          AND reservation_reconcile_status = 'AMBIGUOUS'
+                      )
+                  )
+                  AND created_at <= NOW() - ($2::text || ' seconds')::interval
+                ORDER BY created_at ASC
+                """,
+                self.oms_id,
+                int(stale_after_sec),
+            )
+            self._record_success()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to list pending idempotency reservations: {e}")
+            return []
+
+    async def idempotency_health(self) -> Dict[str, Any]:
+        """Return readiness-impacting unresolved idempotency reservation counts."""
+        if not self._is_connected():
+            return {"status": "error", "pending_count": 0, "ambiguous_count": 0}
+        try:
+            if await self._intent_submission_plan_supported():
+                row = await self.pool.fetchrow(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE status = 'PENDING') AS pending_count,
+                        COUNT(*) FILTER (WHERE COALESCE(reservation_reconcile_status, '') = 'AMBIGUOUS') AS ambiguous_count
+                    FROM intents
+                    WHERE oms_id = $1
+                      AND (
+                          status = 'PENDING'
+                          OR COALESCE(reservation_reconcile_status, '') = 'AMBIGUOUS'
+                      )
+                    """,
+                    self.oms_id,
+                )
+            else:
+                row = await self.pool.fetchrow(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE status = 'PENDING') AS pending_count,
+                        0 AS ambiguous_count
+                    FROM intents
+                    WHERE oms_id = $1
+                      AND status = 'PENDING'
+                    """,
+                    self.oms_id,
+                )
+            pending_count = int(row["pending_count"] or 0) if row else 0
+            ambiguous_count = int(row["ambiguous_count"] or 0) if row else 0
+            self._record_success()
+            return {
+                "status": "degraded" if pending_count or ambiguous_count else "ok",
+                "pending_count": pending_count,
+                "ambiguous_count": ambiguous_count,
+            }
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to compute idempotency health: {e}")
+            return {"status": "error", "pending_count": 0, "ambiguous_count": 0}
+
+    async def mark_intent_ambiguous(
+        self,
+        intent: Intent,
+        *,
+        order_id: Optional[str],
+        submit_ref: Optional[str],
+        reason: str,
+    ) -> None:
+        """Persist a broker-success/persistence-failure ambiguity without allowing re-submit."""
+        if not self._is_connected():
+            return
+        try:
+            if await self._intent_submission_plan_supported():
+                await self.pool.execute(
+                    """
+                    UPDATE intents
+                    SET status = 'DEFERRED',
+                        result_message = $3,
+                        order_id = COALESCE($4, order_id),
+                        submit_ref = COALESCE($5, submit_ref),
+                        reservation_reconcile_status = 'AMBIGUOUS',
+                        reservation_reconcile_message = $3,
+                        processed_at = NOW()
+                    WHERE oms_id = $1
+                      AND idempotency_key = $2
+                    """,
+                    self.oms_id,
+                    intent.idempotency_key,
+                    reason,
+                    order_id,
+                    submit_ref,
+                )
+            else:
+                await self.pool.execute(
+                    """
+                    UPDATE intents
+                    SET status = 'DEFERRED',
+                        result_message = $3,
+                        order_id = COALESCE($4, order_id),
+                        processed_at = NOW()
+                    WHERE oms_id = $1
+                      AND idempotency_key = $2
+                    """,
+                    self.oms_id,
+                    intent.idempotency_key,
+                    reason,
+                    order_id,
+                )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to mark idempotency ambiguity for {intent.idempotency_key}: {e}")
+
+    async def resolve_idempotency(
+        self,
+        idempotency_key: str,
+        *,
+        status: IntentStatus,
+        reason: str,
+        order_id: Optional[str] = None,
+    ) -> Optional[IntentResult]:
+        """Operator/manual reconciliation endpoint for stale pending keys."""
+        if not self._is_connected() or not reason:
+            return None
+        try:
+            if await self._intent_submission_plan_supported():
+                row = await self.pool.fetchrow(
+                    """
+                    UPDATE intents
+                    SET status = $3,
+                        result_message = $4,
+                        order_id = COALESCE($5, order_id),
+                        reservation_reconcile_status = $3,
+                        reservation_reconcile_message = $4,
+                        processed_at = NOW()
+                    WHERE oms_id = $1
+                      AND idempotency_key = $2
+                    RETURNING idempotency_key, intent_id, status, result_message,
+                              modified_qty, order_id,
+                              EXTRACT(EPOCH FROM cooldown_until) AS cooldown_until
+                    """,
+                    self.oms_id,
+                    idempotency_key,
+                    status.name,
+                    reason,
+                    order_id,
+                )
+            else:
+                row = await self.pool.fetchrow(
+                    """
+                    UPDATE intents
+                    SET status = $3,
+                        result_message = $4,
+                        order_id = COALESCE($5, order_id),
+                        processed_at = NOW()
+                    WHERE oms_id = $1
+                      AND idempotency_key = $2
+                    RETURNING idempotency_key, intent_id, status, result_message,
+                              modified_qty, order_id,
+                              EXTRACT(EPOCH FROM cooldown_until) AS cooldown_until
+                    """,
+                    self.oms_id,
+                    idempotency_key,
+                    status.name,
+                    reason,
+                    order_id,
+                )
+            if not row:
+                return None
+            self._record_success()
+            return self._intent_result_from_row(row)
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to resolve idempotency key {idempotency_key}: {e}")
+            return None
+
+    # ------------------------------------------------------------------
+    # Durable Protective Stops
+    # ------------------------------------------------------------------
+
+    async def upsert_stop(self, stop: ProtectiveStop) -> Optional[ProtectiveStop]:
+        """Create or update the durable protective stop for an allocation."""
+        if not self._is_connected():
+            return None
+        try:
+            row = await self.pool.fetchrow(
+                """
+                INSERT INTO protective_stops (
+                    stop_id, oms_id, strategy_id, symbol, side, qty, stop_price,
+                    trigger_price_source, protection_mode, status,
+                    broker_order_id, broker_order_date, entry_intent_id, entry_order_id,
+                    exit_intent_id, idempotency_key, activated_at, triggered_at,
+                    last_checked_at, last_price, last_error, failure_count,
+                    config_hash, source_metadata
+                ) VALUES (
+                    $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                    $11, $12, $13::uuid, $14, $15::uuid, $16, $17, $18,
+                    $19, $20, $21, $22, $23, $24::jsonb
+                )
+                ON CONFLICT (stop_id) DO UPDATE SET
+                    qty = CASE
+                        WHEN protective_stops.status IN ('TRIGGERED', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED', 'FILLED', 'CANCELLED', 'FAILED')
+                        THEN protective_stops.qty ELSE EXCLUDED.qty END,
+                    stop_price = CASE
+                        WHEN protective_stops.status IN ('TRIGGERED', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED', 'FILLED', 'CANCELLED', 'FAILED')
+                        THEN protective_stops.stop_price ELSE EXCLUDED.stop_price END,
+                    trigger_price_source = EXCLUDED.trigger_price_source,
+                    protection_mode = EXCLUDED.protection_mode,
+                    status = CASE
+                        WHEN protective_stops.status IN ('TRIGGERED', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED', 'FILLED', 'CANCELLED', 'FAILED')
+                        THEN protective_stops.status ELSE EXCLUDED.status END,
+                    broker_order_id = COALESCE(EXCLUDED.broker_order_id, protective_stops.broker_order_id),
+                    broker_order_date = COALESCE(EXCLUDED.broker_order_date, protective_stops.broker_order_date),
+                    entry_intent_id = COALESCE(EXCLUDED.entry_intent_id, protective_stops.entry_intent_id),
+                    entry_order_id = COALESCE(EXCLUDED.entry_order_id, protective_stops.entry_order_id),
+                    activated_at = COALESCE(protective_stops.activated_at, EXCLUDED.activated_at, NOW()),
+                    last_error = CASE
+                        WHEN protective_stops.status IN ('TRIGGERED', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED', 'FILLED', 'CANCELLED', 'FAILED')
+                        THEN protective_stops.last_error ELSE NULL END,
+                    config_hash = EXCLUDED.config_hash,
+                    source_metadata = protective_stops.source_metadata || EXCLUDED.source_metadata,
+                    updated_at = NOW()
+                RETURNING *
+                """,
+                stop.stop_id,
+                stop.oms_id,
+                stop.strategy_id,
+                stop.symbol,
+                stop.side,
+                stop.qty,
+                stop.stop_price,
+                stop.trigger_price_source,
+                stop.protection_mode,
+                stop.status,
+                stop.broker_order_id,
+                stop.broker_order_date,
+                self._normalize_uuid(stop.entry_intent_id),
+                stop.entry_order_id,
+                self._normalize_uuid(stop.exit_intent_id),
+                stop.idempotency_key,
+                stop.activated_at,
+                stop.triggered_at,
+                stop.last_checked_at,
+                stop.last_price,
+                stop.last_error,
+                stop.failure_count,
+                stop.config_hash,
+                json.dumps(stop.source_metadata or {}, sort_keys=True, default=str),
+            )
+            self._record_success()
+            return stop_from_row(row) if row else None
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to upsert protective stop {stop.stop_id}: {e}")
+            return None
+
+    async def load_active_stops(self) -> List[ProtectiveStop]:
+        if not self._is_connected():
+            return []
+        try:
+            rows = await self.pool.fetch(
+                """
+                SELECT *
+                FROM protective_stops
+                WHERE oms_id = $1
+                  AND status IN ('PENDING', 'ACTIVE', 'TRIGGERED_PENDING_EXECUTION')
+                ORDER BY updated_at ASC
+                """,
+                self.oms_id,
+            )
+            self._record_success()
+            return [stop_from_row(row) for row in rows]
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to load active protective stops: {e}")
+            return []
+
+    async def load_stop_for_allocation(self, strategy_id: str, symbol: str) -> Optional[ProtectiveStop]:
+        if not self._is_connected():
+            return None
+        try:
+            row = await self.pool.fetchrow(
+                """
+                SELECT *
+                FROM protective_stops
+                WHERE oms_id = $1
+                  AND strategy_id = $2
+                  AND symbol = $3
+                  AND status IN ('PENDING', 'ACTIVE', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED')
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                self.oms_id,
+                strategy_id.upper().strip(),
+                str(symbol).zfill(6),
+            )
+            self._record_success()
+            return stop_from_row(row) if row else None
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to load protective stop for {strategy_id}/{symbol}: {e}")
+            return None
+
+    async def mark_active(self, stop_id: str, broker_order_id: Optional[str] = None) -> None:
+        await self._update_stop_status(stop_id, StopStatus.ACTIVE.value, broker_order_id=broker_order_id, activated=True)
+
+    async def mark_triggered(self, stop_id: str, trigger_price: float, triggered_at: datetime) -> bool:
+        if not self._is_connected():
+            return False
+        try:
+            row = await self.pool.fetchrow(
+                """
+                UPDATE protective_stops
+                SET status = 'TRIGGERED_PENDING_EXECUTION',
+                    triggered_at = $2,
+                    last_checked_at = $2,
+                    last_price = $3,
+                    updated_at = NOW()
+                WHERE stop_id = $1::uuid
+                  AND oms_id = $4
+                  AND status IN ('PENDING', 'ACTIVE')
+                RETURNING stop_id
+                """,
+                stop_id,
+                triggered_at,
+                trigger_price,
+                self.oms_id,
+            )
+            self._record_success()
+            return row is not None
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to mark protective stop triggered {stop_id}: {e}")
+            return False
+
+    async def mark_exit_submitted(
+        self,
+        stop_id: str,
+        exit_intent_id: Optional[str],
+        order_id: Optional[str],
+        idempotency_key: Optional[str] = None,
+    ) -> None:
+        if not self._is_connected():
+            return
+        if not order_id:
+            await self.touch_stop_check(
+                stop_id,
+                checked_at=datetime.now(),
+                last_price=None,
+                last_error="exit_not_submitted:no_broker_order_id",
+            )
+            return
+        try:
+            await self.pool.execute(
+                """
+                UPDATE protective_stops
+                SET status = 'EXIT_SUBMITTED',
+                    exit_intent_id = COALESCE($2::uuid, exit_intent_id),
+                    idempotency_key = COALESCE(idempotency_key, $4),
+                    broker_order_id = COALESCE($3, broker_order_id),
+                    updated_at = NOW()
+                WHERE stop_id = $1::uuid
+                  AND oms_id = $5
+                """,
+                stop_id,
+                self._normalize_uuid(exit_intent_id),
+                order_id,
+                idempotency_key,
+                self.oms_id,
+            )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to mark protective stop exit submitted {stop_id}: {e}")
+
+    async def mark_filled(self, stop_id: str) -> None:
+        await self._update_stop_status(stop_id, StopStatus.FILLED.value)
+
+    async def mark_cancelled(self, stop_id: str, reason: str = "") -> None:
+        await self._update_stop_status(stop_id, StopStatus.CANCELLED.value, last_error=reason)
+
+    async def mark_failed(self, stop_id: str, reason: str) -> None:
+        if not self._is_connected():
+            return
+        try:
+            await self.pool.execute(
+                """
+                UPDATE protective_stops
+                SET status = 'FAILED',
+                    last_error = $2,
+                    failure_count = failure_count + 1,
+                    updated_at = NOW()
+                WHERE stop_id = $1::uuid
+                  AND oms_id = $3
+                """,
+                stop_id,
+                reason,
+                self.oms_id,
+            )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to mark protective stop failed {stop_id}: {e}")
+
+    async def touch_stop_check(
+        self,
+        stop_id: str,
+        *,
+        checked_at: datetime,
+        last_price: float,
+        last_error: Optional[str] = None,
+    ) -> None:
+        if not self._is_connected():
+            return
+        try:
+            await self.pool.execute(
+                """
+                UPDATE protective_stops
+                SET last_checked_at = $2,
+                    last_price = $3,
+                    last_error = $4,
+                    failure_count = CASE WHEN $4 IS NULL THEN failure_count ELSE failure_count + 1 END,
+                    updated_at = NOW()
+                WHERE stop_id = $1::uuid
+                  AND oms_id = $5
+                """,
+                stop_id,
+                checked_at,
+                last_price,
+                last_error,
+                self.oms_id,
+            )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to touch protective stop {stop_id}: {e}")
+
+    async def update_stop_quantity(self, strategy_id: str, symbol: str, qty: int) -> Optional[ProtectiveStop]:
+        if not self._is_connected():
+            return None
+        try:
+            row = await self.pool.fetchrow(
+                """
+                UPDATE protective_stops
+                SET qty = GREATEST($4, 0),
+                    status = CASE
+                        WHEN status IN ('TRIGGERED', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED')
+                        THEN status
+                        WHEN $4 <= 0 THEN 'CANCELLED'
+                        ELSE 'ACTIVE'
+                    END,
+                    updated_at = NOW()
+                WHERE oms_id = $1
+                  AND strategy_id = $2
+                  AND symbol = $3
+                  AND status IN ('PENDING', 'ACTIVE', 'TRIGGERED_PENDING_EXECUTION', 'EXIT_SUBMITTED')
+                RETURNING *
+                """,
+                self.oms_id,
+                strategy_id.upper().strip(),
+                str(symbol).zfill(6),
+                int(qty or 0),
+            )
+            self._record_success()
+            return stop_from_row(row) if row else None
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to update protective stop quantity {strategy_id}/{symbol}: {e}")
+            return None
+
+    async def mark_idempotency_ambiguous(
+        self,
+        idempotency_key: str,
+        *,
+        reason: str,
+        order_id: Optional[str] = None,
+        submit_ref: Optional[str] = None,
+    ) -> None:
+        """Persist operator-visible reconciliation ambiguity without resolving the reservation."""
+        if not self._is_connected():
+            return
+        try:
+            if await self._intent_submission_plan_supported():
+                await self.pool.execute(
+                    """
+                    UPDATE intents
+                    SET reservation_reconcile_status = 'AMBIGUOUS',
+                        reservation_reconcile_message = $3,
+                        order_id = COALESCE($4, order_id),
+                        submit_ref = COALESCE($5, submit_ref),
+                        processed_at = COALESCE(processed_at, NOW())
+                    WHERE oms_id = $1
+                      AND idempotency_key = $2
+                    """,
+                    self.oms_id,
+                    idempotency_key,
+                    reason,
+                    order_id,
+                    submit_ref,
+                )
+            else:
+                await self.pool.execute(
+                    """
+                    UPDATE intents
+                    SET result_message = $3,
+                        order_id = COALESCE($4, order_id),
+                        processed_at = COALESCE(processed_at, NOW())
+                    WHERE oms_id = $1
+                      AND idempotency_key = $2
+                    """,
+                    self.oms_id,
+                    idempotency_key,
+                    reason,
+                    order_id,
+                )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to mark idempotency ambiguity {idempotency_key}: {e}")
+
+    async def _update_stop_status(
+        self,
+        stop_id: str,
+        status: str,
+        *,
+        broker_order_id: Optional[str] = None,
+        last_error: Optional[str] = None,
+        activated: bool = False,
+    ) -> None:
+        if not self._is_connected():
+            return
+        try:
+            await self.pool.execute(
+                """
+                UPDATE protective_stops
+                SET status = $2,
+                    broker_order_id = COALESCE($3, broker_order_id),
+                    last_error = $4,
+                    activated_at = CASE WHEN $5 THEN COALESCE(activated_at, NOW()) ELSE activated_at END,
+                    updated_at = NOW()
+                WHERE stop_id = $1::uuid
+                  AND oms_id = $6
+                """,
+                stop_id,
+                status,
+                broker_order_id,
+                last_error,
+                activated,
+                self.oms_id,
+            )
+            self._record_success()
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to update protective stop status {stop_id}: {e}")
+
     # ------------------------------------------------------------------
     # Order Recording
     # ------------------------------------------------------------------
@@ -313,6 +1278,7 @@ class OMSPersistence:
                         kis_order_date = COALESCE($11, kis_order_date),
                         intent_id = COALESCE($12::uuid, intent_id),
                         cancel_after_sec = COALESCE($13, cancel_after_sec),
+                        meta = COALESCE(meta, '{}'::jsonb) || $14::jsonb,
                         last_update_at = NOW()
                     WHERE oms_order_id = $1::uuid
                     """,
@@ -329,6 +1295,7 @@ class OMSPersistence:
                     kis_order_date,
                     intent_uuid,
                     int(order.cancel_after_sec) if order.cancel_after_sec else None,
+                    self._order_meta(order),
                 )
                 order.oms_order_id = existing_oms_order_id
                 self._record_success()
@@ -340,10 +1307,10 @@ class OMSPersistence:
                     strategy_id, symbol, side, order_type,
                     qty, filled_qty, limit_price, stop_price, status,
                     kis_order_id, kis_order_date, intent_id, cancel_after_sec,
-                    submitted_at, oms_id
+                    submitted_at, oms_id, meta
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9,
-                    $10, $11, $12::uuid, $13, NOW(), $14
+                    $10, $11, $12::uuid, $13, NOW(), $14, $15::jsonb
                 )
                 RETURNING oms_order_id
                 """,
@@ -361,6 +1328,7 @@ class OMSPersistence:
                 intent_uuid,
                 int(order.cancel_after_sec) if order.cancel_after_sec else None,
                 self.oms_id,
+                self._order_meta(order),
             )
             order.oms_order_id = str(oms_order_id) if oms_order_id else None
             self._record_success()
@@ -1112,13 +2080,21 @@ class OMSPersistence:
             )
             orders = []
             for row in rows:
+                meta = self._jsonb_dict(row["meta"])
+                working_price = (
+                    float(row["limit_price"])
+                    if row["limit_price"]
+                    else float(row["avg_fill_price"])
+                    if row["avg_fill_price"]
+                    else float(meta.get("working_price") or 0.0)
+                )
                 orders.append(WorkingOrder(
                     order_id=row["kis_order_id"] or str(row["oms_order_id"]),
                     symbol=row["symbol"],
                     side=row["side"],
                     qty=row["qty"],
                     filled_qty=row["filled_qty"],
-                    price=float(row["limit_price"]) if row["limit_price"] else 0.0,
+                    price=working_price,
                     order_type=row["order_type"],
                     status=OrderStatus[row["status"]],
                     strategy_id=row["strategy_id"],
@@ -1126,7 +2102,13 @@ class OMSPersistence:
                     updated_at=row["last_update_at"],
                     cancel_after_sec=row["cancel_after_sec"],
                     intent_id=str(row["intent_id"]) if row["intent_id"] else None,
+                    idempotency_key=str(meta.get("idempotency_key") or "") or None,
+                    submit_ref=str(meta.get("submit_ref") or "") or None,
+                    branch=str(meta.get("branch") or ""),
+                    submit_ts=float(meta.get("submit_ts") or 0.0) or time.time(),
                     oms_order_id=str(row["oms_order_id"]),
+                    risk_stop_px=float(meta["risk_stop_px"]) if meta.get("risk_stop_px") is not None else None,
+                    risk_hard_stop_px=float(meta["risk_hard_stop_px"]) if meta.get("risk_hard_stop_px") is not None else None,
                 ))
             self._record_success()
             logger.info(f"Loaded {len(orders)} working orders from database")

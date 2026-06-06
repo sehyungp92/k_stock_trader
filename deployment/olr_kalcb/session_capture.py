@@ -49,7 +49,19 @@ ARTIFACT_EVIDENCE_REQUIREMENTS = {
     ),
 }
 STREAM_VOLATILE_HASH_KEYS = {
-    "oms_intents": {"idempotency_key", "intent_id", "timestamp", "record_type", "dry_run", "submitted_to_broker"},
+    "oms_intents": {
+        "idempotency_key",
+        "intent_id",
+        "timestamp",
+        "record_type",
+        "dry_run",
+        "submitted_to_broker",
+        "intended_broker_submit",
+        "broker_submit_possible",
+        "actually_submitted_to_broker",
+        "oms_status",
+        "broker_order_id",
+    },
     "order_events": {
         "intent_id",
         "order_id",
@@ -59,6 +71,8 @@ STREAM_VOLATILE_HASH_KEYS = {
         "record_type",
         "dry_run",
         "submitted_to_broker",
+        "intended_broker_submit",
+        "actually_submitted_to_broker",
     },
     "fill_events": {"order_id", "broker_order_id", "execution_id"},
 }

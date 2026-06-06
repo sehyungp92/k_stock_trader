@@ -59,6 +59,9 @@ async def _rebuild_offline_replay_from_session(root: Path) -> Path:
     recorder = PaperSessionRecorder(offline_root, trade_date)
     initial_account = loader.initial_account_state()
     initial_positions = loader.initial_positions()
+    startup_snapshot = loader.initial_working_order_snapshot()
+    if startup_snapshot["working_orders"]:
+        initial_positions = _positions_with_startup_working_orders(initial_positions, startup_snapshot["working_orders"])
     portfolio_enabled = loader.portfolio_enabled()
     portfolio_config = loader.portfolio_config() if portfolio_enabled else None
     oms = RecordingOMSClient(recorder, account_state=initial_account, positions=dict(initial_positions))
@@ -72,6 +75,7 @@ async def _rebuild_offline_replay_from_session(root: Path) -> Path:
     context = PortfolioContextProvider(oms_client=oms, sector_map=loader.sector_map())
     context.account_state = initial_account
     context.positions = dict(initial_positions)
+    startup_working_orders = startup_snapshot["working_orders"] or context.iter_working_orders()
     descriptors = _descriptors_for_snapshots(snapshots, configs=configs, states=states)
 
     drivers = {
@@ -144,6 +148,9 @@ async def _rebuild_offline_replay_from_session(root: Path) -> Path:
             "portfolio_policy_config": asdict(portfolio_config) if portfolio_config is not None else None,
             "portfolio_policy_hash": PortfolioArbitrationPolicy(portfolio_config).policy_hash if portfolio_config is not None else None,
             "sector_map": loader.sector_map(),
+            "startup_working_order_count": len(startup_working_orders),
+            "startup_working_order_source": startup_snapshot["source"] or "",
+            "startup_working_order_hash": canonical_json_hash(startup_working_orders),
             "market_bar_count": len(bars),
             "timer_event_count": len(timer_events),
             "fill_replay_status": "replayed" if fill_replayed else "not_applicable_no_fill_events",
@@ -493,6 +500,21 @@ class ReplayInputLoader:
             return _coerce_positions(self.manifest.get("positions") or {})
         raise ValueError("missing captured initial positions")
 
+    def initial_working_orders(self) -> list[dict[str, Any]]:
+        return list(self.initial_working_order_snapshot()["working_orders"])
+
+    def initial_working_order_snapshot(self) -> dict[str, Any]:
+        for row in _read_jsonl(self.root / "portfolio_arbitration.jsonl"):
+            if str(row.get("record_type") or "") != "pending_reservations_rehydrated":
+                continue
+            orders = row.get("working_orders")
+            if isinstance(orders, list):
+                return {
+                    "source": str(row.get("source") or ""),
+                    "working_orders": [dict(item) for item in orders if isinstance(item, Mapping)],
+                }
+        return {"source": "", "working_orders": []}
+
 
 def write_offline_replay_manifest(
     offline_root: str | Path,
@@ -589,6 +611,47 @@ def _descriptors_for_snapshots(
             priority=20,
         )
     return descriptors
+
+
+def _positions_with_startup_working_orders(
+    positions: dict[str, Any],
+    working_orders: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    from oms_client.client import PositionInfo, WorkingOrderInfo
+
+    updated = dict(positions)
+    grouped: dict[str, list[WorkingOrderInfo]] = {}
+    for row in working_orders:
+        symbol = str(row.get("symbol") or "").zfill(6)
+        if not symbol:
+            continue
+        remaining_qty = int(row.get("remaining_qty") or row.get("qty") or 0)
+        if remaining_qty <= 0:
+            continue
+        grouped.setdefault(symbol, []).append(
+            WorkingOrderInfo(
+                order_id=str(row.get("order_id") or row.get("intent_id") or row.get("idempotency_key") or f"startup:{symbol}"),
+                symbol=symbol,
+                side=str(row.get("side") or "").upper().strip(),
+                qty=int(row.get("qty") or remaining_qty),
+                filled_qty=int(row.get("filled_qty") or 0),
+                remaining_qty=remaining_qty,
+                price=float(row.get("price") or 0.0),
+                status=str(row.get("status") or "WORKING").upper().strip(),
+                strategy_id=str(row.get("strategy_id") or "").upper().strip(),
+                intent_id=row.get("intent_id"),
+                idempotency_key=row.get("idempotency_key"),
+                submit_ref=row.get("submit_ref"),
+            )
+        )
+    for symbol, orders in grouped.items():
+        position = updated.get(symbol)
+        if position is None:
+            position = PositionInfo(symbol=symbol, real_qty=0, avg_price=max(float(orders[0].price or 0.0), 0.0), allocations={})
+            updated[symbol] = position
+        position.working_orders = orders
+        position.working_order_count = len(orders)
+    return updated
 
 
 def _load_market_bars(path: Path) -> list[MarketBar]:

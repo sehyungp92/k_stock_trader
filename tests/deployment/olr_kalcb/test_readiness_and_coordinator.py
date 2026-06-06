@@ -35,6 +35,35 @@ from strategy_olr.research import (
 )
 
 
+def _paper_health_checks(**overrides):
+    checks = {
+        "dry_run_gate_passed": True,
+        "market_session_open": True,
+        "kis_auth_ok": True,
+        "market_data_ok": True,
+        "account_ok": True,
+        "order_route_enabled": True,
+        "risk_limits_loaded": True,
+        "kill_switch_ready": True,
+        "oms_health_ok": True,
+        "durable_stops_ok": True,
+        "idempotency_reservation_ok": True,
+        "portfolio_context_fresh": True,
+        "paper_trading_approved": True,
+        "oms_health_payload": {
+            "status": "ok",
+            "stop_protection_status": "ok",
+            "unprotected_positions_count": 0,
+            "active_stop_count": 0,
+            "triggered_stop_count": 0,
+            "stop_watcher_price_stale_count": 0,
+            "idempotency_status": "ok",
+        },
+    }
+    checks.update(overrides)
+    return checks
+
+
 def test_readiness_accepts_valid_kalcb_and_rejects_stale(tmp_path):
     trade_date = date(2026, 2, 2)
     KALCBArtifactStore(tmp_path / "kalcb").save_snapshot(_kalcb_snapshot(trade_date))
@@ -391,6 +420,121 @@ def test_runtime_paper_plan_blocks_without_required_operational_gates(tmp_path):
     assert {"oms_client_available", "dry_run_gate_passed", "paper_trading_approved"} <= failure_names
 
 
+def test_runtime_paper_plan_requires_live_hardening_health_gates(tmp_path):
+    trade_date = date(2026, 2, 2)
+    KALCBArtifactStore(tmp_path / "kalcb").save_snapshot(_kalcb_snapshot(trade_date))
+
+    plan = prepare_runtime_session(
+        ("KALCB",),
+        trade_date=trade_date,
+        mode="paper",
+        artifact_roots={"KALCB": tmp_path / "kalcb"},
+        health_checks=_paper_health_checks(
+            oms_health_ok=False,
+            durable_stops_ok=False,
+            idempotency_reservation_ok=False,
+            portfolio_context_fresh=False,
+        ),
+        oms_client=_SubmitOnlyOMS(),
+        session_recorder=PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant"),
+        initial_account_state={"equity": 1_000_000.0, "buyable_cash": 1_000_000.0},
+        initial_positions={},
+    )
+
+    failure_names = {check.name for check in plan.preflight.failures}
+    assert {
+        "oms_health_ok",
+        "durable_stops_ok",
+        "idempotency_reservation_ok",
+        "portfolio_context_fresh",
+    } <= failure_names
+    assert plan.ready_to_start is False
+
+
+def test_runtime_paper_plan_rejects_manual_hardening_booleans_without_raw_oms_health(tmp_path):
+    trade_date = date(2026, 2, 2)
+    KALCBArtifactStore(tmp_path / "kalcb").save_snapshot(_kalcb_snapshot(trade_date))
+    health_checks = _paper_health_checks()
+    health_checks.pop("oms_health_payload")
+
+    plan = prepare_runtime_session(
+        ("KALCB",),
+        trade_date=trade_date,
+        mode="paper",
+        artifact_roots={"KALCB": tmp_path / "kalcb"},
+        health_checks=health_checks,
+        oms_client=_SubmitOnlyOMS(),
+        session_recorder=PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant"),
+        initial_account_state={"equity": 1_000_000.0, "buyable_cash": 1_000_000.0},
+        initial_positions={},
+    )
+
+    failures = {check.name: check for check in plan.preflight.failures}
+    assert {"oms_health_ok", "durable_stops_ok", "idempotency_reservation_ok"} <= set(failures)
+    assert "raw OMS /health" in failures["oms_health_ok"].detail
+    assert plan.ready_to_start is False
+
+
+def test_runtime_paper_plan_rejects_incomplete_stop_health_payload(tmp_path):
+    trade_date = date(2026, 2, 2)
+    KALCBArtifactStore(tmp_path / "kalcb").save_snapshot(_kalcb_snapshot(trade_date))
+
+    plan = prepare_runtime_session(
+        ("KALCB",),
+        trade_date=trade_date,
+        mode="paper",
+        artifact_roots={"KALCB": tmp_path / "kalcb"},
+        health_checks=_paper_health_checks(
+            oms_health_payload={
+                "status": "ok",
+                "stop_protection_status": "ok",
+                "idempotency_status": "ok",
+            }
+        ),
+        oms_client=_SubmitOnlyOMS(),
+        session_recorder=PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant"),
+        initial_account_state={"equity": 1_000_000.0, "buyable_cash": 1_000_000.0},
+        initial_positions={},
+    )
+
+    failures = {check.name: check for check in plan.preflight.failures}
+    assert "durable_stops_ok" in failures
+    assert "missing" in failures["durable_stops_ok"].detail
+    assert plan.ready_to_start is False
+
+
+def test_runtime_paper_plan_requires_recent_stop_watcher_check_when_active_stops_exist(tmp_path):
+    trade_date = date(2026, 2, 2)
+    KALCBArtifactStore(tmp_path / "kalcb").save_snapshot(_kalcb_snapshot(trade_date))
+
+    plan = prepare_runtime_session(
+        ("KALCB",),
+        trade_date=trade_date,
+        mode="paper",
+        artifact_roots={"KALCB": tmp_path / "kalcb"},
+        health_checks=_paper_health_checks(
+            oms_health_payload={
+                "status": "ok",
+                "stop_protection_status": "ok",
+                "unprotected_positions_count": 0,
+                "active_stop_count": 1,
+                "triggered_stop_count": 0,
+                "stop_watcher_price_stale_count": 0,
+                "idempotency_status": "ok",
+            }
+        ),
+        oms_client=_SubmitOnlyOMS(),
+        session_recorder=PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant"),
+        initial_account_state={"equity": 1_000_000.0, "buyable_cash": 1_000_000.0},
+        initial_positions={},
+    )
+
+    failures = {check.name: check for check in plan.preflight.failures}
+    assert "durable_stops_ok" in failures
+    assert "stop_watcher_last_check_age_sec" in failures["durable_stops_ok"].detail
+    assert plan.ready_to_start is False
+
+
 def test_runtime_paper_plan_requires_and_records_initial_replay_state(tmp_path):
     trade_date = date(2026, 2, 2)
     kalcb_payload = {"kalcb.session.ws_budget": 3}
@@ -410,17 +554,7 @@ def test_runtime_paper_plan_requires_and_records_initial_replay_state(tmp_path):
         )
     )
     recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
-    health_checks = {
-        "dry_run_gate_passed": True,
-        "market_session_open": True,
-        "kis_auth_ok": True,
-        "market_data_ok": True,
-        "account_ok": True,
-        "order_route_enabled": True,
-        "risk_limits_loaded": True,
-        "kill_switch_ready": True,
-        "paper_trading_approved": True,
-    }
+    health_checks = _paper_health_checks()
 
     missing_state = prepare_runtime_session(
         ("KALCB",),
@@ -471,17 +605,7 @@ def test_runtime_paper_plan_seeds_portfolio_context_from_initial_state(tmp_path)
         )
     )
     recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
-    health_checks = {
-        "dry_run_gate_passed": True,
-        "market_session_open": True,
-        "kis_auth_ok": True,
-        "market_data_ok": True,
-        "account_ok": True,
-        "order_route_enabled": True,
-        "risk_limits_loaded": True,
-        "kill_switch_ready": True,
-        "paper_trading_approved": True,
-    }
+    health_checks = _paper_health_checks()
 
     plan = prepare_runtime_session(
         ("KALCB",),
@@ -534,17 +658,7 @@ def test_runtime_paper_plan_emits_approval_metadata_when_requested(tmp_path, mon
         )
     )
     recorder = PaperSessionRecorder(tmp_path / "session", trade_date, assistant_event_dir=tmp_path / "assistant")
-    health_checks = {
-        "dry_run_gate_passed": True,
-        "market_session_open": True,
-        "kis_auth_ok": True,
-        "market_data_ok": True,
-        "account_ok": True,
-        "order_route_enabled": True,
-        "risk_limits_loaded": True,
-        "kill_switch_ready": True,
-        "paper_trading_approved": True,
-    }
+    health_checks = _paper_health_checks()
 
     plan = prepare_runtime_session(
         ("KALCB",),

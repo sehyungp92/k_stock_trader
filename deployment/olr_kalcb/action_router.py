@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from datetime import date, datetime, timezone
 from enum import Enum
+import time
 from typing import Any, Iterable, Mapping, Sequence
 
 from oms.intent import IntentStatus
@@ -57,6 +58,11 @@ class RuntimeActionRouter:
     dry_run: bool = False
     pending_reservations: dict[str, "_PendingReservation"] = field(default_factory=dict)
     _reservation_aliases: dict[str, str] = field(default_factory=dict)
+    portfolio_context_degraded: bool = False
+    portfolio_context_degraded_reason: str = ""
+    rehydrated_reservations_count: int = 0
+    rehydrated_pending_notional: float = 0.0
+    rehydrated_source_hash: str = ""
 
     def record_decisions(
         self,
@@ -96,6 +102,106 @@ class RuntimeActionRouter:
         payload["state_hash"] = canonical_json_hash(state_payload)
         self.recorder.append_jsonl("state_snapshots.jsonl", payload)
         return str(payload["state_hash"])
+
+    def rehydrate_pending_reservations(
+        self,
+        working_orders: Iterable[Any],
+        *,
+        source: str = "oms",
+        portfolio_context: PortfolioContextProvider | None = None,
+    ) -> dict[str, Any]:
+        if (
+            portfolio_context is not None
+            and portfolio_context.last_refresh_ts > 0
+            and not portfolio_context.last_refresh_ok
+        ):
+            degraded_reason = portfolio_context.last_refresh_error or "oms_context_unavailable"
+            count = sum(
+                1
+                for reservation in self.pending_reservations.values()
+                if reservation.provenance.startswith("rehydrated:") and reservation.side == "BUY"
+            )
+            notional = sum(
+                reservation.notional
+                for reservation in self.pending_reservations.values()
+                if reservation.provenance.startswith("rehydrated:") and reservation.side == "BUY"
+            )
+            self.portfolio_context_degraded = True
+            self.portfolio_context_degraded_reason = degraded_reason
+            self.rehydrated_reservations_count = count
+            self.rehydrated_pending_notional = notional
+            evidence = {
+                "record_type": "pending_reservations_rehydrated",
+                "source": source,
+                "source_hash": self.rehydrated_source_hash,
+                "pending_reservations_count": len(self.pending_reservations),
+                "rehydrated_reservations_count": count,
+                "rehydrated_pending_notional": notional,
+                "degraded": True,
+                "degraded_reason": degraded_reason,
+                "oms_working_order_count": 0,
+                "preserved_existing_reservations": True,
+            }
+            self.recorder.append_jsonl("portfolio_arbitration.jsonl", evidence)
+            return evidence
+        rows = [_working_order_reservation_row(order, portfolio_context=portfolio_context, source=source) for order in working_orders]
+        normalized = [row for row in rows if row is not None]
+        source_hash = canonical_json_hash(_rehydration_hash_payload(normalized))
+        removed_rehydrated = 0
+        for reservation_id, reservation in list(self.pending_reservations.items()):
+            if reservation.provenance.startswith("rehydrated:"):
+                self.pending_reservations.pop(reservation_id, None)
+                removed_rehydrated += 1
+                for alias in reservation.order_refs:
+                    self._reservation_aliases.pop(alias, None)
+
+        degraded_reason = ""
+        count = 0
+        notional = 0.0
+        for row in normalized:
+            if row["missing_price"] and row["side"] == "BUY":
+                degraded_reason = "working_order_price_missing"
+                continue
+            reservation = _PendingReservation(
+                reservation_id=row["reservation_id"],
+                strategy_id=row["strategy_id"],
+                symbol=row["symbol"],
+                side=row["side"],
+                qty=row["remaining_qty"],
+                notional=row["notional"],
+                sector=row["sector"],
+                order_refs=tuple(row["order_refs"]),
+                provenance=f"rehydrated:{source}",
+                source_hash=source_hash,
+                rehydrated_at=time.time(),
+            )
+            self.pending_reservations[reservation.reservation_id] = reservation
+            for ref in reservation.order_refs:
+                self._reservation_aliases[ref] = reservation.reservation_id
+            if reservation.side == "BUY":
+                count += 1
+                notional += reservation.notional
+
+        self.portfolio_context_degraded = bool(degraded_reason)
+        self.portfolio_context_degraded_reason = degraded_reason
+        self.rehydrated_reservations_count = count
+        self.rehydrated_pending_notional = notional
+        self.rehydrated_source_hash = source_hash
+        evidence = {
+            "record_type": "pending_reservations_rehydrated",
+            "source": source,
+            "source_hash": source_hash,
+            "working_orders": _rehydration_hash_payload(normalized),
+            "pending_reservations_count": len(self.pending_reservations),
+            "rehydrated_reservations_count": count,
+            "rehydrated_pending_notional": notional,
+            "degraded": self.portfolio_context_degraded,
+            "degraded_reason": self.portfolio_context_degraded_reason,
+            "oms_working_order_count": len(normalized),
+        }
+        if normalized or removed_rehydrated or self.portfolio_context_degraded:
+            self.recorder.append_jsonl("portfolio_arbitration.jsonl", evidence)
+        return evidence
 
     async def submit_action(self, action: StrategyAction) -> str | None:
         results = await self.route_actions((_CollectedForRouting(action=action, provisional_order_ref="", batch_index=0),))
@@ -180,6 +286,12 @@ class RuntimeActionRouter:
         portfolio_record = _portfolio_record(decision)
         if portfolio_item is not None:
             portfolio_record["sector"] = portfolio_item.sector
+        portfolio_record["pending_reservations_count"] = len(self.pending_reservations)
+        portfolio_record["rehydrated_reservations_count"] = self.rehydrated_reservations_count
+        portfolio_record["rehydrated_pending_notional"] = self.rehydrated_pending_notional
+        portfolio_record["rehydrated_source_hash"] = self.rehydrated_source_hash
+        portfolio_record["portfolio_context_degraded"] = self.portfolio_context_degraded
+        portfolio_record["portfolio_context_degraded_reason"] = self.portfolio_context_degraded_reason
         portfolio_record["event_ref"] = prepared.metadata.get("event_ref", "")
         portfolio_record["provisional_order_ref"] = prepared.metadata.get("provisional_order_ref", "")
         portfolio_record["original_action"] = action_to_json_dict(prepared.action)
@@ -202,6 +314,8 @@ class RuntimeActionRouter:
                 routed_action=routed_action,
                 routed_action_payload=routed_payload,
                 oms_status=None,
+                oms_message="",
+                resource_conflict_type=None,
                 intent_id=None,
                 broker_order_id=None,
                 portfolio_decision_ref=portfolio_record["portfolio_decision_ref"],
@@ -226,7 +340,14 @@ class RuntimeActionRouter:
                 "portfolio_policy_hash": decision.policy_hash,
             }
         )
-        intent_payload = intent_to_json_dict(intent, dry_run=self.dry_run, submitted_to_broker=not self.dry_run)
+        intent_payload = intent_to_json_dict(
+            intent,
+            dry_run=self.dry_run,
+            intended_broker_submit=not self.dry_run,
+            submitted_to_broker=False,
+            actually_submitted_to_broker=False,
+            oms_status="PENDING_SUBMIT",
+        )
         intent_payload["portfolio_decision_ref"] = portfolio_record["portfolio_decision_ref"]
         self.recorder.append_jsonl("oms_intents.jsonl", intent_payload)
         result = await self.oms_client.submit_intent(intent)
@@ -265,6 +386,8 @@ class RuntimeActionRouter:
             routed_action=routed_action,
             routed_action_payload=routed_payload,
             oms_status=getattr(status, "name", str(status or "")),
+            oms_message=getattr(result, "message", ""),
+            resource_conflict_type=getattr(result, "resource_conflict_type", None),
             intent_id=getattr(result, "intent_id", None),
             broker_order_id=getattr(result, "order_id", None),
             portfolio_decision_ref=portfolio_record["portfolio_decision_ref"],
@@ -333,10 +456,20 @@ class RuntimeActionRouter:
         except Exception:
             return
 
-    def pending_reservations_for(self, item: PortfolioArbitrationInput) -> "_ReservationTotals":
+    def pending_reservations_for(
+        self,
+        item: PortfolioArbitrationInput,
+        *,
+        portfolio_context: PortfolioContextProvider | None = None,
+    ) -> "_ReservationTotals":
         totals = _ReservationTotals()
         for reservation in self.pending_reservations.values():
             if reservation.side == "BUY":
+                if (
+                    reservation.provenance.startswith("rehydrated:")
+                    and _reservation_reflected_in_context(reservation, portfolio_context)
+                ):
+                    continue
                 totals.admitted_gross += reservation.notional
                 if reservation.symbol == item.symbol:
                     totals.admitted_symbol += reservation.notional
@@ -429,7 +562,20 @@ class RuntimeActionRouter:
         if portfolio_context is None:
             raise ValueError("portfolio_context is required for routed BUY/SELL arbitration")
         item = _portfolio_input(action, prepared, side, portfolio_context=portfolio_context)
-        pending = self.pending_reservations_for(item)
+        if item.side == "BUY" and self.portfolio_context_degraded:
+            return PortfolioArbitrationDecision(
+                action_ref=item.action_ref,
+                strategy_id=item.strategy_id,
+                symbol=item.symbol,
+                decision="blocked",
+                final_qty=0,
+                final_notional=0.0,
+                reason_code=self.portfolio_context_degraded_reason or "portfolio_context_degraded",
+                policy_hash=self.portfolio_policy.policy_hash,
+                source_artifact_hashes=item.source_artifact_hashes,
+                timestamp=item.timestamp,
+            ), item
+        pending = self.pending_reservations_for(item, portfolio_context=portfolio_context)
         decision = self.portfolio_policy.decide_one(
             item,
             admitted_gross=reservations.admitted_gross + pending.admitted_gross,
@@ -469,6 +615,8 @@ class RoutedActionResult:
     routed_action: StrategyAction
     routed_action_payload: dict[str, Any]
     oms_status: str | None = None
+    oms_message: str = ""
+    resource_conflict_type: str | None = None
     intent_id: str | None = None
     broker_order_id: str | None = None
     portfolio_decision_ref: str = ""
@@ -484,6 +632,9 @@ class _PendingReservation:
     notional: float
     sector: str
     order_refs: tuple[str, ...]
+    provenance: str = "local"
+    source_hash: str = ""
+    rehydrated_at: float = 0.0
 
 
 @dataclass(slots=True)
@@ -587,6 +738,142 @@ def _coerce_decision_ref_index(value: DecisionRefIndex | Sequence[str]) -> Decis
     if isinstance(value, DecisionRefIndex):
         return value
     return DecisionRefIndex(tuple(str(item) for item in value))
+
+
+_WORKING_ORDER_TERMINAL_STATUSES = {"FILLED", "CANCELLED", "REJECTED", "EXPIRED", "FAILED"}
+
+
+def _working_order_reservation_row(
+    order: Any,
+    *,
+    portfolio_context: PortfolioContextProvider | None,
+    source: str,
+) -> dict[str, Any] | None:
+    data = dict(order) if isinstance(order, Mapping) else {
+        name: getattr(order, name)
+        for name in (
+            "order_id",
+            "symbol",
+            "side",
+            "qty",
+            "filled_qty",
+            "remaining_qty",
+            "price",
+            "status",
+            "strategy_id",
+            "intent_id",
+            "idempotency_key",
+            "submit_ref",
+            "risk_stop_px",
+            "risk_hard_stop_px",
+            "broker_order_id",
+            "created_at",
+        )
+        if hasattr(order, name)
+    }
+    status = str(data.get("status") or "").upper().strip()
+    if status in _WORKING_ORDER_TERMINAL_STATUSES:
+        return None
+    side = str(data.get("side") or "").upper().strip()
+    if side not in {"BUY", "SELL"}:
+        return None
+    symbol = str(data.get("symbol") or "").zfill(6)
+    qty = _int_or_zero(data.get("qty"))
+    filled_qty = _int_or_zero(data.get("filled_qty"))
+    remaining_qty = _int_or_zero(data.get("remaining_qty"))
+    if remaining_qty <= 0:
+        remaining_qty = max(qty - filled_qty, 0)
+    if remaining_qty <= 0:
+        return None
+    price = _float_or_zero(data.get("price"))
+    missing_price = price <= 0
+    strategy_id = str(data.get("strategy_id") or "").upper().strip()
+    refs = tuple(
+        dict.fromkeys(
+            str(raw)
+            for raw in (
+                data.get("order_id"),
+                data.get("broker_order_id"),
+                data.get("intent_id"),
+                data.get("idempotency_key"),
+                data.get("submit_ref"),
+            )
+            if raw not in (None, "")
+        )
+    )
+    reservation_id = str(refs[0]) if refs else f"rehydrated:{source}:{canonical_json_hash(data)[:16]}"
+    sector = "UNKNOWN"
+    if portfolio_context is not None:
+        sector = str(portfolio_context.sector_map.get(symbol, "UNKNOWN") or "UNKNOWN").upper().strip() or "UNKNOWN"
+    return {
+        "reservation_id": f"rehydrated:{source}:{reservation_id}",
+        "strategy_id": strategy_id,
+        "symbol": symbol,
+        "side": side,
+        "remaining_qty": remaining_qty,
+        "notional": 0.0 if missing_price else remaining_qty * price,
+        "price": price,
+        "missing_price": missing_price,
+        "status": status,
+        "sector": sector,
+        "order_refs": refs or (reservation_id,),
+        "intent_id": data.get("intent_id"),
+        "idempotency_key": data.get("idempotency_key"),
+    }
+
+
+def _reservation_reflected_in_context(
+    reservation: _PendingReservation,
+    portfolio_context: PortfolioContextProvider | None,
+) -> bool:
+    if portfolio_context is None or reservation.side != "BUY":
+        return False
+    reservation_refs = {str(ref) for ref in reservation.order_refs if ref not in (None, "")}
+    if not reservation_refs:
+        return False
+    for order in portfolio_context.iter_working_orders():
+        if str(getattr(order, "side", "") or "").upper().strip() != "BUY":
+            continue
+        if str(getattr(order, "status", "") or "").upper().strip() in _WORKING_ORDER_TERMINAL_STATUSES:
+            continue
+        remaining_qty = _int_or_zero(getattr(order, "remaining_qty", 0))
+        if remaining_qty <= 0:
+            remaining_qty = max(_int_or_zero(getattr(order, "qty", 0)) - _int_or_zero(getattr(order, "filled_qty", 0)), 0)
+        if remaining_qty <= 0:
+            continue
+        refs = {
+            str(raw)
+            for raw in (
+                getattr(order, "order_id", None),
+                getattr(order, "intent_id", None),
+                getattr(order, "idempotency_key", None),
+                getattr(order, "submit_ref", None),
+            )
+            if raw not in (None, "")
+        }
+        if refs & reservation_refs:
+            return True
+    return False
+
+
+def _rehydration_hash_payload(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    for row in rows:
+        payload.append(
+            {
+                "strategy_id": row.get("strategy_id"),
+                "symbol": row.get("symbol"),
+                "side": row.get("side"),
+                "remaining_qty": row.get("remaining_qty"),
+                "price": row.get("price"),
+                "status": row.get("status"),
+                "sector": row.get("sector"),
+                "intent_id": row.get("intent_id"),
+                "idempotency_key": row.get("idempotency_key"),
+                "missing_price": row.get("missing_price"),
+            }
+        )
+    return sorted(payload, key=lambda item: (str(item.get("strategy_id")), str(item.get("symbol")), str(item.get("side"))))
 
 
 def _decision_action_key(action: StrategyAction) -> str:
@@ -724,16 +1011,20 @@ def _resize_action(action: StrategyAction, final_qty: int) -> StrategyAction:
 def _intent_result_record(result: Any, *, intent_payload: Mapping[str, Any], dry_run: bool) -> dict[str, Any]:
     status = getattr(result, "status", None)
     status_name = getattr(status, "name", str(status or ""))
+    broker_order_id = getattr(result, "order_id", None)
+    actually_submitted = bool((not dry_run) and broker_order_id)
     return {
         "record_type": "dry_run_order_result" if dry_run else "oms_order_result",
         "dry_run": bool(dry_run),
-        "submitted_to_broker": not bool(dry_run),
+        "intended_broker_submit": bool(intent_payload.get("intended_broker_submit", not bool(dry_run))),
+        "actually_submitted_to_broker": actually_submitted,
+        "submitted_to_broker": actually_submitted,
         "event_ref": intent_payload.get("event_ref") or (intent_payload.get("metadata") or {}).get("event_ref", ""),
         "action_ref": intent_payload.get("action_ref", ""),
         "provisional_order_ref": (intent_payload.get("metadata") or {}).get("provisional_order_ref", ""),
         "portfolio_decision_ref": intent_payload.get("portfolio_decision_ref", ""),
         "intent_id": getattr(result, "intent_id", None),
-        "order_id": getattr(result, "order_id", None),
+        "order_id": broker_order_id,
         "status": status_name,
         "message": getattr(result, "message", ""),
         "modified_qty": getattr(result, "modified_qty", None),

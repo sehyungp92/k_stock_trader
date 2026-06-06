@@ -327,6 +327,24 @@ class TestRiskGatewaySectorLimits:
         assert result.decision == RiskDecision.REJECT
         assert "sector" in result.reason.lower()
 
+    def test_unknown_sector_can_block_entries(self, state_store_with_equity, risk_config):
+        """Paper/live sector maps should be able to reject unmapped symbols."""
+        risk_config.unknown_sector_policy = "block"
+        gateway = RiskGateway(state_store_with_equity, risk_config, sector_map={"005930": "IT"})
+        intent = Intent(
+            intent_type=IntentType.ENTER,
+            strategy_id="ALPHA",
+            symbol="123456",
+            desired_qty=100,
+            risk_payload=RiskPayload(entry_px=1000, stop_px=950),
+        )
+
+        result = gateway.check(intent)
+
+        assert result.decision == RiskDecision.REJECT
+        assert "sector map required" in result.reason
+        assert result.resource_conflict_type == "unknown_sector"
+
 
 class TestRiskGatewayStrategyBudget:
     """Tests for RiskGateway strategy budget checks."""

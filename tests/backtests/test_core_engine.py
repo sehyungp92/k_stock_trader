@@ -7,7 +7,8 @@ import pytest
 from backtests.core.completed_bar_policy import bar_availability_time, visible_bars_at
 from backtests.engine.replay import run_replay
 from backtests.engine.sim_broker import SimBroker
-from strategy_common.actions import FlattenPosition, SubmitEntry, SubmitExit
+from oms.stop_protection import LIVE_BACKTEST_STOP_PARITY_VERSION
+from strategy_common.actions import FlattenPosition, SubmitEntry, SubmitExit, SubmitProtectiveStop
 from strategy_common.events import DecisionEvent
 from strategy_common.clock import KST
 from strategy_common.market import MarketBar
@@ -76,6 +77,28 @@ def test_exit_fill_event_qty_matches_position_qty():
     fills = broker.process_bar(exit_bar)
     assert len(fills) == 1
     assert fills[0].qty == 5
+
+
+def test_sim_broker_protective_stop_uses_live_parity_metadata():
+    broker = SimBroker(1_000_000)
+    signal_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
+    fill_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 1, tzinfo=KST), "1m", 100, 100, 100, 100, 1000)
+    stop_bar = MarketBar("000001", datetime(2026, 1, 5, 9, 2, tzinfo=KST), "1m", 96, 97, 94, 95, 1000)
+    broker.submit(SubmitEntry("ALPHA", "000001", 5, "MARKET", None, 95, "entry"), signal_bar.timestamp)
+    broker.process_bar(signal_bar)
+    broker.process_bar(fill_bar)
+    broker.submit(SubmitProtectiveStop("ALPHA", "000001", 5, 95, "protective_stop"), fill_bar.timestamp)
+
+    fills = broker.process_bar(stop_bar)
+
+    assert len(fills) == 1
+    fill = fills[0]
+    assert fill.side == "SELL"
+    assert fill.reason == "protective_stop"
+    assert fill.metadata["stop_protection_mode"] == "OMS_WATCHER"
+    assert fill.metadata["stop_trigger_price_source"] == "BAR_LOW"
+    assert fill.metadata["stop_fill_model"] == "sell_stop_fills_at_stop_or_bar_open_gap_through_with_slippage"
+    assert fill.metadata["live_backtest_stop_parity_version"] == LIVE_BACKTEST_STOP_PARITY_VERSION
 
 
 def test_same_day_forced_flatten_does_not_carry_to_next_session():

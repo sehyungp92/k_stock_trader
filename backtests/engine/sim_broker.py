@@ -7,6 +7,14 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from oms.stop_protection import (
+    LIVE_BACKTEST_STOP_PARITY_VERSION,
+    PriceObservation,
+    StopProtectionMode,
+    StopSide,
+    TriggerPriceSource,
+    evaluate_stop_trigger,
+)
 from strategy_common.actions import (
     CancelOrders,
     FlattenPosition,
@@ -343,7 +351,9 @@ class SimBroker:
                 if bar.high >= order.limit_price:
                     return self._sell_slippage(max(order.limit_price, bar.open))
             if order.order_type == "STOP" and order.stop_price is not None:
-                if bar.low <= order.stop_price:
+                decision = _sell_stop_trigger_decision(order, bar)
+                if decision.triggered:
+                    order.metadata = _with_stop_parity_metadata(order.metadata)
                     return self._sell_slippage(min(order.stop_price, bar.open))
         return None
 
@@ -415,7 +425,10 @@ class SimBroker:
         if not bool(metadata.get("same_bar_stop_first", True)):
             return None
         protective = float(metadata.get("protective_stop_price") or metadata.get("stop_price") or 0.0)
-        if protective <= 0.0 or protective >= float(fill.price) or float(bar.low) > protective:
+        if protective <= 0.0 or protective >= float(fill.price):
+            return None
+        decision = _long_bar_low_stop_decision(protective, order, bar)
+        if not decision.triggered:
             return None
         self.same_bar_stop_ambiguities += 1
         fill.metadata["same_bar_stop_fired"] = True
@@ -433,6 +446,7 @@ class SimBroker:
                 "order_role": "STOP",
                 "stop_kind": "same_bar_stop_first",
                 "same_bar_ambiguity": True,
+                **_stop_parity_metadata(),
                 **metadata,
             },
         )
@@ -567,8 +581,47 @@ def _metadata_float(metadata: dict[str, Any], key: str) -> float | None:
         return None
 
 
+def _long_bar_low_stop_decision(stop_price: float, order: SimOrder, bar: MarketBar):
+    return evaluate_stop_trigger(
+        stop_price=float(stop_price),
+        side=StopSide.LONG.value,
+        observation=PriceObservation(
+            symbol=order.symbol,
+            price=float(bar.low),
+            timestamp=bar.timestamp.timestamp(),
+            source=TriggerPriceSource.BAR_LOW.value,
+            market_open=True,
+            executable=True,
+        ),
+        stale_after_sec=0.0,
+        now=bar.timestamp.timestamp(),
+    )
+
+
+def _sell_stop_trigger_decision(order: SimOrder, bar: MarketBar):
+    return _long_bar_low_stop_decision(float(order.stop_price or 0.0), order, bar)
+
+
+def _stop_parity_metadata() -> dict[str, Any]:
+    return {
+        "stop_protection_mode": StopProtectionMode.OMS_WATCHER.value,
+        "stop_trigger_price_source": TriggerPriceSource.BAR_LOW.value,
+        "stop_fill_model": "sell_stop_fills_at_stop_or_bar_open_gap_through_with_slippage",
+        "live_backtest_stop_parity_version": LIVE_BACKTEST_STOP_PARITY_VERSION,
+    }
+
+
+def _with_stop_parity_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {**dict(metadata), **_stop_parity_metadata()}
+
+
 def _execution_priority(order: SimOrder, bar: MarketBar) -> tuple[int, datetime, str]:
-    if order.side == "SELL" and order.order_type == "STOP" and order.stop_price is not None and bar.low <= order.stop_price:
+    if (
+        order.side == "SELL"
+        and order.order_type == "STOP"
+        and order.stop_price is not None
+        and _sell_stop_trigger_decision(order, bar).triggered
+    ):
         return (0, order.submitted_at, order.order_id)
     if order.side == "SELL" and order.order_type == "MARKET":
         return (1, order.submitted_at, order.order_id)

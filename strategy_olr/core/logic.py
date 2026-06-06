@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import date, datetime, time
 from math import floor
-from typing import Iterable
+from typing import Any, Iterable
 
 from strategy_common.actions import (
     CancelOrders,
@@ -221,6 +221,9 @@ def on_olr_order_update(state: OLRState, update: OLROrderUpdateEvent, config: OL
         symbol_state.pending_entry_metadata.clear()
         if symbol_state.position is None:
             symbol_state.stage = OLRSymbolStage.WATCHING
+    if terminal and _is_retryable_entry_update(update, status, metadata) and symbol_state.position is None:
+        symbol_state.entry_attempted = False
+        symbol_state.stage = OLRSymbolStage.WATCHING
     if terminal and symbol_state.pending_exit_order_id == str(update.order_id):
         symbol_state.pending_exit_order_id = ""
         symbol_state.pending_exit_metadata.clear()
@@ -245,6 +248,36 @@ def on_olr_order_update(state: OLRState, update: OLROrderUpdateEvent, config: OL
             )
         ],
     )
+
+
+def _is_retryable_entry_update(update: OLROrderUpdateEvent, status: str, metadata: dict[str, Any]) -> bool:
+    side = str(update.side or metadata.get("side") or "").upper().strip()
+    if side and side != "BUY":
+        return False
+    if status == "DEFERRED":
+        return True
+    reason_text = " ".join(
+        str(value or "")
+        for value in (
+            update.reason,
+            metadata.get("message"),
+            metadata.get("reason"),
+            metadata.get("oms_status"),
+            metadata.get("portfolio_reason_code"),
+            metadata.get("resource_conflict_type"),
+        )
+    ).lower()
+    retryable_markers = (
+        "oms unreachable",
+        "oms error 503",
+        "timeout",
+        "temporar",
+        "missing_or_zero_account_state",
+        "equity not yet loaded",
+        "price unavailable",
+        "reconciliation pending",
+    )
+    return status in {"REJECTED", "BLOCKED"} and any(marker in reason_text for marker in retryable_markers)
 
 
 def remember_submitted_order(state: OLRState, order_id: str | None, action: StrategyAction) -> None:

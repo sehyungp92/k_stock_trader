@@ -6,7 +6,23 @@
 # - max_positions: Maximum concurrent positions for this strategy
 # - max_risk_pct: Maximum risk per trade as percentage of equity
 
+active_strategies:
+  - KALCB
+  - OLR
+
 strategy_budgets:
+  KALCB:
+    # KALCB: opening-range continuation strategy
+    max_positions: 4
+    max_risk_pct: 0.010   # 1.0% of equity per trade
+    capital_allocation_pct: 0.50
+
+  OLR:
+    # OLR: overnight/late-session reversal strategy
+    max_positions: 4
+    max_risk_pct: 0.010   # 1.0% of equity per trade
+    capital_allocation_pct: 0.50
+
   PCIM:
     # PCIM: YouTube Signal Strategy
     # Evening + 08:00-15:00, varies by signals
@@ -29,10 +45,24 @@ risk:
   max_position_pct: 0.15        # Max 15% per single position
   max_positions_count: 15       # Max 15 total positions across all strategies
   max_sector_pct: 0.30          # Max 30% in single sector
+  unknown_sector_policy: block  # Active paper/live symbols must be sector-mapped
 
   # Microstructure
   max_spread_bps: 50.0      # Max 50bps spread for entry
   vi_cooldown_sec: 600.0    # 10 min cooldown after VI trigger
+
+  # Durable protective stops
+  require_durable_stops: true
+  default_stop_protection_mode: oms_watcher
+  allow_synthetic_stop_only: false
+  stop_price_stale_after_sec: 30.0
+  stop_watcher_interval_sec: 5.0
+  stop_exit_order_type: MARKET
+  stop_protection_emergency_override: false
+
+
+# Approved OMS sector map used by the independent OMS risk backstop.
+sector_map_path: config/olr/sector_map.yaml
 
 
 # Regime-based exposure caps

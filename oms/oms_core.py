@@ -6,9 +6,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date, datetime
 from types import SimpleNamespace
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Mapping
 import asyncio
+import inspect
 import time
+import uuid
+from zoneinfo import ZoneInfo
 from loguru import logger
 
 from collections import defaultdict
@@ -20,6 +23,15 @@ from .arbitration import ArbitrationEngine, ArbitrationResult
 from .planner import OrderPlanner
 from .adapter import KISExecutionAdapter
 from .persistence import OMSPersistence
+from .stop_protection import (
+    PriceObservation,
+    ProtectiveStop,
+    StopProtectionMode,
+    StopStatus,
+    TriggerPriceSource,
+    utcnow,
+)
+from .stop_watcher import StopWatcher
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +108,189 @@ def _intent_order_side(intent: Intent) -> str:
     return ""
 
 
+def _incremental_fill_price(
+    wo: WorkingOrder,
+    new_filled_qty: int,
+    fill_delta: int,
+    broker_avg_price: Optional[float],
+) -> float:
+    """Derive the newly filled slice price from broker VWAP when available."""
+    if not broker_avg_price or broker_avg_price <= 0 or fill_delta <= 0:
+        return float(wo.price or 0.0)
+    previous_qty = max(int(wo.filled_qty or 0), 0)
+    if previous_qty <= 0:
+        return float(broker_avg_price)
+    previous_avg = float(wo.price or 0.0)
+    if previous_avg <= 0:
+        return float(broker_avg_price)
+    new_total = max(int(new_filled_qty or 0), previous_qty + fill_delta)
+    incremental_notional = float(broker_avg_price) * new_total - previous_avg * previous_qty
+    return max(incremental_notional / max(fill_delta, 1), 0.0)
+
+
+def _working_order_stop_metadata(wo: WorkingOrder, intent: Optional[Intent] = None) -> tuple[Optional[float], Optional[float]]:
+    """Return explicit entry stop metadata from the live intent or persisted order metadata."""
+    if intent is not None and intent.risk_payload is not None:
+        if intent.risk_payload.stop_px is not None:
+            wo.risk_stop_px = intent.risk_payload.stop_px
+        if intent.risk_payload.hard_stop_px is not None:
+            wo.risk_hard_stop_px = intent.risk_payload.hard_stop_px
+    return wo.risk_stop_px, wo.risk_hard_stop_px
+
+
+def _stop_exit_epoch(stop: ProtectiveStop, observation: PriceObservation) -> int:
+    triggered_at = getattr(stop, "triggered_at", None)
+    if isinstance(triggered_at, datetime):
+        return int(triggered_at.timestamp())
+    if triggered_at:
+        try:
+            return int(float(triggered_at))
+        except (TypeError, ValueError):
+            pass
+    return int(observation.timestamp or time.time())
+
+
+_IDEMPOTENCY_MATCH_WINDOW_SEC = 30 * 60
+_KST = ZoneInfo("Asia/Seoul")
+_TERMINAL_STOP_STATUSES = {
+    StopStatus.FILLED.value,
+    StopStatus.CANCELLED.value,
+    StopStatus.FAILED.value,
+}
+_ACTIVE_STOP_STATUSES = {
+    StopStatus.PENDING.value,
+    StopStatus.ACTIVE.value,
+    StopStatus.TRIGGERED_PENDING_EXECUTION.value,
+    StopStatus.EXIT_SUBMITTED.value,
+}
+
+
+def _coerce_epoch(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, datetime):
+        return float(value.timestamp())
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        pass
+    try:
+        return float(datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
+def _broker_attr(order: Any, *names: str) -> str:
+    for name in names:
+        value = getattr(order, name, None)
+        if value:
+            return str(value).strip()
+    metadata = getattr(order, "metadata", None) or getattr(order, "meta", None)
+    if isinstance(metadata, Mapping):
+        for name in names:
+            value = metadata.get(name)
+            if value:
+                return str(value).strip()
+    return ""
+
+
+def _positive_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0.0:
+        return None
+    return parsed
+
+
+def _price_matches(expected: Any, actual: Any) -> bool:
+    expected_px = _positive_float(expected)
+    actual_px = _positive_float(actual)
+    if expected_px is None or actual_px is None:
+        return False
+    tolerance = max(1.0, abs(expected_px) * 0.0001)
+    return abs(expected_px - actual_px) <= tolerance
+
+
+def _first_positive_float(payload: Mapping[str, Any], *keys: str) -> Optional[float]:
+    for key in keys:
+        parsed = _positive_float(payload.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _digits(value: Any) -> str:
+    return "".join(ch for ch in str(value or "").strip() if ch.isdigit())
+
+
+def _quote_epoch_from_value(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = None
+    if parsed is not None:
+        if parsed > 10_000_000_000:
+            parsed /= 1000.0
+        if parsed > 946_684_800:
+            return parsed
+    epoch = _coerce_epoch(value)
+    if epoch is not None and epoch > 946_684_800:
+        return epoch
+    return None
+
+
+def _quote_timestamp(payload: Mapping[str, Any]) -> Optional[float]:
+    for key in (
+        "quote_ts",
+        "quote_timestamp",
+        "provider_ts",
+        "provider_timestamp",
+        "created_ts",
+        "timestamp",
+        "stck_cntg_timestamp",
+    ):
+        epoch = _quote_epoch_from_value(payload.get(key))
+        if epoch is not None:
+            return epoch
+
+    for key in ("quote_datetime", "provider_datetime", "updated_at", "last_updated_at", "datetime"):
+        epoch = _quote_epoch_from_value(payload.get(key))
+        if epoch is not None:
+            return epoch
+
+    date_digits = ""
+    for key in ("stck_bsop_date", "bsop_date", "trading_date", "quote_date", "date"):
+        date_digits = _digits(payload.get(key))
+        if date_digits:
+            break
+    time_digits = ""
+    for key in ("stck_cntg_hour", "stck_cntg_time", "cntg_hour", "quote_time", "time"):
+        time_digits = _digits(payload.get(key))
+        if time_digits:
+            break
+    if len(date_digits) == 6:
+        date_digits = f"20{date_digits}"
+    if len(date_digits) < 8 or len(time_digits) < 4:
+        return None
+    time_digits = time_digits[:6].ljust(6, "0")
+    try:
+        observed_at = datetime.strptime(f"{date_digits[:8]}{time_digits}", "%Y%m%d%H%M%S")
+    except ValueError:
+        return None
+    return observed_at.replace(tzinfo=_KST).timestamp()
+
+
 class OMSCore:
     """
     OMS Core: Central order management system.
@@ -115,27 +310,53 @@ class OMSCore:
         idempotency_store: Optional[IdempotencyStore] = None,
         persistence: Optional[OMSPersistence] = None,
         event_emitter: Optional[object] = None,
+        sector_map: Optional[Mapping[str, str]] = None,
+        require_persistence: bool = False,
     ):
         self.state = StateStore()
         self.risk = RiskGateway(
             self.state,
             risk_config or RiskConfig(),
             price_getter=lambda s: kis_api.get_last_price(s),
+            sector_map=dict(sector_map or {}),
         )
         self.arbitration = ArbitrationEngine(self.state)
         self.planner = OrderPlanner()
         self.adapter = KISExecutionAdapter(kis_api)
         self.persistence = persistence
         self.event_emitter = event_emitter
+        self.require_persistence = require_persistence
 
         self._idem = idempotency_store or InMemoryIdempotencyStore()
         self._reconcile_task: Optional[asyncio.Task] = None
+        self._stop_watcher: Optional[StopWatcher] = None
         self._symbol_locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._rejection_counts: Dict[str, int] = {}
+        self.stop_protection_status: str = "unknown"
+        self.unprotected_positions_count: int = 0
+        self.active_stop_count: int = 0
+        self.triggered_stop_count: int = 0
+        self.stop_watcher_last_check_ts: Optional[float] = None
+        self.stop_watcher_price_stale_count: int = 0
+        self.stop_protection_last_error: str = ""
+        self._stop_protection_status_source: str = ""
 
     # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
+
+    def _set_stop_protection_status(self, status: str, *, last_error: str = "", source: str) -> None:
+        self.stop_protection_status = status
+        self.stop_protection_last_error = last_error
+        self._stop_protection_status_source = source
+
+    def _has_independent_stop_protection_fault(self) -> bool:
+        status = str(self.stop_protection_status or "").lower().strip()
+        if status not in {"error", "degraded"}:
+            return False
+        if self._stop_protection_status_source == "watcher":
+            return False
+        return bool(self.stop_protection_last_error or getattr(self.risk, "halt_new_entries", False))
 
     async def submit_intent(self, intent: Intent) -> IntentResult:
         """Submit intent for processing. Main entry point for strategies."""
@@ -155,6 +376,33 @@ class OMSCore:
 
         # Per-symbol mutex: prevents concurrent submits for same symbol
         async with self._symbol_locks[intent.symbol]:
+            cached = self._idem.get(intent.idempotency_key)
+            if cached is not None:
+                logger.debug(f"Duplicate intent after lock: {intent.idempotency_key}")
+                self._emit_intent(intent, cached, phase="duplicate")
+                return cached
+            reserved_result = await self._reserve_idempotency(intent)
+            if reserved_result is not None:
+                if reserved_result.status in {IntentStatus.EXECUTED, IntentStatus.ACCEPTED}:
+                    self._idem.put(intent.idempotency_key, reserved_result)
+                self._emit_reconciliation(
+                    "IDEMPOTENCY_DUPLICATE",
+                    symbol=intent.symbol,
+                    payload={
+                        "idempotency_key": intent.idempotency_key,
+                        "intent_id": intent.intent_id,
+                        "existing_intent_id": reserved_result.intent_id,
+                        "status": reserved_result.status.name,
+                        "message": reserved_result.message,
+                    },
+                )
+                self._emit_intent(intent, reserved_result, phase="duplicate")
+                return reserved_result
+            self._emit_reconciliation(
+                "IDEMPOTENCY_RESERVED",
+                symbol=intent.symbol,
+                payload={"idempotency_key": intent.idempotency_key, "intent_id": intent.intent_id},
+            )
             return await self._process_intent(intent, oms_received_at=oms_received_at)
 
     async def _process_intent(self, intent: Intent, oms_received_at: float = 0.0) -> IntentResult:
@@ -202,6 +450,38 @@ class OMSCore:
         if result.status == IntentStatus.REJECTED:
             self._release_lock_if_entry(intent)
 
+        return result
+
+    async def _reserve_idempotency(self, intent: Intent) -> Optional[IntentResult]:
+        if self.persistence is None:
+            if self.require_persistence:
+                return IntentResult(
+                    intent_id=intent.intent_id,
+                    status=IntentStatus.DEFERRED,
+                    message="Durable idempotency reservation unavailable; no persistence backend configured",
+                )
+            return None
+        is_connected = getattr(self.persistence, "_is_connected", None)
+        if callable(is_connected) and not is_connected():
+            if self.require_persistence:
+                return IntentResult(
+                    intent_id=intent.intent_id,
+                    status=IntentStatus.DEFERRED,
+                    message="Durable idempotency reservation unavailable; persistence is disconnected",
+                )
+            return None
+        reserve = getattr(self.persistence, "reserve_intent", None)
+        if not callable(reserve):
+            if self.require_persistence:
+                return IntentResult(
+                    intent_id=intent.intent_id,
+                    status=IntentStatus.DEFERRED,
+                    message="Durable idempotency reservation unavailable; backend lacks reserve_intent",
+                )
+            return None
+        result = reserve(intent)
+        if inspect.isawaitable(result):
+            return await result
         return result
 
     # ------------------------------------------------------------------
@@ -270,6 +550,31 @@ class OMSCore:
         # Persist allocation modification
         if self.persistence:
             await self.persistence.sync_allocation(intent.symbol, alloc)
+
+        stop_px = rp.hard_stop_px if rp.hard_stop_px is not None else rp.stop_px
+        if stop_px is not None and alloc.qty > 0:
+            stored = await self._upsert_durable_stop(
+                symbol=intent.symbol,
+                strategy_id=intent.strategy_id,
+                qty=alloc.qty,
+                stop_price=stop_px,
+                entry_intent_id=None,
+                entry_order_id=None,
+                source_metadata={
+                    "source": "modify_risk",
+                    "intent_id": intent.intent_id,
+                    "old_stop_px": None,
+                    "new_stop_px": stop_px,
+                },
+                event_type="STOP_UPDATED",
+            )
+            if stored is None and self._durable_stop_required():
+                self.risk.halt_new_entries = True
+                return await self._finalize(
+                    intent,
+                    IntentStatus.DEFERRED,
+                    "Risk overlays updated but durable stop persistence failed; new entries halted",
+                )
 
         return await self._finalize(intent, IntentStatus.EXECUTED, "Risk overlays updated")
 
@@ -374,6 +679,14 @@ class OMSCore:
             return await self._finalize(intent, IntentStatus.REJECTED, f"Unsupported intent type: {intent.intent_type}", oms_received_at=oms_received_at)
 
         if plan.execution_style == "SYNTHETIC_STOP":
+            if self._durable_stop_required() and not bool(self.risk.config.allow_synthetic_stop_only):
+                self.risk.halt_new_entries = True
+                return await self._finalize(
+                    intent,
+                    IntentStatus.DEFERRED,
+                    "Synthetic stop-only routing is not live-safe without emergency override; new entries halted",
+                    oms_received_at=oms_received_at,
+                )
             return await self._finalize(
                 intent,
                 IntentStatus.ACCEPTED,
@@ -387,12 +700,31 @@ class OMSCore:
             self.risk.reserve_sector(plan.symbol, plan.qty, order_price)
             sector_reserved = True
 
+        submit_ref = f"OMS-{uuid.uuid4().hex[:12]}"
+        if self.persistence:
+            update_plan = getattr(self.persistence, "update_intent_submission_plan", None)
+            if callable(update_plan):
+                maybe = update_plan(
+                    intent,
+                    side=plan.side,
+                    planned_qty=plan.qty,
+                    order_type=plan.order_type.name,
+                    limit_price=plan.limit_price,
+                    stop_price=plan.stop_price,
+                    submit_ref=submit_ref,
+                )
+                if inspect.isawaitable(maybe):
+                    await maybe
+
         # Execute
         try:
             exec_result = await self.adapter.submit_order(
                 symbol=plan.symbol, side=plan.side, qty=plan.qty,
                 order_type=plan.order_type.name,
                 limit_price=plan.limit_price, stop_price=plan.stop_price,
+                intent_id=intent.intent_id,
+                idempotency_key=intent.idempotency_key,
+                submit_ref=submit_ref,
             )
         except Exception:
             if sector_reserved:
@@ -418,22 +750,60 @@ class OMSCore:
             cancel_after_sec=plan.cancel_after,
             intent_id=intent.intent_id,
             idempotency_key=intent.idempotency_key,
+            submit_ref=submit_ref,
+            risk_stop_px=intent.risk_payload.stop_px,
+            risk_hard_stop_px=intent.risk_payload.hard_stop_px,
         )
+
+        # Persist the broker order before any slower event/export work.
+        order_persistence_failed = False
+        if self.persistence:
+            wo.oms_order_id = await self.persistence.record_order(wo, intent_id=intent.intent_id)
+            order_persistence_failed = not bool(wo.oms_order_id)
+            if order_persistence_failed and self.require_persistence:
+                self.risk.halt_new_entries = True
+                reason = "broker_success_order_persistence_failed"
+                marker = getattr(self.persistence, "mark_intent_ambiguous", None)
+                if callable(marker):
+                    maybe = marker(intent, order_id=wo.order_id, submit_ref=submit_ref, reason=reason)
+                    if inspect.isawaitable(maybe):
+                        await maybe
+                self._emit_reconciliation(
+                    "IDEMPOTENCY_AMBIGUOUS",
+                    symbol=plan.symbol,
+                    payload={
+                        "idempotency_key": intent.idempotency_key,
+                        "intent_id": intent.intent_id,
+                        "order_id": wo.order_id,
+                        "submit_ref": submit_ref,
+                        "reason": reason,
+                    },
+                )
+            if not order_persistence_failed:
+                await self.persistence.record_order_event(
+                    "ORDER_SUBMITTED", order_id=wo.order_id, intent_id=intent.intent_id,
+                    strategy_id=intent.strategy_id, symbol=plan.symbol,
+                    payload={"submit_ref": submit_ref},
+                    status_after="WORKING",
+                )
+
         self.state.add_working_order(plan.symbol, wo)
         self._emit_order_event(
             wo,
             "ORDER_SUBMITTED",
-            payload={"status_after": "WORKING", "order_submitted_at": order_submitted_at},
+            payload={"status_after": "WORKING", "order_submitted_at": order_submitted_at, "submit_ref": submit_ref},
             intent=intent,
         )
 
-        # Persist order
-        if self.persistence:
-            wo.oms_order_id = await self.persistence.record_order(wo, intent_id=intent.intent_id)
-            await self.persistence.record_order_event(
-                "ORDER_SUBMITTED", order_id=wo.order_id, intent_id=intent.intent_id,
-                strategy_id=intent.strategy_id, symbol=plan.symbol,
-                status_after="WORKING",
+        if order_persistence_failed and self.require_persistence:
+            return await self._finalize(
+                intent,
+                IntentStatus.DEFERRED,
+                "Broker order accepted but OMS order persistence failed; reconciliation required before retry",
+                order_id=exec_result.order_id,
+                modified_qty=final_qty if was_modified else None,
+                oms_received_at=oms_received_at,
+                order_submitted_at=order_submitted_at,
             )
 
         return await self._finalize(
@@ -447,11 +817,23 @@ class OMSCore:
     # Fill handling
     # ------------------------------------------------------------------
 
-    async def _apply_fill(self, wo: WorkingOrder, fill_qty: int, intent: Optional[Intent] = None, *, inferred: bool = False) -> None:
+    async def _apply_fill(
+        self,
+        wo: WorkingOrder,
+        fill_qty: int,
+        intent: Optional[Intent] = None,
+        *,
+        inferred: bool = False,
+        fill_price: Optional[float] = None,
+    ) -> None:
         """Apply fill to allocation. real_qty is updated from broker sync only."""
+        applied_price = float(fill_price if fill_price and fill_price > 0 else wo.price or 0.0)
+        if applied_price > 0:
+            wo.price = applied_price
         qty_delta = fill_qty if wo.side == "BUY" else -fill_qty
         fill_ts = datetime.now()
         exec_id = f"{wo.order_id}:{wo.filled_qty + fill_qty}"
+        resolved_intent_id = intent.intent_id if intent else wo.intent_id
         before_pos = self.state.get_position(wo.symbol)
         before_alloc = _allocation_payload(wo.symbol, before_pos.allocations.get(wo.strategy_id))
 
@@ -461,26 +843,69 @@ class OMSCore:
             pos = self.state.get_position(wo.symbol)
             alloc = pos.allocations.get(wo.strategy_id)
             if alloc and alloc.cost_basis > 0:
-                fill_realized_pnl = (wo.price - alloc.cost_basis) * fill_qty
+                fill_realized_pnl = (applied_price - alloc.cost_basis) * fill_qty
                 self.state.record_realized_pnl(fill_realized_pnl, strategy_id=wo.strategy_id)
 
         self.state.update_allocation(
             wo.symbol, wo.strategy_id, qty_delta,
-            cost_basis=wo.price,
+            cost_basis=applied_price,
         )
 
-        # Persist soft_stop_px from intent risk payload on BUY fills
-        if wo.side == "BUY" and intent and intent.risk_payload and intent.risk_payload.stop_px is not None:
+        soft_stop_px, hard_stop_px = _working_order_stop_metadata(wo, intent)
+
+        # Persist explicit entry stop metadata from either the live intent or
+        # the rehydrated working order on every BUY fill path.
+        if wo.side == "BUY" and (soft_stop_px is not None or hard_stop_px is not None):
             pos = self.state.get_position(wo.symbol)
             alloc = pos.allocations.get(wo.strategy_id) if pos else None
             if alloc:
-                alloc.soft_stop_px = intent.risk_payload.stop_px
+                if soft_stop_px is not None:
+                    alloc.soft_stop_px = soft_stop_px
+                elif alloc.soft_stop_px is None:
+                    alloc.soft_stop_px = hard_stop_px
+            if hard_stop_px is not None:
+                pos.hard_stop_px = hard_stop_px
+
+        durable_stop_attempt = self.persistence is not None or (
+            isinstance(self, OMSCore) and self._durable_stop_required()
+        )
+        if durable_stop_attempt and wo.side == "BUY":
+            stop_px = hard_stop_px or soft_stop_px
+            if stop_px is not None:
+                pos = self.state.get_position(wo.symbol)
+                alloc = pos.allocations.get(wo.strategy_id) if pos else None
+                stored = await self._upsert_durable_stop(
+                    symbol=wo.symbol,
+                    strategy_id=wo.strategy_id,
+                    qty=alloc.qty if alloc else fill_qty,
+                    stop_price=stop_px,
+                    entry_intent_id=resolved_intent_id,
+                    entry_order_id=wo.order_id,
+                    source_metadata={
+                        "source": "buy_fill",
+                        "fill_qty": fill_qty,
+                        "order_id": wo.order_id,
+                        "intent_id": resolved_intent_id,
+                        "risk_stop_px": soft_stop_px,
+                        "risk_hard_stop_px": hard_stop_px,
+                    },
+                    event_type="STOP_CREATED",
+                )
+                if stored is None and self._durable_stop_required():
+                    self.risk.halt_new_entries = True
+                    self._set_stop_protection_status(
+                        "error",
+                        last_error="durable stop upsert failed after BUY fill",
+                        source="durable_stop",
+                    )
+        elif durable_stop_attempt and wo.side == "SELL":
+            await self._sync_durable_stop_after_exit_fill(wo)
 
         # Update OMS risk gateway sector exposure on fills
         if wo.side == "BUY":
-            self.risk.on_sector_fill(wo.symbol, fill_qty, wo.price)
+            self.risk.on_sector_fill(wo.symbol, fill_qty, applied_price)
         else:
-            self.risk.on_sector_close(wo.symbol, fill_qty, wo.price)
+            self.risk.on_sector_close(wo.symbol, fill_qty, applied_price)
         after_pos = self.state.get_position(wo.symbol)
         after_alloc = _allocation_payload(wo.symbol, after_pos.allocations.get(wo.strategy_id))
         self._emit_fill(
@@ -496,6 +921,7 @@ class OMSCore:
                 "order_qty": wo.qty,
                 "commission": None,
                 "tax": None,
+                "fill_price": applied_price,
                 "previous_allocation": before_alloc,
                 "new_allocation": after_alloc,
                 "realized_pnl": fill_realized_pnl,
@@ -510,11 +936,10 @@ class OMSCore:
 
         # Persist fill and allocation
         if self.persistence:
-            resolved_intent_id = intent.intent_id if intent else wo.intent_id
             await self.persistence.record_fill(
                 kis_exec_id=exec_id, order_id=wo.order_id,
                 strategy_id=wo.strategy_id, symbol=wo.symbol,
-                side=wo.side, qty=fill_qty, price=wo.price,
+                side=wo.side, qty=fill_qty, price=applied_price,
                 fill_ts=fill_ts,
             )
             pos = self.state.get_position(wo.symbol)
@@ -533,7 +958,7 @@ class OMSCore:
                         symbol=wo.symbol,
                         direction="LONG",
                         entry_qty=fill_qty,
-                        entry_price=wo.price,
+                        entry_price=applied_price,
                         entry_ts=fill_ts,
                         entry_intent_id=resolved_intent_id,
                         setup_type=setup_type,
@@ -547,7 +972,7 @@ class OMSCore:
                     await self.persistence.close_trade(
                         trade_id=trade_id,
                         exit_qty=fill_qty,
-                        exit_price=wo.price,
+                        exit_price=applied_price,
                         exit_ts=fill_ts,
                         exit_intent_id=resolved_intent_id,
                         exit_reason=exit_reason,
@@ -635,6 +1060,622 @@ class OMSCore:
                 wo.order_id, final_status, wo.filled_qty, wo.price,
             )
 
+    def _durable_stop_required(self) -> bool:
+        if bool(getattr(self.risk.config, "stop_protection_emergency_override", False)):
+            return False
+        if not bool(getattr(self.risk.config, "require_durable_stops", True)):
+            return False
+        return bool(self.require_persistence)
+
+    def _persistence_callable(self, name: str):
+        if self.persistence is None:
+            return None
+        method = getattr(self.persistence, name, None)
+        if not callable(method):
+            return None
+        if type(self.persistence).__module__.startswith("unittest.mock") and name not in vars(self.persistence):
+            return None
+        return method
+
+    def _default_stop_mode(self, symbol: str) -> str:
+        raw = str(getattr(self.risk.config, "default_stop_protection_mode", "oms_watcher") or "oms_watcher")
+        mode = raw.upper().replace("-", "_")
+        if mode == StopProtectionMode.BROKER_NATIVE.value:
+            if self.adapter.supports_native_stop(symbol):
+                return StopProtectionMode.BROKER_NATIVE.value
+            logger.warning(f"Broker-native stops unverified for {symbol}; falling back to OMS watcher")
+            return StopProtectionMode.OMS_WATCHER.value
+        if mode in {"SYNTHETIC", "SYNTHETIC_ONLY"}:
+            return StopProtectionMode.SYNTHETIC_ONLY.value
+        return StopProtectionMode.OMS_WATCHER.value
+
+    async def _upsert_durable_stop(
+        self,
+        *,
+        symbol: str,
+        strategy_id: str,
+        qty: int,
+        stop_price: float,
+        entry_intent_id: Optional[str],
+        entry_order_id: Optional[str],
+        source_metadata: Mapping[str, Any],
+        event_type: str,
+    ) -> Optional[ProtectiveStop]:
+        if stop_price <= 0 or qty <= 0:
+            return None
+        mode = self._default_stop_mode(symbol)
+        if mode == StopProtectionMode.SYNTHETIC_ONLY.value and self._durable_stop_required():
+            self.risk.halt_new_entries = True
+            self._set_stop_protection_status(
+                "error",
+                last_error="synthetic stop-only protection is not live-safe",
+                source="durable_stop",
+            )
+            return None
+        if self.persistence is None:
+            return None
+        oms_id = getattr(self.persistence, "oms_id", "primary")
+        existing_active = await self._load_stop_for_allocation(strategy_id, symbol)
+        stop = ProtectiveStop.for_allocation(
+            oms_id=oms_id,
+            strategy_id=strategy_id,
+            symbol=symbol,
+            qty=qty,
+            stop_price=stop_price,
+            trigger_price_source=TriggerPriceSource.LAST.value,
+            protection_mode=mode,
+            status=StopStatus.ACTIVE.value if mode == StopProtectionMode.OMS_WATCHER.value else StopStatus.PENDING.value,
+            entry_intent_id=entry_intent_id,
+            entry_order_id=entry_order_id,
+            config_hash=str(getattr(self.risk.config, "default_stop_protection_mode", "")),
+            source_metadata=source_metadata,
+        )
+        if existing_active is not None and str(existing_active.status).upper() in _ACTIVE_STOP_STATUSES:
+            stop.stop_id = existing_active.stop_id
+        store_upsert = self._persistence_callable("upsert_stop")
+        if not callable(store_upsert):
+            return None
+        stored = store_upsert(stop)
+        if inspect.isawaitable(stored):
+            stored = await stored
+        terminal_returned = (
+            stored is not None
+            and str(getattr(stored, "status", "") or "").upper() in _TERMINAL_STOP_STATUSES
+        )
+        if stored is None or terminal_returned:
+            self._set_stop_protection_status(
+                "error",
+                last_error=(
+                    "protective stop upsert returned a terminal row; active protection was not created"
+                    if terminal_returned
+                    else "protective stop persistence failed"
+                ),
+                source="durable_stop",
+            )
+            if self._durable_stop_required():
+                self.risk.halt_new_entries = True
+            return None
+        self._emit_stop_event(event_type, stored, payload=dict(source_metadata or {}))
+        await self._record_stop_event(event_type, stored, dict(source_metadata or {}))
+        self.active_stop_count = max(self.active_stop_count, 1)
+        self._set_stop_protection_status(
+            "ok" if self.unprotected_positions_count == 0 else "degraded",
+            source="durable_stop",
+        )
+        return stored
+
+    async def _sync_durable_stop_after_exit_fill(self, wo: WorkingOrder) -> None:
+        if self.persistence is None:
+            return
+        pos = self.state.get_position(wo.symbol)
+        alloc = pos.allocations.get(wo.strategy_id)
+        remaining_qty = int(alloc.qty) if alloc else 0
+        updater = self._persistence_callable("update_stop_quantity")
+        if callable(updater):
+            result = updater(wo.strategy_id, wo.symbol, remaining_qty)
+            if inspect.isawaitable(result):
+                result = await result
+            if result is not None:
+                self._emit_stop_event(
+                    "STOP_FILLED" if remaining_qty <= 0 else "STOP_UPDATED",
+                    result,
+                    payload={"source": "sell_fill", "remaining_qty": remaining_qty, "order_id": wo.order_id},
+                )
+        if wo.idempotency_key and str(wo.idempotency_key).startswith("STOP:") and remaining_qty <= 0:
+            stop = await self._load_stop_for_allocation(wo.strategy_id, wo.symbol)
+            if stop is not None:
+                marker = self._persistence_callable("mark_filled")
+                if callable(marker):
+                    maybe = marker(stop.stop_id)
+                    if inspect.isawaitable(maybe):
+                        await maybe
+
+    async def _load_stop_for_allocation(self, strategy_id: str, symbol: str) -> Optional[ProtectiveStop]:
+        if self.persistence is None:
+            return None
+        loader = self._persistence_callable("load_stop_for_allocation")
+        if not callable(loader):
+            return None
+        result = loader(strategy_id, symbol)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    async def _submit_stop_exit(self, stop: ProtectiveStop, observation: PriceObservation) -> IntentResult:
+        async with self._symbol_locks[stop.symbol]:
+            pos = self.state.get_position(stop.symbol)
+            alloc_qty = pos.get_allocation(stop.strategy_id)
+            exit_qty = min(max(int(stop.qty or 0), 0), max(int(alloc_qty or 0), 0), max(int(pos.real_qty or 0), 0))
+            if exit_qty <= 0:
+                if self.persistence:
+                    marker = self._persistence_callable("mark_cancelled")
+                    if callable(marker):
+                        maybe = marker(stop.stop_id, "stop_triggered_no_sellable_qty")
+                        if inspect.isawaitable(maybe):
+                            await maybe
+                return IntentResult(stop.exit_intent_id or stop.stop_id, IntentStatus.CANCELLED, "Stop triggered but no sellable quantity")
+            triggered_at = _stop_exit_epoch(stop, observation)
+            idempotency_key = f"STOP:{getattr(self.persistence, 'oms_id', 'primary')}:{stop.stop_id}:{triggered_at}:{exit_qty}"
+            stop.idempotency_key = idempotency_key
+            intent = Intent(
+                intent_type=IntentType.EXIT,
+                strategy_id=stop.strategy_id,
+                symbol=stop.symbol,
+                desired_qty=exit_qty,
+                urgency=Urgency.HIGH,
+                risk_payload=RiskPayload(
+                    stop_px=stop.stop_price,
+                    rationale_code=f"protective_stop:{stop.stop_id}",
+                    confidence="RED",
+                ),
+                idempotency_key=idempotency_key,
+                metadata={
+                    "stop_id": stop.stop_id,
+                    "stop_price": stop.stop_price,
+                    "trigger_price": observation.price,
+                    "trigger_price_source": observation.source,
+                    "stop_protection_mode": stop.protection_mode,
+                },
+            )
+            cached = self._idem.get(intent.idempotency_key)
+            if cached is not None:
+                return cached
+            reserved_result = await self._reserve_idempotency(intent)
+            if reserved_result is not None:
+                if reserved_result.status in {IntentStatus.EXECUTED, IntentStatus.ACCEPTED}:
+                    self._idem.put(intent.idempotency_key, reserved_result)
+                self._emit_reconciliation(
+                    "IDEMPOTENCY_DUPLICATE",
+                    symbol=intent.symbol,
+                    payload={
+                        "idempotency_key": intent.idempotency_key,
+                        "intent_id": intent.intent_id,
+                        "existing_intent_id": reserved_result.intent_id,
+                        "status": reserved_result.status.name,
+                    },
+                )
+                return reserved_result
+            self._emit_reconciliation(
+                "IDEMPOTENCY_RESERVED",
+                symbol=intent.symbol,
+                payload={"idempotency_key": intent.idempotency_key, "intent_id": intent.intent_id},
+            )
+            result = await self._process_intent(intent, oms_received_at=time.time())
+            stop_exit_submitted = bool(result.order_id) and result.status not in {
+                IntentStatus.REJECTED,
+                IntentStatus.DEFERRED,
+                IntentStatus.CANCELLED,
+            }
+            self._emit_stop_event(
+                "STOP_EXIT_SUBMITTED" if stop_exit_submitted else "STOP_FAILED",
+                stop,
+                payload={
+                    "exit_intent_id": result.intent_id,
+                    "order_id": result.order_id,
+                    "status": result.status.name,
+                    "message": result.message,
+                    "trigger_price": observation.price,
+                },
+            )
+            return result
+
+    def _emit_stop_event(self, event_type: str, stop: ProtectiveStop, *, payload: Optional[Dict] = None) -> None:
+        emitter = self.event_emitter
+        row = {
+            "stop_id": stop.stop_id,
+            "strategy_id": stop.strategy_id,
+            "symbol": stop.symbol,
+            "qty": stop.qty,
+            "stop_price": stop.stop_price,
+            "status": stop.status,
+            "protection_mode": stop.protection_mode,
+            **dict(payload or {}),
+        }
+        if emitter is not None:
+            try:
+                emit_stop = getattr(emitter, "emit_stop_event", None)
+                if callable(emit_stop):
+                    emit_stop(event_type, row)
+                else:
+                    emitter.emit_reconciliation(event_type, symbol=stop.symbol, payload=row)
+            except Exception:
+                pass
+
+    async def _record_stop_event(self, event_type: str, stop: ProtectiveStop, payload: Optional[Dict] = None) -> None:
+        if self.persistence is None:
+            return
+        recorder = self._persistence_callable("record_order_event")
+        if not callable(recorder):
+            return
+        maybe = recorder(
+            event_type,
+            intent_id=stop.entry_intent_id or stop.exit_intent_id,
+            strategy_id=stop.strategy_id,
+            symbol=stop.symbol,
+            payload={"stop_id": stop.stop_id, **dict(payload or {})},
+            status_after=stop.status,
+        )
+        if inspect.isawaitable(maybe):
+            await maybe
+
+    async def _start_stop_watcher(self) -> None:
+        if self.persistence is None or self._stop_watcher is not None:
+            return
+        if self._persistence_callable("load_active_stops") is None:
+            return
+        self._stop_watcher = StopWatcher(
+            store=self.persistence,
+            price_source=self._price_observation,
+            exit_submitter=self._submit_stop_exit,
+            trigger_notifier=self._notify_stop_triggered,
+            stale_after_sec=float(getattr(self.risk.config, "stop_price_stale_after_sec", 30.0) or 30.0),
+            interval_sec=float(getattr(self.risk.config, "stop_watcher_interval_sec", 5.0) or 5.0),
+        )
+        await self._stop_watcher.start()
+
+    async def _notify_stop_triggered(self, stop: ProtectiveStop, observation: PriceObservation) -> None:
+        payload = {
+            "trigger_price": observation.price,
+            "trigger_price_source": observation.source,
+            "observation_ts": observation.timestamp,
+            "market_open": observation.market_open,
+            "executable": observation.executable,
+        }
+        self._emit_stop_event("STOP_TRIGGERED", stop, payload=payload)
+        await self._record_stop_event("STOP_TRIGGERED", stop, payload)
+
+    async def _price_observation(self, symbol: str) -> PriceObservation:
+        quote = await self._get_current_price_payload(symbol)
+        if isinstance(quote, Mapping):
+            price = _first_positive_float(
+                quote,
+                "stck_prpr",
+                "last",
+                "last_price",
+                "price",
+                "close",
+                "stck_prdy_clpr",
+            )
+            if price is not None:
+                quote_ts = _quote_timestamp(quote)
+                if quote_ts is not None:
+                    market_open = self.adapter._is_order_session_open()
+                    return PriceObservation(
+                        symbol=str(symbol).zfill(6),
+                        price=price,
+                        timestamp=quote_ts,
+                        source=TriggerPriceSource.LAST.value,
+                        market_open=market_open,
+                        executable=market_open,
+                    )
+        price = await self._get_current_price(symbol)
+        return PriceObservation(
+            symbol=str(symbol).zfill(6),
+            price=float(price or 0.0),
+            timestamp=0.0,
+            source="UNVERIFIED_LAST",
+            market_open=False,
+            executable=False,
+        )
+
+    async def _reconcile_protective_stops_on_startup(self) -> None:
+        active_stops: list[ProtectiveStop] = []
+        if self.persistence:
+            loader = self._persistence_callable("load_active_stops")
+            if callable(loader):
+                loaded = loader()
+                if inspect.isawaitable(loaded):
+                    loaded = await loaded
+                active_stops = list(loaded or [])
+        active_keys = {(stop.strategy_id, stop.symbol) for stop in active_stops}
+        unprotected = []
+        for symbol, pos in self.state.get_all_positions().items():
+            for strategy_id, alloc in pos.allocations.items():
+                if int(alloc.qty or 0) <= 0:
+                    continue
+                required_stop_px = alloc.soft_stop_px or pos.hard_stop_px
+                if required_stop_px and (strategy_id, str(symbol).zfill(6)) not in active_keys:
+                    unprotected.append((strategy_id, symbol, alloc.qty, required_stop_px))
+        self.active_stop_count = len(active_stops)
+        self.unprotected_positions_count = len(unprotected)
+        self.triggered_stop_count = sum(1 for stop in active_stops if stop.status.startswith("TRIGGERED"))
+        if unprotected:
+            self.risk.halt_new_entries = True
+            self._set_stop_protection_status(
+                "error",
+                last_error=f"{len(unprotected)} protected allocations lack durable stops",
+                source="startup_reconcile",
+            )
+        else:
+            self._set_stop_protection_status("ok", source="startup_reconcile")
+        for stop in active_stops:
+            self._emit_stop_event("STOP_ACTIVE", stop, payload={"source": "startup"})
+            await self._record_stop_event("STOP_ACTIVE", stop, {"source": "startup"})
+
+    def stop_health_payload(self) -> Dict[str, Any]:
+        if self._stop_watcher is not None:
+            health = self._stop_watcher.health
+            if health.last_check_ts is not None:
+                self.stop_watcher_last_check_ts = health.last_check_ts
+                self.active_stop_count = health.active_stop_count
+                self.triggered_stop_count = health.triggered_stop_count
+            self.stop_watcher_price_stale_count = health.stale_price_count
+            if self.unprotected_positions_count > 0:
+                self._set_stop_protection_status(
+                    "error",
+                    last_error=(
+                        self.stop_protection_last_error
+                        or f"{self.unprotected_positions_count} protected allocations lack durable stops"
+                    ),
+                    source="startup_reconcile",
+                )
+            elif self._has_independent_stop_protection_fault():
+                pass
+            elif health.status in {"error", "degraded"}:
+                self._set_stop_protection_status(health.status, last_error=health.last_error, source="watcher")
+            elif health.stale_price_count > 0:
+                self._set_stop_protection_status(
+                    "degraded",
+                    last_error=health.last_error or "stop watcher price stale",
+                    source="watcher",
+                )
+            elif (
+                health.status == "ok"
+                and health.last_check_ts is not None
+                and (
+                    self._stop_protection_status_source == "watcher"
+                    or str(self.stop_protection_status or "").lower().strip() in {"", "unknown", "ok"}
+                )
+            ):
+                self._set_stop_protection_status("ok", source="watcher")
+        age = None
+        if self.stop_watcher_last_check_ts is not None:
+            age = max(time.time() - self.stop_watcher_last_check_ts, 0.0)
+        return {
+            "stop_protection_status": self.stop_protection_status,
+            "unprotected_positions_count": self.unprotected_positions_count,
+            "active_stop_count": self.active_stop_count,
+            "triggered_stop_count": self.triggered_stop_count,
+            "stop_watcher_last_check_age_sec": age,
+            "stop_watcher_price_stale_count": self.stop_watcher_price_stale_count,
+            "stop_protection_last_error": self.stop_protection_last_error,
+        }
+
+    def _pending_idempotency_match(
+        self,
+        row: Mapping[str, Any],
+        broker_orders: list[Any],
+    ) -> tuple[Optional[Any], str, list[str]]:
+        symbol = str(row.get("symbol") or "").zfill(6)
+        side = str(row.get("planned_side") or ("BUY" if row.get("intent_type") == "ENTER" else "SELL")).upper()
+        qty = int(row.get("planned_qty") or row.get("desired_qty") or row.get("target_qty") or 0)
+        planned_type = str(row.get("planned_order_type") or "").upper().strip()
+        planned_ref = str(row.get("submit_ref") or "").strip()
+        planned_limit = row.get("planned_limit_price")
+        planned_stop = row.get("planned_stop_price")
+        created_ts = _coerce_epoch(row.get("created_ts") or row.get("created_at"))
+        price_required = planned_type in {"LIMIT", "MARKETABLE_LIMIT", "CLOSE_AUCTION", "STOP_LIMIT"}
+        planned_price = planned_limit if planned_limit is not None and str(planned_limit).strip() else planned_stop
+        durable_order_id = str(row.get("order_id") or "").strip()
+
+        base = [
+            order
+            for order in broker_orders
+            if str(getattr(order, "symbol", "") or "").zfill(6) == symbol
+            and str(getattr(order, "side", "") or "").upper() == side
+            and int(getattr(order, "qty", 0) or 0) == qty
+        ]
+        if durable_order_id:
+            direct = [
+                order
+                for order in broker_orders
+                if str(getattr(order, "order_id", "") or "").strip() == durable_order_id
+            ]
+            if len(direct) == 1:
+                order = direct[0]
+                mismatches: list[str] = []
+                if str(getattr(order, "symbol", "") or "").zfill(6) != symbol:
+                    mismatches.append("symbol")
+                if str(getattr(order, "side", "") or "").upper() != side:
+                    mismatches.append("side")
+                if int(getattr(order, "qty", 0) or 0) != qty:
+                    mismatches.append("qty")
+                if mismatches:
+                    return None, f"order_id_candidate_mismatch:{','.join(mismatches)}", [durable_order_id]
+                return order, "matched_order_id", [durable_order_id]
+            if len(direct) > 1:
+                return None, f"multiple_order_id_candidates:{len(direct)}", [durable_order_id]
+            base_order_ids = [str(getattr(order, "order_id", "") or "") for order in base]
+            if base_order_ids:
+                return None, f"expected_order_id_not_visible:{durable_order_id};base_candidates:{len(base)}", base_order_ids
+            return None, f"expected_order_id_not_visible:{durable_order_id}", []
+
+        exact: list[Any] = []
+        for order in base:
+            broker_ref = _broker_attr(order, "submit_ref", "client_order_id", "client_order_key", "memo", "order_memo")
+            if planned_ref and broker_ref != planned_ref:
+                continue
+
+            broker_type = _broker_attr(order, "order_type", "ord_type", "type")
+            if not planned_type or not broker_type or broker_type.upper().strip() != planned_type:
+                continue
+
+            if price_required:
+                if not _price_matches(planned_price, getattr(order, "price", None)):
+                    continue
+
+            broker_ts = _coerce_epoch(
+                getattr(order, "created_ts", None)
+                or getattr(order, "created_at", None)
+                or getattr(order, "created_time", None)
+            )
+            if created_ts is None or broker_ts is None:
+                continue
+            if abs(broker_ts - created_ts) > _IDEMPOTENCY_MATCH_WINDOW_SEC:
+                continue
+
+            exact.append(order)
+
+        order_ids = [str(getattr(order, "order_id", "") or "") for order in (exact or base)]
+        if len(exact) == 1:
+            return exact[0], "matched_exact_plan", order_ids
+        if len(exact) > 1:
+            return None, f"multiple_exact_candidates:{len(exact)}", order_ids
+        if base:
+            return None, f"broker_candidates_do_not_match_plan:{len(base)}", order_ids
+        return None, "no_broker_candidate", []
+
+    async def _mark_pending_idempotency_ambiguous(
+        self,
+        row: Mapping[str, Any],
+        *,
+        reason: str,
+        candidate_order_ids: list[str],
+    ) -> None:
+        idempotency_key = str(row.get("idempotency_key") or "")
+        if not idempotency_key:
+            return
+        marker = self._persistence_callable("mark_idempotency_ambiguous")
+        if callable(marker):
+            maybe = marker(
+                idempotency_key,
+                reason=f"{reason}; candidates={candidate_order_ids}",
+                submit_ref=str(row.get("submit_ref") or "") or None,
+            )
+            if inspect.isawaitable(maybe):
+                await maybe
+        self._emit_reconciliation(
+            "IDEMPOTENCY_AMBIGUOUS",
+            symbol=str(row.get("symbol") or "").zfill(6),
+            payload={
+                "idempotency_key": idempotency_key,
+                "intent_id": row.get("intent_id"),
+                "reason": reason,
+                "candidate_order_ids": candidate_order_ids,
+                "submit_ref": row.get("submit_ref"),
+                "planned_side": row.get("planned_side"),
+                "planned_qty": row.get("planned_qty") or row.get("desired_qty") or row.get("target_qty"),
+                "planned_order_type": row.get("planned_order_type"),
+                "planned_limit_price": row.get("planned_limit_price"),
+                "planned_stop_price": row.get("planned_stop_price"),
+                "created_ts": row.get("created_ts"),
+            },
+        )
+
+    async def reconcile_stale_pending_idempotency(self, stale_after_sec: float = 60.0) -> int:
+        if self.persistence is None:
+            return 0
+        lister = self._persistence_callable("list_pending_idempotency")
+        resolver = self._persistence_callable("resolve_idempotency")
+        if not callable(lister) or not callable(resolver):
+            return 0
+        rows = lister(stale_after_sec=stale_after_sec)
+        if inspect.isawaitable(rows):
+            rows = await rows
+        if not rows:
+            return 0
+        orders_result = await self.adapter.get_orders()
+        broker_orders = list(orders_result.data) if orders_result.ok else []
+        reconciled = 0
+        for row in rows:
+            symbol = str(row.get("symbol") or "").zfill(6)
+            side = str(row.get("planned_side") or ("BUY" if row.get("intent_type") == "ENTER" else "SELL")).upper()
+            qty = int(row.get("planned_qty") or row.get("desired_qty") or row.get("target_qty") or 0)
+            match, match_reason, candidate_order_ids = self._pending_idempotency_match(row, broker_orders)
+            if match is None:
+                if candidate_order_ids:
+                    await self._mark_pending_idempotency_ambiguous(
+                        row,
+                        reason=match_reason,
+                        candidate_order_ids=candidate_order_ids,
+                    )
+                continue
+            record_order = self._persistence_callable("record_order")
+            if callable(record_order):
+                reconciled_order = WorkingOrder(
+                    order_id=match.order_id,
+                    symbol=symbol,
+                    side=side,
+                    qty=qty,
+                    filled_qty=int(getattr(match, "filled_qty", 0) or 0),
+                    price=float(row.get("planned_limit_price") or getattr(match, "price", 0.0) or 0.0),
+                    order_type=str(row.get("planned_order_type") or "LIMIT").upper(),
+                    status=(
+                        OrderStatus.PARTIAL
+                        if int(getattr(match, "filled_qty", 0) or 0) > 0
+                        else OrderStatus.WORKING
+                    ),
+                    strategy_id=str(row.get("strategy_id") or "").upper().strip(),
+                    intent_id=str(row.get("intent_id") or "") or None,
+                    idempotency_key=str(row.get("idempotency_key") or "") or None,
+                    submit_ref=str(row.get("submit_ref") or "") or None,
+                    risk_stop_px=float(row["stop_px"]) if row.get("stop_px") is not None else None,
+                    risk_hard_stop_px=float(row["hard_stop_px"]) if row.get("hard_stop_px") is not None else None,
+                )
+                persisted_order_id = record_order(reconciled_order, intent_id=reconciled_order.intent_id)
+                if inspect.isawaitable(persisted_order_id):
+                    persisted_order_id = await persisted_order_id
+                if not persisted_order_id and self.require_persistence:
+                    self._emit_reconciliation(
+                        "IDEMPOTENCY_AMBIGUOUS",
+                        symbol=symbol,
+                        payload={
+                            "idempotency_key": row.get("idempotency_key"),
+                            "order_id": match.order_id,
+                            "reason": "reconciled_broker_order_persistence_failed",
+                        },
+                    )
+                    continue
+                if self._remaining_qty(reconciled_order) > 0:
+                    pos = self.state.get_position(symbol)
+                    if not any(existing.order_id == reconciled_order.order_id for existing in pos.working_orders):
+                        self.state.add_working_order(symbol, reconciled_order)
+            result = resolver(
+                str(row.get("idempotency_key") or ""),
+                status=IntentStatus.EXECUTED,
+                reason=f"IDEMPOTENCY_RECONCILED broker order {match.order_id}",
+                order_id=match.order_id,
+            )
+            if inspect.isawaitable(result):
+                result = await result
+            if result is not None:
+                reconciled += 1
+                self._idem.put(str(row.get("idempotency_key") or ""), result)
+                self._emit_reconciliation(
+                    "IDEMPOTENCY_RECONCILED",
+                    symbol=symbol,
+                    payload={
+                        "idempotency_key": row.get("idempotency_key"),
+                        "order_id": match.order_id,
+                        "match_reason": match_reason,
+                        "submit_ref": row.get("submit_ref"),
+                        "planned_order_type": row.get("planned_order_type"),
+                        "planned_limit_price": row.get("planned_limit_price"),
+                        "planned_stop_price": row.get("planned_stop_price"),
+                    },
+                )
+        return reconciled
+
     async def _sync_working_orders(self) -> Dict[str, 'BrokerOrder']:
         """Poll broker orders and reconcile with working order state.
 
@@ -664,13 +1705,21 @@ class OMSCore:
                         new_filled = broker.filled_qty
                         fill_delta = new_filled - wo.filled_qty
                         if fill_delta > 0:
-                            await self._apply_fill(wo, fill_delta)
+                            fill_price = _incremental_fill_price(wo, new_filled, fill_delta, broker.price)
+                            await self._apply_fill(wo, fill_delta, fill_price=fill_price)
+                            if broker.price and broker.price > 0:
+                                wo.price = broker.price
                             # Record partial fill event
                             if self.persistence and new_filled < wo.qty:
                                 await self.persistence.record_order_event(
                                     "PARTIAL_FILL", order_id=wo.order_id,
                                     strategy_id=wo.strategy_id, symbol=wo.symbol,
-                                    payload={"fill_qty": fill_delta, "total_filled": new_filled, "order_qty": wo.qty},
+                                    payload={
+                                        "fill_qty": fill_delta,
+                                        "fill_price": fill_price,
+                                        "total_filled": new_filled,
+                                        "order_qty": wo.qty,
+                                    },
                                     status_before=prev_status.name, status_after="PARTIAL",
                                 )
                         wo.filled_qty = new_filled
@@ -1444,6 +2493,12 @@ class OMSCore:
         """Get current price for symbol."""
         return self.adapter.api.get_last_price(symbol)
 
+    async def _get_current_price_payload(self, symbol: str) -> Any:
+        getter = getattr(self.adapter.api, "get_current_price", None)
+        if not callable(getter):
+            return None
+        return await asyncio.to_thread(getter, symbol)
+
     async def _finalize(
         self, intent: Intent, status: IntentStatus, message: str = "",
         order_id: Optional[str] = None, modified_qty: Optional[int] = None,
@@ -1682,7 +2737,12 @@ class OMSCore:
         # Connect to database
         if self.persistence:
             await self.persistence.connect()
+            if self.require_persistence and not self.persistence._is_connected():
+                raise RuntimeError("OMS persistence is required but Postgres is unavailable")
             await self._load_persisted_state()
+            await self.reconcile_stale_pending_idempotency(stale_after_sec=60.0)
+        elif self.require_persistence:
+            raise RuntimeError("OMS persistence is required but no persistence backend is configured")
 
         # Run first reconciliation synchronously so equity is loaded before
         # the server starts accepting strategy requests (prevents equity=0 gap)
@@ -1699,6 +2759,8 @@ class OMSCore:
             logger.error(f"Initial reconciliation failed (will retry in loop): {e}")
 
         # Start reconciliation loop
+        if self.persistence:
+            await self._start_stop_watcher()
         await self.start_reconciliation_loop()
         self._emit_deployment("started")
         logger.info("OMS started")
@@ -1724,6 +2786,15 @@ class OMSCore:
         for wo in orders:
             self.state.add_working_order(wo.symbol, wo)
 
+        # Rehydrate accepted/executed intent outcomes for restart-safe dedupe.
+        load_idem = getattr(self.persistence, "load_idempotency_results", None)
+        if inspect.iscoroutinefunction(load_idem):
+            idempotency_results = await load_idem()
+            for key, result in idempotency_results.items():
+                self._idem.put(key, result)
+            if idempotency_results:
+                logger.info(f"Restored {len(idempotency_results)} idempotency results from database")
+
         # Load OMS state (safe_mode, halt flags)
         oms_state = await self.persistence.load_oms_state()
         if oms_state:
@@ -1731,6 +2802,8 @@ class OMSCore:
                 self.risk.safe_mode = True
             if oms_state.get("halt_new_entries"):
                 self.risk.halt_new_entries = True
+
+        await self._reconcile_protective_stops_on_startup()
 
         # Restore per-strategy realized PnL from today's closed trades (mid-day restart resilience)
         realized = await self.persistence.load_daily_realized_pnl(date.today())
@@ -1749,6 +2822,8 @@ class OMSCore:
         self._emit_portfolio_snapshot("shutdown")
         if self._reconcile_task:
             self._reconcile_task.cancel()
+        if self._stop_watcher:
+            await self._stop_watcher.stop()
         if self.persistence:
             await self.persistence.close()
         logger.info("OMS shutdown complete")

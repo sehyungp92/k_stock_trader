@@ -346,6 +346,11 @@ class RuntimeSessionDriver:
         )
         if refresh_context:
             await self.portfolio_context.refresh()
+            self.action_router.rehydrate_pending_reservations(
+                self.portfolio_context.iter_working_orders(),
+                source="oms_positions",
+                portfolio_context=self.portfolio_context,
+            )
         collector = ActionCollector(
             strategy_id=self.descriptor.strategy_id,
             event_ref=event_ref,
@@ -480,6 +485,8 @@ class RuntimeSessionDriver:
                 "portfolio_reason_code": getattr(result, "portfolio_reason_code", ""),
                 "portfolio_decision_ref": getattr(result, "portfolio_decision_ref", ""),
                 "oms_status": getattr(result, "oms_status", "") or "",
+                "message": getattr(result, "oms_message", "") or "",
+                "resource_conflict_type": getattr(result, "resource_conflict_type", "") or "",
                 "intent_id": getattr(result, "intent_id", "") or "",
                 "broker_order_id": getattr(result, "broker_order_id", "") or "",
             }

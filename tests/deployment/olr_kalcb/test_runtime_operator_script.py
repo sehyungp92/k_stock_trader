@@ -4,6 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 from datetime import date, datetime, time
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,6 +36,19 @@ def test_operator_fixture_health_ok_is_dry_run_only():
     assert "fixture-only" in checks["market_data_ok"]["detail"]
     with pytest.raises(ValueError, match="only valid"):
         operator._load_health_checks(None, mode="paper", fixture_health_ok=True)
+
+
+def test_operator_augments_paper_health_checks_with_raw_oms_health(monkeypatch):
+    payload = {"status": "ok", "stop_protection_status": "ok", "idempotency_status": "ok"}
+    monkeypatch.setattr(operator, "_fetch_oms_health_payload", lambda url: payload)
+
+    checks = operator._with_oms_health_payload(
+        {"paper_trading_approved": True},
+        SimpleNamespace(oms_url="http://oms.example"),
+        mode="paper",
+    )
+
+    assert checks["oms_health_payload"] == payload
 
 
 def test_operator_has_watch_bars_runtime_entrypoint():

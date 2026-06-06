@@ -62,6 +62,9 @@ REQUIREMENT_TO_TESTS = {
         ("tests/deployment/olr_kalcb/test_portfolio_and_replay.py", "test_router_applies_portfolio_priority_before_batch_arrival_order"),
         ("tests/deployment/olr_kalcb/test_session_driver.py", "test_runtime_plan_routes_market_bar_as_one_combined_priority_batch"),
     ),
+    "startup OMS working-order snapshots replay through the full paper gate": (
+        ("tests/deployment/olr_kalcb/test_offline_replay_engine.py", "test_offline_replay_preserves_startup_working_order_snapshot_parity"),
+    ),
     "KIS resource plan binds candidate surfaces, phased leases, mode, routing, and session evidence": (
         ("tests/deployment/olr_kalcb/test_kis_resource_plan.py", "test_resource_plan_models_candidate_surfaces_by_phase_without_false_ws_conflict"),
         ("tests/deployment/olr_kalcb/test_kis_resource_plan.py", "test_resource_plan_fails_mode_mismatch_and_oversized_olr_acquisition"),

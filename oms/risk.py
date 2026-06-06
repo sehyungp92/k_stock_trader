@@ -48,6 +48,7 @@ class RiskConfig:
     max_position_pct: float = 0.15
     max_positions_count: int = 10
     max_sector_pct: float = 0.30
+    unknown_sector_policy: str = "allow"
 
     # Strategy budgets (% of equity for risk)
     strategy_budgets: dict = None
@@ -59,6 +60,16 @@ class RiskConfig:
     # Regime-based exposure caps (set by PCIM at 08:30)
     regime_exposure_caps: Dict[str, float] = None
     current_regime: str = "NORMAL"
+
+    # Durable protective-stop policy. These are enforced by OMS core in
+    # paper/live when durable persistence is required.
+    require_durable_stops: bool = True
+    default_stop_protection_mode: str = "oms_watcher"
+    allow_synthetic_stop_only: bool = False
+    stop_price_stale_after_sec: float = 30.0
+    stop_watcher_interval_sec: float = 5.0
+    stop_exit_order_type: str = "MARKET"
+    stop_protection_emergency_override: bool = False
 
     def __post_init__(self):
         # Set default regime exposure caps if not provided
@@ -72,6 +83,8 @@ class RiskConfig:
             self.strategy_budgets = {
                 "PCIM": {"max_positions": 8, "max_risk_pct": 0.10, "capital_allocation_pct": 1.0},
             }
+        policy = str(self.unknown_sector_policy or "allow").lower().strip()
+        self.unknown_sector_policy = "block" if policy in {"block", "reject"} else "allow"
 
 
 class RiskGateway:
@@ -102,7 +115,7 @@ class RiskGateway:
         sector_config = SectorExposureConfig(
             mode="pct",
             max_sector_pct=config.max_sector_pct,
-            unknown_sector_policy="allow",
+            unknown_sector_policy=config.unknown_sector_policy,
         )
         self._sector_exposure = SectorExposure(sector_map or {}, sector_config)
         self.last_trace: List[Dict[str, Any]] = []
@@ -472,11 +485,18 @@ class RiskGateway:
         entry_px = intent.risk_payload.entry_px or self._get_price(intent.symbol)
         qty = intent.desired_qty or intent.target_qty or 0
 
-        if entry_px <= 0 or qty <= 0:
+        if not entry_px or entry_px <= 0 or qty <= 0:
             return RiskResult(RiskDecision.APPROVE)
 
+        sector = self._sector_exposure.get_sector(intent.symbol)
+        if sector == "UNKNOWN" and self.config.unknown_sector_policy == "block":
+            return RiskResult(
+                RiskDecision.REJECT,
+                f"Unknown sector for {intent.symbol}; approved sector map required",
+                resource_conflict_type="unknown_sector",
+            )
+
         if not self._sector_exposure.can_enter(intent.symbol, qty, entry_px, equity):
-            sector = self._sector_exposure.get_sector(intent.symbol)
             current_pct = self._sector_exposure.sector_pct(sector, equity)
             all_positions = self.state.get_all_positions()
             return RiskResult(

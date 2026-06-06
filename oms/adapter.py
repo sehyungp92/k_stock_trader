@@ -60,6 +60,111 @@ class BrokerOrder:
     status: str
     created_at: str
     branch: str = ""  # KRX_FWDG_ORD_ORGNO for cancel/revise
+    order_type: str = ""
+    submit_ref: str = ""
+    created_ts: Optional[float] = None
+
+
+def _row_value(row: Any, *names: str, default: Any = "") -> Any:
+    for name in names:
+        try:
+            value = row.get(name)
+        except AttributeError:
+            try:
+                value = row[name]
+            except (KeyError, TypeError):
+                value = None
+        if value is not None and str(value).strip() != "":
+            return value
+    return default
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(str(value).replace(",", "").strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(str(value).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_broker_side(raw_side: Any) -> str:
+    side = str(raw_side or "").strip().upper()
+    if side in {"01", "SELL", "S", "매도"}:
+        return "SELL"
+    if side in {"02", "BUY", "B", "매수"}:
+        return "BUY"
+    return ""
+
+
+def _normalize_broker_order_type(raw_type: Any) -> str:
+    order_type = str(raw_type or "").strip().upper()
+    if not order_type:
+        return ""
+    code_map = {
+        "00": "LIMIT",
+        "01": "MARKET",
+    }
+    if order_type in code_map:
+        return code_map[order_type]
+    aliases = {
+        "LIMIT": "LIMIT",
+        "MARKET": "MARKET",
+        "MARKETABLE_LIMIT": "MARKETABLE_LIMIT",
+        "CLOSE_AUCTION": "CLOSE_AUCTION",
+        "STOP_LIMIT": "STOP_LIMIT",
+    }
+    return aliases.get(order_type, order_type)
+
+
+def _parse_broker_timestamp(raw_time: Any, raw_date: Any, default_date: datetime) -> tuple[str, Optional[float]]:
+    raw = str(raw_time or "").strip()
+    if not raw:
+        return "", None
+    try:
+        numeric = float(raw)
+        if numeric > 1_000_000_000:
+            dt = datetime.fromtimestamp(numeric, tz=_KST)
+            return dt.isoformat(), float(dt.timestamp())
+    except ValueError:
+        pass
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_KST)
+        return dt.isoformat(), float(dt.timestamp())
+    except ValueError:
+        pass
+
+    date_raw = str(raw_date or "").strip()
+    order_date = default_date.date()
+    if date_raw:
+        digits = "".join(ch for ch in date_raw if ch.isdigit())
+        try:
+            if len(digits) == 8:
+                order_date = datetime.strptime(digits, "%Y%m%d").date()
+            elif len(digits) == 6:
+                order_date = datetime.strptime(f"20{digits}", "%Y%m%d").date()
+        except ValueError:
+            order_date = default_date.date()
+
+    time_digits = "".join(ch for ch in raw if ch.isdigit())
+    try:
+        if len(time_digits) >= 6:
+            order_time = datetime.strptime(time_digits[:6], "%H%M%S").time()
+        elif len(time_digits) == 4:
+            order_time = datetime.strptime(time_digits, "%H%M").time()
+        else:
+            order_time = datetime.strptime(raw, "%H:%M:%S").time()
+    except ValueError:
+        return raw, None
+    dt = datetime.combine(order_date, order_time, tzinfo=_KST)
+    return dt.isoformat(), float(dt.timestamp())
 
 
 @dataclass
@@ -93,6 +198,7 @@ class KISExecutionAdapter:
     def __init__(self, kis_api: 'KoreaInvestAPI'):
         self.api = kis_api
         self._known_order_ids: set = set()
+        self.retry_bind_open_order_on_ambiguous_submit = False
 
     _ORDER_OPEN = time(9, 0)
     _ORDER_CLOSE = time(15, 30)
@@ -165,6 +271,9 @@ class KISExecutionAdapter:
         limit_price: Optional[float] = None,
         stop_price: Optional[float] = None,
         max_retries: int = 3,
+        intent_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        submit_ref: Optional[str] = None,
     ) -> AdapterResult:
         """
         Submit order to KIS with retry on transient errors.
@@ -190,11 +299,15 @@ class KISExecutionAdapter:
 
         # Local correlation ID for logs. KIS does not expose a broker-native
         # client order ID here, so timeout recovery must fail closed.
-        submit_ref = f"OMS-{uuid.uuid4().hex[:12]}"
+        submit_ref = submit_ref or f"OMS-{uuid.uuid4().hex[:12]}"
+        logger.debug(
+            f"KIS submit ref={submit_ref} intent_id={intent_id or ''} "
+            f"idempotency_key={idempotency_key or ''} {symbol} {side} x{qty} {order_type}"
+        )
 
         for attempt in range(max_retries):
-            # Automatic retry-to-open-order binding is intentionally disabled.
-            if False and attempt > 0:
+            # Disabled by default: heuristic retry binding must be explicitly enabled and tested per broker.
+            if self.retry_bind_open_order_on_ambiguous_submit and attempt > 0:
                 try:
                     result = await self.get_orders()
                     if result.ok:
@@ -215,7 +328,15 @@ class KISExecutionAdapter:
                         elif len(unknown_matches) > 1:
                             logger.warning(
                                 f"Ambiguous retry match ({len(unknown_matches)} candidates) "
-                                f"for {symbol} {side} x{qty} — submitting fresh order"
+                                f"for {symbol} {side} x{qty}; failing closed"
+                            )
+                            return AdapterResult(
+                                False,
+                                error=AdapterError.TEMP_ERROR,
+                                message=(
+                                    f"Ambiguous retry match for {symbol} {side} x{qty}; "
+                                    "reconcile broker state before retrying."
+                                ),
                             )
                 except Exception:
                     pass  # Best-effort check; proceed with retry
@@ -290,6 +411,61 @@ class KISExecutionAdapter:
 
         return AdapterResult(False, error=AdapterError.TEMP_ERROR, message="Max retries exhausted")
 
+    def supports_native_stop(self, symbol: str) -> bool:
+        """Return whether KIS has verified broker-native conditional stops.
+
+        STOP_LIMIT routing in submit_order is only a simulated limit order today,
+        so this remains false until a paper test proves broker-resting stops.
+        """
+        return False
+
+    async def submit_stop_order(
+        self,
+        *,
+        symbol: str,
+        side: str,
+        qty: int,
+        stop_price: float,
+        limit_price: Optional[float] = None,
+        intent_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        submit_ref: Optional[str] = None,
+    ) -> AdapterResult:
+        if not self.supports_native_stop(symbol):
+            return AdapterResult(
+                False,
+                error=AdapterError.REJECTED_INVALID,
+                message="Broker-native stop support is not paper-verified; use OMS watcher",
+            )
+        return await self.submit_order(
+            symbol=symbol,
+            side=side,
+            qty=qty,
+            order_type="STOP_LIMIT",
+            limit_price=limit_price,
+            stop_price=stop_price,
+            intent_id=intent_id,
+            idempotency_key=idempotency_key,
+            submit_ref=submit_ref,
+        )
+
+    async def cancel_stop_order(self, order_id: str, symbol: str, qty: int, branch: str = "") -> AdapterResult:
+        if not self.supports_native_stop(symbol):
+            return AdapterResult(
+                False,
+                error=AdapterError.REJECTED_INVALID,
+                message="Broker-native stop support is not paper-verified",
+            )
+        return await self.cancel_order(order_id, symbol, qty, branch=branch)
+
+    def stop_capabilities_snapshot(self) -> Dict[str, Any]:
+        return {
+            "stop_protection_modes_supported": ["OMS_WATCHER", "SYNTHETIC_ONLY"],
+            "default_stop_protection_mode": "OMS_WATCHER",
+            "broker_native_stop_verified_at": None,
+            "broker_native_stop_status": "unverified",
+        }
+
     def reset(self) -> None:
         """Reset adapter state (called from eod_cleanup)."""
         self._known_order_ids.clear()
@@ -323,21 +499,47 @@ class KISExecutionAdapter:
             df = await asyncio.to_thread(self.api.get_orders)
             if df is None:
                 return BrokerQueryResult(ok=True, data=[])
+            if getattr(df, "empty", False):
+                return BrokerQueryResult(ok=True, data=[])
 
             orders = []
             for odno, row in df.iterrows():
-                raw_side = row.get('매도매수구분코드', row.get('매매구분코드', ''))
-                side = "SELL" if str(raw_side) in ("01", "sell", "SELL") else "BUY"
+                raw_side = _row_value(row, "매도매수구분코드", "매매구분코드", "sll_buy_dvsn_cd", "side", "buy_sell_code")
+                side = _normalize_broker_side(raw_side)
+                qty = _coerce_int(_row_value(row, "주문수량", "ord_qty", "qty"))
+                remaining_qty = _coerce_int(
+                    _row_value(row, "주문가능수량", "psbl_qty", "nccs_qty", "remaining_qty"),
+                    default=qty,
+                )
+                raw_time = _row_value(row, "시간", "ord_tmd", "created_at", "created_time", "time")
+                raw_date = _row_value(row, "주문일자", "ord_dt", "order_date", "created_date")
+                created_at, created_ts = _parse_broker_timestamp(raw_time, raw_date, self._now_kst())
+                order_type = _normalize_broker_order_type(
+                    _row_value(row, "ord_dvsn", "ORD_DVSN", "order_type", "ord_type", "주문구분코드")
+                )
+                order_id = str(_row_value(row, "odno", "order_id", "주문번호", default=odno))
                 orders.append(BrokerOrder(
-                    order_id=str(odno),
-                    symbol=row['종목코드'],
+                    order_id=order_id,
+                    symbol=str(_row_value(row, "종목코드", "pdno", "symbol", "ticker")).zfill(6),
                     side=side,
-                    qty=int(row['주문수량']),
-                    filled_qty=int(row['주문수량']) - int(row['주문가능수량']),
-                    price=float(row['주문가격']),
+                    qty=qty,
+                    filled_qty=max(qty - remaining_qty, 0),
+                    price=_coerce_float(_row_value(row, "주문가격", "ord_unpr", "price", "limit_price")),
                     status="WORKING",
-                    created_at=row['시간'],
-                    branch=str(row.get('주문점', '')),
+                    created_at=created_at,
+                    branch=str(_row_value(row, "주문점", "ord_gno_brno", "branch")),
+                    order_type=order_type,
+                    submit_ref=str(
+                        _row_value(
+                            row,
+                            "submit_ref",
+                            "client_order_id",
+                            "client_order_key",
+                            "memo",
+                            "order_memo",
+                        )
+                    ),
+                    created_ts=created_ts,
                 ))
             return BrokerQueryResult(ok=True, data=orders)
         except Exception as e:

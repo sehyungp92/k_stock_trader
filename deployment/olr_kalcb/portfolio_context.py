@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import inspect
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from oms_client.client import AccountState, AllocationInfo, PositionInfo
+from oms_client.client import AccountState, AllocationInfo, PositionInfo, WorkingOrderInfo
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,20 +34,44 @@ class PortfolioContextProvider:
     account_state: AccountState = field(default_factory=AccountState)
     positions: dict[str, PositionInfo] = field(default_factory=dict)
     sector_map: dict[str, str] = field(default_factory=dict)
+    last_refresh_ts: float = 0.0
+    last_refresh_ok: bool = False
+    last_refresh_error: str = ""
 
     async def refresh(self) -> None:
         if self.oms_client is None:
             return
+        account_seen = False
+        account_ok = False
+        positions_seen = False
+        positions_ok = False
+        errors: list[str] = []
         get_account = getattr(self.oms_client, "get_account_state", None)
         if callable(get_account):
-            account = await _maybe_await(get_account())
-            if account is not None:
-                self.account_state = _coerce_account(account)
+            account_seen = True
+            try:
+                account = await _maybe_await(get_account())
+                if account is not None:
+                    self.account_state = _coerce_account(account)
+                    account_ok = True
+            except Exception as exc:
+                errors.append(f"account:{exc}")
         get_positions = getattr(self.oms_client, "get_all_positions", None)
         if callable(get_positions):
-            positions = await _maybe_await(get_positions())
-            if positions is not None:
-                self.positions = _coerce_positions(positions)
+            positions_seen = True
+            try:
+                positions = await _maybe_await(get_positions())
+                if positions is not None:
+                    self.positions = _coerce_positions(positions)
+                    positions_ok = True
+            except Exception as exc:
+                errors.append(f"positions:{exc}")
+        ok = (account_ok if account_seen else True) and (positions_ok if positions_seen else True)
+        if not account_seen and not positions_seen:
+            ok = False
+        self.last_refresh_ts = time.time()
+        self.last_refresh_ok = ok
+        self.last_refresh_error = "" if ok else ("; ".join(errors) or "oms_context_unavailable")
 
     def strategy_exposure(self, strategy_id: str, symbol: str) -> PortfolioExposure:
         sid = str(strategy_id or "").upper().strip()
@@ -56,7 +81,12 @@ class PortfolioContextProvider:
         qty = int(position.get_allocation(sid) or 0)
         allocation = position.allocations.get(sid)
         price = float(getattr(allocation, "cost_basis", 0.0) or position.avg_price or 0.0)
-        return PortfolioExposure(qty=max(qty, 0), notional=max(qty, 0) * max(price, 0.0))
+        working = _working_buy_exposure(position, strategy_id=sid)
+        owned_qty = max(qty, 0)
+        return PortfolioExposure(
+            qty=owned_qty + working.qty,
+            notional=owned_qty * max(price, 0.0) + working.notional,
+        )
 
     def symbol_exposure(self, symbol: str) -> PortfolioExposure:
         position = self.positions.get(_symbol(symbol))
@@ -64,7 +94,12 @@ class PortfolioContextProvider:
             return PortfolioExposure()
         qty = int(position.real_qty or 0)
         price = float(position.avg_price or 0.0)
-        return PortfolioExposure(qty=max(qty, 0), notional=max(qty, 0) * max(price, 0.0))
+        working = _working_buy_exposure(position)
+        owned_qty = max(qty, 0)
+        return PortfolioExposure(
+            qty=owned_qty + working.qty,
+            notional=owned_qty * max(price, 0.0) + working.notional,
+        )
 
     def portfolio_exposure(self) -> PortfolioExposure:
         qty = 0
@@ -73,6 +108,9 @@ class PortfolioContextProvider:
             position_qty = max(int(position.real_qty or 0), 0)
             qty += position_qty
             notional += position_qty * max(float(position.avg_price or 0.0), 0.0)
+            working = _working_buy_exposure(position)
+            qty += working.qty
+            notional += working.notional
         return PortfolioExposure(qty=qty, notional=notional)
 
     def sector_exposure(self, sector: str) -> PortfolioExposure:
@@ -86,6 +124,9 @@ class PortfolioContextProvider:
             position_qty = max(int(position.real_qty or 0), 0)
             qty += position_qty
             notional += position_qty * max(float(position.avg_price or 0.0), 0.0)
+            working = _working_buy_exposure(position)
+            qty += working.qty
+            notional += working.notional
         return PortfolioExposure(qty=qty, notional=notional)
 
     def cash_equity(self) -> CashEquity:
@@ -93,6 +134,12 @@ class PortfolioContextProvider:
             cash=float(self.account_state.buyable_cash or 0.0),
             equity=float(self.account_state.equity or self.account_state.buyable_cash or 0.0),
         )
+
+    def iter_working_orders(self) -> list[WorkingOrderInfo]:
+        orders: list[WorkingOrderInfo] = []
+        for position in self.positions.values():
+            orders.extend(list(getattr(position, "working_orders", []) or []))
+        return orders
 
     def portfolio_view(self, strategy_id: str) -> Any:
         sid = str(strategy_id or "").upper().strip()
@@ -235,8 +282,68 @@ def _coerce_positions(value: Any) -> dict[str, PositionInfo]:
             entry_lock_until=data.get("entry_lock_until"),
             frozen=bool(data.get("frozen", False)),
             working_order_count=int(data.get("working_order_count", 0) or 0),
+            working_orders=_coerce_working_orders(data.get("working_orders", []), default_symbol=key),
         )
     return positions
+
+
+def _coerce_working_orders(value: Any, *, default_symbol: str = "") -> list[WorkingOrderInfo]:
+    rows = value or []
+    if isinstance(rows, dict):
+        rows = rows.values()
+    orders: list[WorkingOrderInfo] = []
+    for raw in rows:
+        if isinstance(raw, WorkingOrderInfo):
+            orders.append(raw)
+            continue
+        data = dict(raw or {})
+        qty = int(data.get("qty", 0) or 0)
+        filled_qty = int(data.get("filled_qty", 0) or 0)
+        orders.append(
+            WorkingOrderInfo(
+                order_id=str(data.get("order_id") or ""),
+                symbol=_symbol(str(data.get("symbol") or default_symbol)),
+                side=str(data.get("side") or "").upper(),
+                qty=qty,
+                filled_qty=filled_qty,
+                remaining_qty=int(data.get("remaining_qty", max(qty - filled_qty, 0)) or 0),
+                price=float(data.get("price", 0.0) or 0.0),
+                order_type=str(data.get("order_type") or ""),
+                status=str(data.get("status") or ""),
+                strategy_id=str(data.get("strategy_id") or "").upper().strip(),
+                intent_id=data.get("intent_id"),
+                idempotency_key=data.get("idempotency_key"),
+                submit_ref=data.get("submit_ref"),
+                risk_stop_px=data.get("risk_stop_px"),
+                risk_hard_stop_px=data.get("risk_hard_stop_px"),
+                created_at=data.get("created_at"),
+                updated_at=data.get("updated_at"),
+                submit_ts=data.get("submit_ts"),
+                cancel_after_sec=data.get("cancel_after_sec"),
+            )
+        )
+    return orders
+
+
+def _working_buy_exposure(position: PositionInfo, strategy_id: str | None = None) -> PortfolioExposure:
+    wanted = str(strategy_id or "").upper().strip()
+    qty = 0
+    notional = 0.0
+    for order in getattr(position, "working_orders", []) or []:
+        if str(order.side or "").upper() != "BUY":
+            continue
+        if wanted and str(order.strategy_id or "").upper().strip() != wanted:
+            continue
+        status = str(order.status or "").upper().strip()
+        if status in {"FILLED", "CANCELLED", "REJECTED", "EXPIRED", "FAILED"}:
+            continue
+        remaining_qty = max(int(order.remaining_qty or (order.qty - order.filled_qty) or 0), 0)
+        if remaining_qty <= 0:
+            continue
+        price = float(order.price or 0.0)
+        qty += remaining_qty
+        notional += remaining_qty * max(price, 0.0)
+    return PortfolioExposure(qty=qty, notional=notional)
 
 
 def _position_items(value: Any) -> list[tuple[str, Any]]:

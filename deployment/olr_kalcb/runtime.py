@@ -58,6 +58,10 @@ REQUIRED_HEALTH_CHECKS_BY_MODE: dict[str, tuple[str, ...]] = {
         "order_route_enabled",
         "risk_limits_loaded",
         "kill_switch_ready",
+        "oms_health_ok",
+        "durable_stops_ok",
+        "idempotency_reservation_ok",
+        "portfolio_context_fresh",
         "paper_trading_approved",
     ),
     "live": (
@@ -69,9 +73,31 @@ REQUIRED_HEALTH_CHECKS_BY_MODE: dict[str, tuple[str, ...]] = {
         "order_route_enabled",
         "risk_limits_loaded",
         "kill_switch_ready",
+        "oms_health_ok",
+        "durable_stops_ok",
+        "idempotency_reservation_ok",
+        "portfolio_context_fresh",
         "live_capital_approved",
     ),
 }
+
+OMS_HARDENING_HEALTH_CHECKS = {"oms_health_ok", "durable_stops_ok", "idempotency_reservation_ok"}
+OMS_HEALTH_PAYLOAD_KEYS = (
+    "oms_health_payload",
+    "raw_oms_health",
+    "oms_health_body",
+    "oms_health",
+    "oms_health_gate_evidence",
+)
+_READY_HEALTH_STATES = {"ok", "ready", "healthy"}
+_ACCEPTABLE_OMS_STATUS = _READY_HEALTH_STATES | {"warn"}
+_REQUIRED_STOP_HEALTH_FIELDS = (
+    "unprotected_positions_count",
+    "active_stop_count",
+    "triggered_stop_count",
+    "stop_watcher_price_stale_count",
+)
+_MAX_STOP_WATCHER_AGE_SEC = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -810,8 +836,25 @@ def run_runtime_preflight(
             )
         )
     provided_checks = health_checks or {}
+    derived_oms_checks = (
+        _derive_oms_hardening_health_checks(provided_checks)
+        if mode_name in {"paper", "live"}
+        else {}
+    )
     for name in REQUIRED_HEALTH_CHECKS_BY_MODE[mode_name]:
-        checks.append(_coerce_health_check(name, provided_checks.get(name)))
+        if name in derived_oms_checks:
+            check = derived_oms_checks[name]
+            if name in provided_checks:
+                supplied = _coerce_health_check(name, provided_checks.get(name))
+                if not supplied.passed:
+                    check = RuntimePreflightCheck(
+                        name,
+                        False,
+                        f"{check.detail}; supplied operator check failed: {supplied.detail}",
+                    )
+            checks.append(check)
+        else:
+            checks.append(_coerce_health_check(name, provided_checks.get(name)))
     return RuntimePreflightResult(mode_name, trade_date, tuple(checks))
 
 
@@ -967,6 +1010,187 @@ def _coerce_health_check(name: str, raw: Any) -> RuntimePreflightCheck:
         return RuntimePreflightCheck(name, False, "missing required preflight input")
     passed = bool(raw)
     return RuntimePreflightCheck(name, passed, "ok" if passed else "failed")
+
+
+def _derive_oms_hardening_health_checks(provided_checks: Mapping[str, Any]) -> dict[str, RuntimePreflightCheck]:
+    payload, source = _extract_oms_health_payload(provided_checks)
+    if payload is None:
+        detail = "missing raw OMS /health payload for hardening readiness evidence"
+        if provided_checks.get("oms_health_payload_error"):
+            detail = f"{detail}: {provided_checks['oms_health_payload_error']}"
+        return {
+            name: RuntimePreflightCheck(name, False, detail)
+            for name in OMS_HARDENING_HEALTH_CHECKS
+        }
+
+    status = str(payload.get("status") or "").lower().strip()
+    stop_status = str(payload.get("stop_protection_status") or "").lower().strip()
+    idempotency_status = str(
+        payload.get("idempotency_status")
+        or payload.get("idempotency_health")
+        or payload.get("reservation_reconcile_status")
+        or ""
+    ).lower().strip()
+    missing_stop_fields = [
+        field
+        for field in _REQUIRED_STOP_HEALTH_FIELDS
+        if field not in payload or payload.get(field) is None
+    ]
+    stop_counts = {
+        field: _required_nonnegative_int(payload, field)
+        for field in _REQUIRED_STOP_HEALTH_FIELDS
+        if field not in missing_stop_fields
+    }
+    invalid_stop_fields = [field for field, value in stop_counts.items() if value is None]
+    unprotected_count = stop_counts.get("unprotected_positions_count")
+    active_stop_count = stop_counts.get("active_stop_count")
+    stale_price_count = stop_counts.get("stop_watcher_price_stale_count")
+    watcher_age = None
+    watcher_age_missing = False
+    watcher_age_stale = False
+    if active_stop_count is not None and active_stop_count > 0:
+        watcher_age = _required_nonnegative_float(payload, "stop_watcher_last_check_age_sec")
+        watcher_age_missing = watcher_age is None
+        watcher_age_stale = watcher_age is not None and watcher_age > _MAX_STOP_WATCHER_AGE_SEC
+
+    oms_ok = bool(status in _ACCEPTABLE_OMS_STATUS)
+    stop_ok = bool(
+        not missing_stop_fields
+        and not invalid_stop_fields
+        and stop_status in _READY_HEALTH_STATES
+        and unprotected_count == 0
+        and stale_price_count == 0
+        and not watcher_age_missing
+        and not watcher_age_stale
+    )
+    idempotency_ok = bool(idempotency_status in _READY_HEALTH_STATES)
+    stop_failure_detail = _stop_health_failure_detail(
+        source=source,
+        stop_status=stop_status,
+        missing_fields=missing_stop_fields,
+        invalid_fields=invalid_stop_fields,
+        unprotected_count=unprotected_count,
+        active_stop_count=active_stop_count,
+        stale_price_count=stale_price_count,
+        watcher_age=watcher_age,
+        watcher_age_missing=watcher_age_missing,
+        watcher_age_stale=watcher_age_stale,
+    )
+
+    return {
+        "oms_health_ok": RuntimePreflightCheck(
+            "oms_health_ok",
+            oms_ok,
+            (
+                f"derived from OMS /health evidence '{source}': status={status or 'missing'}"
+                if oms_ok
+                else f"OMS /health status is {status or 'missing'} in evidence '{source}'"
+            ),
+        ),
+        "durable_stops_ok": RuntimePreflightCheck(
+            "durable_stops_ok",
+            stop_ok,
+            (
+                f"derived from OMS /health evidence '{source}': stop_protection_status={stop_status}, "
+                f"unprotected_positions_count={unprotected_count}, active_stop_count={active_stop_count}, "
+                f"stop_watcher_last_check_age_sec={watcher_age}"
+                if stop_ok
+                else stop_failure_detail
+            ),
+        ),
+        "idempotency_reservation_ok": RuntimePreflightCheck(
+            "idempotency_reservation_ok",
+            idempotency_ok,
+            (
+                f"derived from OMS /health evidence '{source}': idempotency_status={idempotency_status}"
+                if idempotency_ok
+                else f"OMS idempotency health is {idempotency_status or 'missing'} in evidence '{source}'"
+            ),
+        ),
+    }
+
+
+def _extract_oms_health_payload(provided_checks: Mapping[str, Any]) -> tuple[dict[str, Any] | None, str]:
+    for key in OMS_HEALTH_PAYLOAD_KEYS:
+        raw = provided_checks.get(key)
+        payload = _unwrap_oms_health_payload(raw)
+        if payload is not None:
+            return payload, key
+    return None, ""
+
+
+def _unwrap_oms_health_payload(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, Mapping):
+        return None
+    for nested_key in ("payload", "raw_oms_health", "oms_health_payload", "health", "body"):
+        nested = raw.get(nested_key)
+        if isinstance(nested, Mapping):
+            return dict(nested)
+    if any(
+        key in raw
+        for key in (
+            "status",
+            "stop_protection_status",
+            "idempotency_status",
+            "idempotency_health",
+            "reservation_reconcile_status",
+        )
+    ):
+        return dict(raw)
+    return None
+
+
+def _required_nonnegative_int(payload: Mapping[str, Any], field: str) -> int | None:
+    if field not in payload or payload.get(field) is None:
+        return None
+    try:
+        value = int(payload[field])
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _required_nonnegative_float(payload: Mapping[str, Any], field: str) -> float | None:
+    if field not in payload or payload.get(field) is None:
+        return None
+    try:
+        value = float(payload[field])
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0.0 else None
+
+
+def _stop_health_failure_detail(
+    *,
+    source: str,
+    stop_status: str,
+    missing_fields: Sequence[str],
+    invalid_fields: Sequence[str],
+    unprotected_count: int | None,
+    active_stop_count: int | None,
+    stale_price_count: int | None,
+    watcher_age: float | None,
+    watcher_age_missing: bool,
+    watcher_age_stale: bool,
+) -> str:
+    reasons: list[str] = []
+    if stop_status not in _READY_HEALTH_STATES:
+        reasons.append(f"stop_protection_status={stop_status or 'missing'}")
+    if missing_fields:
+        reasons.append(f"missing fields={','.join(missing_fields)}")
+    if invalid_fields:
+        reasons.append(f"invalid fields={','.join(invalid_fields)}")
+    if unprotected_count not in {0, None}:
+        reasons.append(f"unprotected_positions_count={unprotected_count}")
+    if stale_price_count not in {0, None}:
+        reasons.append(f"stop_watcher_price_stale_count={stale_price_count}")
+    if watcher_age_missing:
+        reasons.append("active stops require stop_watcher_last_check_age_sec")
+    if watcher_age_stale:
+        reasons.append(f"stop_watcher_last_check_age_sec={watcher_age}")
+    if not reasons:
+        reasons.append("durable stop health is incomplete")
+    return f"OMS durable stop health failed in evidence '{source}': {'; '.join(reasons)}"
 
 
 def _build_runtime_kis_resource_plan(

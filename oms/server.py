@@ -4,8 +4,10 @@ Exposes OMSCore over HTTP for multi-strategy deployment.
 """
 
 from __future__ import annotations
+import inspect
 import os
 import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -18,12 +20,16 @@ from loguru import logger
 from kis_core import KoreaInvestEnv, KoreaInvestAPI, build_kis_config_from_env
 from .config_loader import (
     build_risk_config as _build_risk_config,
+    configured_active_strategy_ids,
     effective_risk_config_payload,
+    load_oms_sector_map,
     load_oms_config_with_source,
+    missing_strategy_budgets,
+    stable_mapping_hash,
 )
 from .oms_core import OMSCore
 from .intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, TimeHorizon, IntentConstraints, RiskPayload
-from .state import StrategyAllocation
+from .state import StrategyAllocation, WorkingOrder
 from .risk import RiskConfig
 from .persistence import OMSPersistence
 try:
@@ -101,6 +107,8 @@ class RiskPayloadModel(BaseModel):
 
 
 class IntentRequest(BaseModel):
+    intent_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
     intent_type: str
     strategy_id: str
     symbol: str
@@ -136,6 +144,28 @@ class AllocationInfo(BaseModel):
     time_stop_ts: Optional[float] = None
 
 
+class WorkingOrderInfo(BaseModel):
+    order_id: str
+    symbol: str
+    side: str
+    qty: int
+    filled_qty: int
+    remaining_qty: int
+    price: float
+    order_type: str
+    status: str
+    strategy_id: str
+    intent_id: Optional[str] = None
+    idempotency_key: Optional[str] = None
+    submit_ref: Optional[str] = None
+    risk_stop_px: Optional[float] = None
+    risk_hard_stop_px: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    submit_ts: Optional[float] = None
+    cancel_after_sec: Optional[float] = None
+
+
 class PositionInfo(BaseModel):
     symbol: str
     real_qty: int
@@ -146,6 +176,7 @@ class PositionInfo(BaseModel):
     entry_lock_until: Optional[float] = None
     frozen: bool
     working_order_count: int
+    working_orders: List[WorkingOrderInfo] = Field(default_factory=list)
 
 
 class AccountState(BaseModel):
@@ -167,6 +198,13 @@ class HealthResponse(BaseModel):
     kis_circuit_breaker: Optional[str] = None
     recon_status: Optional[str] = None
     strategies: Optional[Dict[str, Any]] = None
+    stop_protection_status: str = "unknown"
+    unprotected_positions_count: int = 0
+    active_stop_count: int = 0
+    triggered_stop_count: int = 0
+    stop_watcher_last_check_age_sec: Optional[float] = None
+    stop_watcher_price_stale_count: int = 0
+    idempotency_status: str = "unknown"
 
 
 class RegimeRequest(BaseModel):
@@ -176,6 +214,12 @@ class RegimeRequest(BaseModel):
 class VICooldownRequest(BaseModel):
     symbol: str
     duration_sec: int
+
+
+class IdempotencyResolveRequest(BaseModel):
+    status: str = "DEFERRED"
+    reason: str
+    order_id: Optional[str] = None
 
 
 class StrategyHeartbeatRequest(BaseModel):
@@ -231,6 +275,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No OMS config file found, using defaults")
     risk_config = build_risk_config(oms_config)
+    active_strategy_ids = configured_active_strategy_ids(oms_config)
 
     if oms_config.get("strategy_budgets"):
         logger.info(f"Loaded strategy budgets: {list(oms_config['strategy_budgets'].keys())}")
@@ -238,12 +283,27 @@ async def lifespan(app: FastAPI):
     # Load KIS credentials from environment
     kis_config = build_kis_config_from_env()
     logger.info(f"Trading mode: {'PAPER' if kis_config['is_paper_trading'] else 'LIVE'}")
+    missing_budgets = missing_strategy_budgets(risk_config, active_strategy_ids)
+    if missing_budgets and os.environ.get("OMS_ALLOW_MISSING_STRATEGY_BUDGETS", "").lower() not in {"1", "true", "yes"}:
+        raise RuntimeError(
+            "OMS startup blocked: active strategies missing strategy_budgets: "
+            + ", ".join(missing_budgets)
+        )
+    sector_map, sector_map_source = load_oms_sector_map(oms_config, config_source=oms_config_source)
+    if not sector_map and os.environ.get("OMS_ALLOW_MISSING_SECTOR_MAP", "").lower() not in {"1", "true", "yes"}:
+        raise RuntimeError("OMS startup blocked: approved sector map is missing or empty")
+    if sector_map_source is not None:
+        logger.info(f"Loaded OMS sector map from {sector_map_source} ({len(sector_map)} symbols)")
+    else:
+        logger.info(f"Loaded OMS sector map from inline config ({len(sector_map)} symbols)")
     env = KoreaInvestEnv(kis_config)
     api = KoreaInvestAPI(env)
 
-    # Initialize persistence (optional - will degrade gracefully if Postgres unavailable)
+    # Initialize persistence. Paper/live requires durable state unless explicitly
+    # overridden for emergency operator workflows.
     oms_id = os.environ.get("OMS_ID", "primary")
     persistence = OMSPersistence(oms_id=oms_id)
+    require_persistence = os.environ.get("OMS_ALLOW_NO_DATABASE", "").lower() not in {"1", "true", "yes"}
     logger.info(f"OMS instance: {oms_id}")
 
     assistant_event_dir = os.environ.get("ASSISTANT_EVENT_DATA_DIR", "instrumentation/data")
@@ -253,16 +313,36 @@ async def lifespan(app: FastAPI):
         try:
             event_emitter = OMSEventEmitter(assistant_event_dir, lineage=lineage)
             if DeploymentLogger is not None:
+                risk_snapshot = {
+                    **effective_risk_config_payload(oms_config),
+                    "sector_map_hash": stable_mapping_hash(sector_map),
+                    "sector_map_size": len(sector_map),
+                    "sector_map_source": str(sector_map_source or ""),
+                    "stop_protection_modes_supported": ["OMS_WATCHER", "SYNTHETIC_ONLY"],
+                    "default_stop_protection_mode": str(
+                        (oms_config.get("risk") or {}).get("default_stop_protection_mode", "oms_watcher")
+                    ),
+                    "broker_native_stop_verified_at": None,
+                    "idempotency_uniqueness_scope": "global_idempotency_key",
+                    "reservation_rehydration_mode": "position_working_orders",
+                }
                 snapshot_event = DeploymentLogger(assistant_event_dir, lineage=lineage).emit_config_snapshot(
-                    risk_config=effective_risk_config_payload(oms_config),
-                    strategy_registry={"strategy_ids": ["KALCB", "OLR", "PCIM"], "producer": "oms_server"},
-                    source_files=[oms_config_source] if oms_config_source is not None else (),
+                    risk_config=risk_snapshot,
+                    strategy_registry={"strategy_ids": list(active_strategy_ids), "producer": "oms_server"},
+                    source_files=[path for path in (oms_config_source, sector_map_source) if path is not None],
                     environment={"OMS_ID": oms_id, "OMS_CONFIG_PATH": os.environ.get("OMS_CONFIG_PATH", "")},
                 )
                 _apply_config_snapshot_lineage(event_emitter, snapshot_event)
         except Exception:
             event_emitter = None
-    _oms = OMSCore(api, risk_config=risk_config, persistence=persistence, event_emitter=event_emitter)
+    _oms = OMSCore(
+        api,
+        risk_config=risk_config,
+        persistence=persistence,
+        event_emitter=event_emitter,
+        sector_map=sector_map,
+        require_persistence=require_persistence,
+    )
     await _oms.start()
 
     logger.info("OMS Server ready")
@@ -333,6 +413,14 @@ def _lineage_authoritative_overrides(payload: Mapping[str, Any]) -> dict[str, An
 
 app = FastAPI(title="OMS", version="1.0.0", lifespan=lifespan)
 
+_REQUIRED_STOP_HEALTH_FIELDS = (
+    "unprotected_positions_count",
+    "active_stop_count",
+    "triggered_stop_count",
+    "stop_watcher_price_stale_count",
+)
+_MAX_STOP_WATCHER_AGE_SEC = 60.0
+
 
 # ---------------------------------------------------------------------------
 # Health
@@ -378,6 +466,95 @@ async def health():
         if overall_status == "ok":
             overall_status = "warn"
 
+    idempotency_status = "ok"
+    if getattr(oms, "require_persistence", False):
+        connected = bool(
+            oms.persistence is not None
+            and callable(getattr(oms.persistence, "_is_connected", None))
+            and oms.persistence._is_connected()
+        )
+        if not connected:
+            idempotency_status = "error"
+            overall_status = "error"
+            recon_status = f"{recon_status},idempotency_error"
+        elif getattr(oms.persistence, "consecutive_failures", 0) >= 5:
+            idempotency_status = "degraded"
+            if overall_status == "ok":
+                overall_status = "degraded"
+        else:
+            health_getter = getattr(oms.persistence, "idempotency_health", None)
+            if callable(health_getter):
+                idem_health = health_getter()
+                if inspect.isawaitable(idem_health):
+                    idem_health = await idem_health
+                idempotency_status = str((idem_health or {}).get("status") or "unknown").lower().strip()
+                if idempotency_status == "error":
+                    overall_status = "error"
+                    recon_status = f"{recon_status},idempotency_error"
+                elif idempotency_status != "ok":
+                    if overall_status == "ok":
+                        overall_status = "degraded"
+                    recon_status = f"{recon_status},idempotency_{idempotency_status or 'unknown'}"
+
+    stop_health = oms.stop_health_payload() if hasattr(oms, "stop_health_payload") else {}
+    stop_status = str(stop_health.get("stop_protection_status") or "unknown")
+    missing_stop_fields = [
+        field
+        for field in _REQUIRED_STOP_HEALTH_FIELDS
+        if field not in stop_health or stop_health.get(field) is None
+    ]
+    stop_counts = {
+        field: _health_int_or_none(stop_health, field)
+        for field in _REQUIRED_STOP_HEALTH_FIELDS
+        if field not in missing_stop_fields
+    }
+    invalid_stop_fields = [field for field, value in stop_counts.items() if value is None]
+    unprotected_positions_count = stop_counts.get("unprotected_positions_count") or 0
+    active_stop_count = stop_counts.get("active_stop_count") or 0
+    triggered_stop_count = stop_counts.get("triggered_stop_count") or 0
+    stop_watcher_price_stale_count = stop_counts.get("stop_watcher_price_stale_count") or 0
+    stop_watcher_last_check_age_sec = stop_health.get("stop_watcher_last_check_age_sec")
+    watcher_age_present = stop_watcher_last_check_age_sec is not None
+    watcher_age = _health_float_or_none(stop_health, "stop_watcher_last_check_age_sec")
+    watcher_age_invalid = watcher_age_present and watcher_age is None
+    active_stop_lacks_watcher_check = active_stop_count > 0 and watcher_age is None
+    active_stop_stale_watcher_check = (
+        active_stop_count > 0
+        and watcher_age is not None
+        and watcher_age > _MAX_STOP_WATCHER_AGE_SEC
+    )
+    if missing_stop_fields:
+        stop_status = "error"
+        overall_status = "error"
+        recon_status = f"{recon_status},stop_health_missing({','.join(missing_stop_fields)})"
+    if invalid_stop_fields or watcher_age_invalid:
+        invalid_fields = list(invalid_stop_fields)
+        if watcher_age_invalid:
+            invalid_fields.append("stop_watcher_last_check_age_sec")
+        stop_status = "error"
+        overall_status = "error"
+        recon_status = f"{recon_status},stop_health_invalid({','.join(invalid_fields)})"
+    if active_stop_lacks_watcher_check:
+        stop_status = "error"
+        overall_status = "error"
+        recon_status = f"{recon_status},stop_watcher_missing"
+    elif active_stop_stale_watcher_check:
+        stop_status = "degraded"
+        if overall_status == "ok":
+            overall_status = "degraded"
+        recon_status = f"{recon_status},stop_watcher_stale"
+    if stop_watcher_price_stale_count > 0:
+        if stop_status != "error":
+            stop_status = "degraded"
+        if overall_status in {"ok", "warn"}:
+            overall_status = "degraded"
+        recon_status = f"{recon_status},stop_price_stale({stop_watcher_price_stale_count})"
+    if stop_status == "error":
+        overall_status = "error"
+        recon_status = f"{recon_status},stop_error"
+    elif stop_status == "degraded" and overall_status == "ok":
+        overall_status = "degraded"
+
     return HealthResponse(
         status=overall_status,
         uptime_sec=time.time() - _start_time,
@@ -385,7 +562,35 @@ async def health():
         kis_circuit_breaker=cb_state,
         recon_status=recon_status,
         strategies=strategies if strategies else None,
+        stop_protection_status=stop_status,
+        unprotected_positions_count=unprotected_positions_count,
+        active_stop_count=active_stop_count,
+        triggered_stop_count=triggered_stop_count,
+        stop_watcher_last_check_age_sec=watcher_age,
+        stop_watcher_price_stale_count=stop_watcher_price_stale_count,
+        idempotency_status=idempotency_status,
     )
+
+
+def _health_int(payload: Mapping[str, Any], field: str) -> int:
+    value = _health_int_or_none(payload, field)
+    return value if value is not None else 0
+
+
+def _health_int_or_none(payload: Mapping[str, Any], field: str) -> Optional[int]:
+    try:
+        value = int(payload.get(field))
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _health_float_or_none(payload: Mapping[str, Any], field: str) -> Optional[float]:
+    try:
+        value = float(payload.get(field))
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0.0 else None
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +626,8 @@ async def submit_intent(req: IntentRequest):
         ),
         signal_hash=req.signal_hash,
         metadata=dict(req.metadata or {}),
+        intent_id=req.intent_id or str(uuid.uuid4()),
+        idempotency_key=req.idempotency_key,
     )
 
     result = await oms.submit_intent(intent)
@@ -454,11 +661,38 @@ def _alloc_to_model(alloc: StrategyAllocation) -> AllocationInfo:
     )
 
 
+def _working_order_to_model(order: WorkingOrder) -> WorkingOrderInfo:
+    filled_qty = max(int(order.filled_qty or 0), 0)
+    qty = max(int(order.qty or 0), 0)
+    return WorkingOrderInfo(
+        order_id=order.order_id,
+        symbol=order.symbol,
+        side=order.side,
+        qty=qty,
+        filled_qty=filled_qty,
+        remaining_qty=max(qty - filled_qty, 0),
+        price=float(order.price or 0.0),
+        order_type=order.order_type,
+        status=order.status.name,
+        strategy_id=order.strategy_id,
+        intent_id=order.intent_id,
+        idempotency_key=order.idempotency_key,
+        submit_ref=order.submit_ref,
+        risk_stop_px=order.risk_stop_px,
+        risk_hard_stop_px=order.risk_hard_stop_px,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        submit_ts=order.submit_ts,
+        cancel_after_sec=order.cancel_after_sec,
+    )
+
+
 @app.get("/api/v1/positions", response_model=Dict[str, PositionInfo])
 async def get_positions():
     oms = get_oms()
     result = {}
     for symbol, pos in oms.state.get_all_positions().items():
+        working_orders = [_working_order_to_model(order) for order in pos.working_orders]
         result[symbol] = PositionInfo(
             symbol=pos.symbol,
             real_qty=pos.real_qty,
@@ -468,7 +702,8 @@ async def get_positions():
             entry_lock_owner=pos.entry_lock_owner,
             entry_lock_until=pos.entry_lock_until,
             frozen=pos.frozen,
-            working_order_count=len(pos.working_orders),
+            working_order_count=len(working_orders),
+            working_orders=working_orders,
         )
     return result
 
@@ -477,6 +712,7 @@ async def get_positions():
 async def get_position(symbol: str):
     oms = get_oms()
     pos = oms.state.get_position(symbol)
+    working_orders = [_working_order_to_model(order) for order in pos.working_orders]
     return PositionInfo(
         symbol=pos.symbol,
         real_qty=pos.real_qty,
@@ -486,7 +722,61 @@ async def get_position(symbol: str):
         entry_lock_owner=pos.entry_lock_owner,
         entry_lock_until=pos.entry_lock_until,
         frozen=pos.frozen,
-        working_order_count=len(pos.working_orders),
+        working_order_count=len(working_orders),
+        working_orders=working_orders,
+    )
+
+
+@app.get("/api/v1/working-orders", response_model=List[WorkingOrderInfo])
+async def get_working_orders():
+    oms = get_oms()
+    return [_working_order_to_model(order) for order in oms.state.get_working_orders()]
+
+
+@app.get("/api/v1/idempotency/pending")
+async def get_pending_idempotency(stale_after_sec: float = 60.0):
+    oms = get_oms()
+    if not oms.persistence:
+        return []
+    lister = getattr(oms.persistence, "list_pending_idempotency", None)
+    if not callable(lister):
+        return []
+    return await lister(stale_after_sec=stale_after_sec)
+
+
+@app.post("/api/v1/idempotency/{key}/resolve", response_model=IntentResultModel)
+async def resolve_idempotency(key: str, req: IdempotencyResolveRequest):
+    oms = get_oms()
+    if not req.reason.strip():
+        raise HTTPException(status_code=400, detail="resolution reason is required")
+    if not oms.persistence:
+        raise HTTPException(status_code=503, detail="persistence unavailable")
+    try:
+        status = IntentStatus[req.status.upper()]
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"unsupported status {req.status!r}")
+    resolver = getattr(oms.persistence, "resolve_idempotency", None)
+    if not callable(resolver):
+        raise HTTPException(status_code=503, detail="idempotency resolver unavailable")
+    result = await resolver(key, status=status, reason=req.reason, order_id=req.order_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"idempotency key not found: {key}")
+    _emit_operator_event(
+        oms,
+        "IDEMPOTENCY_RESOLVE",
+        payload={"idempotency_key": key, "status": status.name, "reason": req.reason, "order_id": req.order_id},
+    )
+    return IntentResultModel(
+        intent_id=result.intent_id,
+        status=result.status.name,
+        message=result.message,
+        modified_qty=result.modified_qty,
+        order_id=result.order_id,
+        cooldown_until=result.cooldown_until,
+        blocking_positions=result.blocking_positions,
+        resource_conflict_type=result.resource_conflict_type,
+        oms_received_at=result.oms_received_at,
+        order_submitted_at=result.order_submitted_at,
     )
 
 
