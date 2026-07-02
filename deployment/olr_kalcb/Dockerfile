@@ -10,6 +10,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY deployment/ /app/deployment/
+COPY trading_assistant_backtest/contracts/ /app/trading_assistant_backtest/contracts/
 COPY strategy_common/ /app/strategy_common/
 COPY strategy_kalcb/ /app/strategy_kalcb/
 COPY strategy_olr/ /app/strategy_olr/

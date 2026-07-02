@@ -151,10 +151,30 @@ OLR_KALCB_RESTART_RUNTIME_AFTER_AFTERNOON=true
 | `config/optimization/kalcb.yaml`, `config/optimization/olr.yaml` | Optimization search configs |
 | `config/optimization/portfolio_synergy.yaml` | Joint portfolio search |
 | `config/oms_config.yaml` | Risk limits, exposure caps, reconciliation |
+| `trading_assistant_backtest/contracts/k_stock_olr_kalcb/strategy_plugin_contract.json` | Assistant bridge contract for OLR/KALCB parameters, event joins, and deployment evidence |
 | `config/conservative.yaml` | Tighter thresholds (`CONSERVATIVE_MODE=true`) |
 | `config/universe_103.yaml` | Base universe definition |
 
 Replacing the approved deployment universe should be a reviewed config change, not an ad-hoc runtime override.
+
+### Assistant bridge contract
+
+Refresh the checked-in OLR/KALCB assistant contract after changing strategy config fields, OMS risk fields, the approved universe, sector map, or portfolio policy:
+
+```bash
+python scripts/generate_olr_kalcb_bridge_contract.py
+```
+
+For paper/live approval runs, emit runtime deployment metadata against that contract:
+
+```bash
+python scripts/run_olr_kalcb_runtime_session.py watch-bars \
+  --trade-date 2026-05-28 \
+  --mode paper \
+  --deployment-metadata-json data/paper_live/olr_kalcb/2026-05-28/deployment_metadata.json
+```
+
+The metadata writer records the strategy plugin contract hash, clean source-control provenance, strategy/config/resource-plan hashes, staged artifact hashes, KIS resource-plan hash, and runtime instance details.
 
 ## Daily Operations
 
