@@ -1,0 +1,3436 @@
+{
+  "current_phase": 7,
+  "completed_phases": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cumulative_mutations": {
+    "blockers.block_olr_after_kalcb_failed_followthrough": false,
+    "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+    "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+    "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+    "blockers.kalcb_rank6_10_half_size_confirmed": true,
+    "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+    "blockers.sector_failure_haircut_mult": 1.0,
+    "kalcb.confirmed_size_mult": 1.25,
+    "kalcb.size_mult": 1.06,
+    "olr.confirmed_size_mult": 1.25,
+    "olr.size_mult": 0.94,
+    "portfolio.agreement_boost_mult": 1.2,
+    "portfolio.daily_loss_stop_r": 0.0,
+    "portfolio.disagreement_haircut_mult": 1.0,
+    "portfolio.dynamic_drawdown_tiers": [
+      [
+        0.06,
+        1.0
+      ],
+      [
+        0.09,
+        0.8
+      ],
+      [
+        0.12,
+        0.55
+      ],
+      [
+        0.15,
+        0.0
+      ]
+    ],
+    "portfolio.frequency.enable_kalcb_secondary": true,
+    "portfolio.frequency.enable_olr_shadow_slot6": true,
+    "portfolio.max_daily_gross": 2.1,
+    "portfolio.max_sector_gross": 9.99,
+    "portfolio.reference_risk_pct": 0.006,
+    "portfolio.risk_stance": "controlled_aggressive",
+    "portfolio.same_symbol_policy": "allow",
+    "portfolio.strategy_r_share_cap": 0.72,
+    "portfolio.use_dynamic_drawdown_tiers": true,
+    "portfolio.weekly_loss_stop_r": 0.0,
+    "source.holdout_excluded": true,
+    "source.kalcb.round": 3,
+    "source.olr.round": 5
+  },
+  "phase_results": {
+    "1": {
+      "focus": "Latest KALCB/OLR artifact baseline and accounting integrity",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 1.0,
+        "blockers.kalcb_rank6_10_half_size_confirmed": false,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.0,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 1.0,
+        "portfolio.agreement_boost_mult": 1.0,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 9.99,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 1.0,
+        "blockers.kalcb_rank6_10_half_size_confirmed": false,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 9.99,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 94.70309921889492,
+      "final_score": 97.3455481756711,
+      "kept_features": [
+        "p1_light_agreement_boost",
+        "p1_kalcb_olr_55_45_risk"
+      ],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 4,
+          "best_name": "p1_light_agreement_boost",
+          "best_score": 96.85893623283229,
+          "best_delta_pct": 2.2764165393937237,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 2,
+          "candidates_tested": 3,
+          "best_name": "p1_kalcb_olr_55_45_risk",
+          "best_score": 97.3455481756711,
+          "best_delta_pct": 0.502392408759347,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 3,
+          "candidates_tested": 2,
+          "best_name": "p1_equal_risk_baseline",
+          "best_score": 97.3455481756711,
+          "best_delta_pct": 0.0,
+          "kept": false,
+          "rejected_count": 0
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 437.0,
+        "trades": 437.0,
+        "eligible_trade_count": 437.0,
+        "entries_blocked_by_portfolio": 0.0,
+        "block_rate": 0.0,
+        "positive_alpha_block_rate": 0.0,
+        "blocked_positive_fraction": 0.0,
+        "accepted_avg_r": 1.3782829140807802,
+        "blocked_avg_r": 1.27828291408078,
+        "block_selectivity_edge_r": 0.10000000000000009,
+        "total_r": 636.0339072105356,
+        "risk_normalized_total_r": 0.9217882713196168,
+        "net_profit": 349818648.9657947,
+        "net_return_pct": 3.4981864896579467,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 3.4981864896579467,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.033684786559103175,
+        "official_mtm_max_drawdown_pct": 0.033684786559103175,
+        "profit_factor": 4.531514116258975,
+        "win_rate": 0.620137299771167,
+        "trades_per_21_sessions": 42.29032258064516,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 205.0,
+        "olr_trades": 232.0,
+        "kalcb_source_trade_capture": 1.0,
+        "olr_source_trade_capture": 1.0,
+        "min_strategy_trade_capture": 1.0,
+        "max_strategy_trade_share": 0.5308924485125858,
+        "max_strategy_r_share": 0.6606888071027501,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {},
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 3.4981864896579467,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 3.4981864896579467,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 97.3455481756711,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 0.9314679779370117,
+        "score_risk_normalized_total_r": 1.04748667195411,
+        "score_trade_frequency": 1.057258064516129,
+        "score_block_selectivity": 0.6071428571428573,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 4,
+      "accepted_count": 2,
+      "elapsed_seconds": 0.1980433464050293,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 1,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 3.4981864896579467,
+            "pct_of_target": 79.50423840131697
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 42.29032258064516,
+            "pct_of_target": 105.7258064516129
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.531514116258975,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.10000000000000009,
+            "pct_of_target": 40.000000000000036
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.0,
+            "pct_of_target": 0.0
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.033684786559103175,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 1.0,
+            "pct_of_target": 151.5151515151515
+          }
+        },
+        "strengths": [
+          "trades_per_21_sessions: 42.2903 (106% of 40.0000)",
+          "profit_factor: 4.5315 (200% of 2.2000)",
+          "max_drawdown_pct: 0.0337 (200% of 0.1400)",
+          "min_strategy_trade_capture: 1.0000 (152% of 0.6600)"
+        ],
+        "weaknesses": [
+          "block_selectivity_edge_r: 0.1000 (40% of 0.2500)",
+          "positive_alpha_block_rate: 0.0000 (0% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 1 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + trades_per_21_sessions: 42.2903 (106% of 40.0000)\n  + profit_factor: 4.5315 (200% of 2.2000)\n  + max_drawdown_pct: 0.0337 (200% of 0.1400)\n  + min_strategy_trade_capture: 1.0000 (152% of 0.6600)\n\nWeaknesses:\n  - block_selectivity_edge_r: 0.1000 (40% of 0.2500)\n  - positive_alpha_block_rate: 0.0000 (0% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p1_equal_risk_baseline\n  block reasons: {}\n\nGoal Progress:\n  official_mtm_net_return_pct: 3.4982 / 4.4000 (80%)\n  trades_per_21_sessions: 42.2903 / 40.0000 (106%)\n  profit_factor: 4.5315 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.1000 / 0.2500 (40%)\n  positive_alpha_block_rate: 0.0000 / 0.1800 (0%)\n  max_drawdown_pct: 0.0337 / 0.1400 (200%)\n  min_strategy_trade_capture: 1.0000 / 0.6600 (152%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {},
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p1_equal_risk_baseline"
+        }
+      },
+      "new_mutations": {
+        "kalcb.size_mult": 1.06,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08
+      },
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    },
+    "2": {
+      "focus": "Neutral capacity and low-friction portfolio caps",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 1.0,
+        "blockers.kalcb_rank6_10_half_size_confirmed": false,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 9.99,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 1.0,
+        "blockers.kalcb_rank6_10_half_size_confirmed": false,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 97.3455481756711,
+      "final_score": 101.82728895413966,
+      "kept_features": [
+        "p2_gross_cap_2p10"
+      ],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 8,
+          "best_name": "p2_gross_cap_2p10",
+          "best_score": 101.82728895413966,
+          "best_delta_pct": 4.6039504245029805,
+          "kept": true,
+          "rejected_count": 2
+        },
+        {
+          "round_num": 2,
+          "candidates_tested": 7,
+          "best_name": "p2_weekly_loss_8r",
+          "best_score": 101.82728895413966,
+          "best_delta_pct": 0.0,
+          "kept": false,
+          "rejected_count": 3
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 417.0,
+        "trades": 417.0,
+        "eligible_trade_count": 437.0,
+        "entries_blocked_by_portfolio": 20.0,
+        "block_rate": 0.04576659038901602,
+        "positive_alpha_block_rate": 0.029748283752860413,
+        "blocked_positive_fraction": 0.65,
+        "accepted_avg_r": 1.4024294478379289,
+        "blocked_avg_r": 0.8748276852442265,
+        "block_selectivity_edge_r": 0.5276017625937024,
+        "total_r": 617.7736517039175,
+        "risk_normalized_total_r": 0.8953241329042283,
+        "net_profit": 339775508.43715477,
+        "net_return_pct": 3.3977550843715476,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 3.3977550843715476,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.033684786559103175,
+        "official_mtm_max_drawdown_pct": 0.033684786559103175,
+        "profit_factor": 4.562945312529046,
+        "win_rate": 0.6187050359712231,
+        "trades_per_21_sessions": 40.354838709677416,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 195.0,
+        "olr_trades": 222.0,
+        "kalcb_source_trade_capture": 0.9512195121951219,
+        "olr_source_trade_capture": 0.9568965517241379,
+        "min_strategy_trade_capture": 0.9512195121951219,
+        "max_strategy_trade_share": 0.5323741007194245,
+        "max_strategy_r_share": 0.6674671553201998,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {
+          "daily_gross_cap": 20
+        },
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 3.3977550843715476,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 3.3977550843715476,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 101.82728895413966,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 0.9047259393750133,
+        "score_risk_normalized_total_r": 1.0174137873911684,
+        "score_trade_frequency": 1.0088709677419354,
+        "score_block_selectivity": 1.035629290617849,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 8,
+      "accepted_count": 1,
+      "elapsed_seconds": 0.3510000705718994,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 2,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 3.3977550843715476,
+            "pct_of_target": 77.22170646298972
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 40.354838709677416,
+            "pct_of_target": 100.88709677419354
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.562945312529046,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.5276017625937024,
+            "pct_of_target": 200.0
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.029748283752860413,
+            "pct_of_target": 16.526824307144675
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.033684786559103175,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 0.9512195121951219,
+            "pct_of_target": 144.12416851441242
+          }
+        },
+        "strengths": [
+          "trades_per_21_sessions: 40.3548 (101% of 40.0000)",
+          "profit_factor: 4.5629 (200% of 2.2000)",
+          "block_selectivity_edge_r: 0.5276 (200% of 0.2500)",
+          "max_drawdown_pct: 0.0337 (200% of 0.1400)",
+          "min_strategy_trade_capture: 0.9512 (144% of 0.6600)"
+        ],
+        "weaknesses": [
+          "positive_alpha_block_rate: 0.0297 (17% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 2 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + trades_per_21_sessions: 40.3548 (101% of 40.0000)\n  + profit_factor: 4.5629 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.5276 (200% of 0.2500)\n  + max_drawdown_pct: 0.0337 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.9512 (144% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0297 (17% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p2_weekly_loss_8r\n  block reasons: {\"daily_gross_cap\": 20}\n\nGoal Progress:\n  official_mtm_net_return_pct: 3.3978 / 4.4000 (77%)\n  trades_per_21_sessions: 40.3548 / 40.0000 (101%)\n  profit_factor: 4.5629 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.5276 / 0.2500 (200%)\n  positive_alpha_block_rate: 0.0297 / 0.1800 (17%)\n  max_drawdown_pct: 0.0337 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.9512 / 0.6600 (144%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {
+            "daily_gross_cap": 20
+          },
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p2_weekly_loss_8r"
+        }
+      },
+      "new_mutations": {
+        "portfolio.max_daily_gross": 2.1
+      },
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    },
+    "3": {
+      "focus": "Selective blockers that should block weaker trades first",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 1.0,
+        "blockers.kalcb_rank6_10_half_size_confirmed": false,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 101.82728895413966,
+      "final_score": 102.08435008972239,
+      "kept_features": [
+        "p3_kalcb_rank6_10_confirmed_half_size",
+        "p3_olr_haircut_negative_path_65"
+      ],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 8,
+          "best_name": "p3_kalcb_rank6_10_confirmed_half_size",
+          "best_score": 101.96067693538677,
+          "best_delta_pct": 0.13099433621097925,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 2,
+          "candidates_tested": 7,
+          "best_name": "p3_olr_haircut_negative_path_65",
+          "best_score": 102.08435008972239,
+          "best_delta_pct": 0.12129495218435296,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 3,
+          "candidates_tested": 6,
+          "best_name": "p3_olr_haircut_negative_path_50",
+          "best_score": 102.07347184832484,
+          "best_delta_pct": -0.010656130335343341,
+          "kept": false,
+          "rejected_count": 0
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 418.0,
+        "trades": 418.0,
+        "eligible_trade_count": 437.0,
+        "entries_blocked_by_portfolio": 19.0,
+        "block_rate": 0.043478260869565216,
+        "positive_alpha_block_rate": 0.02745995423340961,
+        "blocked_positive_fraction": 0.631578947368421,
+        "accepted_avg_r": 1.3999895331059669,
+        "blocked_avg_r": 0.9007372955266727,
+        "block_selectivity_edge_r": 0.49925223757929416,
+        "total_r": 619.8894776560883,
+        "risk_normalized_total_r": 0.8983905473276642,
+        "net_profit": 340939212.71084857,
+        "net_return_pct": 3.4093921271084855,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 3.4093921271084855,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.033758613975323475,
+        "official_mtm_max_drawdown_pct": 0.033758613975323475,
+        "profit_factor": 4.724784740009121,
+        "win_rate": 0.6196172248803827,
+        "trades_per_21_sessions": 40.45161290322581,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 195.0,
+        "olr_trades": 223.0,
+        "kalcb_source_trade_capture": 0.9512195121951219,
+        "olr_source_trade_capture": 0.9612068965517241,
+        "min_strategy_trade_capture": 0.9512195121951219,
+        "max_strategy_trade_share": 0.5334928229665071,
+        "max_strategy_r_share": 0.6686878972922079,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {
+          "daily_gross_cap": 19
+        },
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 3.4093921271084855,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 3.4093921271084855,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 102.08435008972239,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 0.9078245542428565,
+        "score_risk_normalized_total_r": 1.020898349235982,
+        "score_trade_frequency": 1.011290322580645,
+        "score_block_selectivity": 1.041350114416476,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 8,
+      "accepted_count": 2,
+      "elapsed_seconds": 0.48894762992858887,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 3,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 3.4093921271084855,
+            "pct_of_target": 77.48618470701103
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 40.45161290322581,
+            "pct_of_target": 101.12903225806451
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.724784740009121,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.49925223757929416,
+            "pct_of_target": 199.70089503171766
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.02745995423340961,
+            "pct_of_target": 15.255530129672007
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.033758613975323475,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 0.9512195121951219,
+            "pct_of_target": 144.12416851441242
+          }
+        },
+        "strengths": [
+          "trades_per_21_sessions: 40.4516 (101% of 40.0000)",
+          "profit_factor: 4.7248 (200% of 2.2000)",
+          "block_selectivity_edge_r: 0.4993 (200% of 0.2500)",
+          "max_drawdown_pct: 0.0338 (200% of 0.1400)",
+          "min_strategy_trade_capture: 0.9512 (144% of 0.6600)"
+        ],
+        "weaknesses": [
+          "positive_alpha_block_rate: 0.0275 (15% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 3 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + trades_per_21_sessions: 40.4516 (101% of 40.0000)\n  + profit_factor: 4.7248 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.4993 (200% of 0.2500)\n  + max_drawdown_pct: 0.0338 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.9512 (144% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0275 (15% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p3_olr_haircut_negative_path_50\n  block reasons: {\"daily_gross_cap\": 19}\n\nGoal Progress:\n  official_mtm_net_return_pct: 3.4094 / 4.4000 (77%)\n  trades_per_21_sessions: 40.4516 / 40.0000 (101%)\n  profit_factor: 4.7248 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.4993 / 0.2500 (200%)\n  positive_alpha_block_rate: 0.0275 / 0.1800 (15%)\n  max_drawdown_pct: 0.0338 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.9512 / 0.6600 (144%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {
+            "daily_gross_cap": 19
+          },
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p3_olr_haircut_negative_path_50"
+        }
+      },
+      "new_mutations": {
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true
+      },
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    },
+    "4": {
+      "focus": "Causal cross-strategy confirmation and sizing overlays",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.0,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.08,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.12,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.18,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 102.08435008972239,
+      "final_score": 104.35367181078121,
+      "kept_features": [
+        "p4_confirmed_olr_size_112",
+        "p4_agreement_boost_118",
+        "p4_olr_boost_after_kalcb_strong_eod_115"
+      ],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 7,
+          "best_name": "p4_confirmed_olr_size_112",
+          "best_score": 102.71711383219841,
+          "best_delta_pct": 0.6198440230259356,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 2,
+          "candidates_tested": 6,
+          "best_name": "p4_agreement_boost_118",
+          "best_score": 103.86571555081885,
+          "best_delta_pct": 1.1182184504296226,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 3,
+          "candidates_tested": 5,
+          "best_name": "p4_olr_boost_after_kalcb_strong_eod_115",
+          "best_score": 104.35367181078121,
+          "best_delta_pct": 0.46979530962131105,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 4,
+          "candidates_tested": 4,
+          "best_name": "p4_disagreement_haircut_70",
+          "best_score": 104.33179795491287,
+          "best_delta_pct": -0.020961270924896854,
+          "kept": false,
+          "rejected_count": 0
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 406.0,
+        "trades": 406.0,
+        "eligible_trade_count": 437.0,
+        "entries_blocked_by_portfolio": 31.0,
+        "block_rate": 0.07093821510297482,
+        "positive_alpha_block_rate": 0.04576659038901602,
+        "blocked_positive_fraction": 0.6451612903225806,
+        "accepted_avg_r": 1.4115194839234018,
+        "blocked_avg_r": 0.942991063883868,
+        "block_selectivity_edge_r": 0.46852842003953377,
+        "total_r": 675.9783079652018,
+        "risk_normalized_total_r": 0.9796787071959446,
+        "net_profit": 371788069.38086134,
+        "net_return_pct": 3.7178806938086133,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 3.7178806938086133,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.0408708071612922,
+        "official_mtm_max_drawdown_pct": 0.0408708071612922,
+        "profit_factor": 4.829277217780362,
+        "win_rate": 0.6182266009852216,
+        "trades_per_21_sessions": 39.29032258064516,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 190.0,
+        "olr_trades": 216.0,
+        "kalcb_source_trade_capture": 0.926829268292683,
+        "olr_source_trade_capture": 0.9310344827586207,
+        "min_strategy_trade_capture": 0.926829268292683,
+        "max_strategy_trade_share": 0.5320197044334976,
+        "max_strategy_r_share": 0.6459471089419598,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {
+          "daily_gross_cap": 31
+        },
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 3.7178806938086133,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 3.7178806938086133,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 104.35367181078121,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 0.9899663217816568,
+        "score_risk_normalized_total_r": 1.1132712581772097,
+        "score_trade_frequency": 0.982258064516129,
+        "score_block_selectivity": 0.99558352402746,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 7,
+      "accepted_count": 3,
+      "elapsed_seconds": 0.5580387115478516,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 4,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 3.7178806938086133,
+            "pct_of_target": 84.4972884956503
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 39.29032258064516,
+            "pct_of_target": 98.2258064516129
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.829277217780362,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.46852842003953377,
+            "pct_of_target": 187.4113680158135
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.04576659038901602,
+            "pct_of_target": 25.425883549453342
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.0408708071612922,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 0.926829268292683,
+            "pct_of_target": 140.42867701404288
+          }
+        },
+        "strengths": [
+          "official_mtm_net_return_pct: 3.7179 (84% of 4.4000)",
+          "trades_per_21_sessions: 39.2903 (98% of 40.0000)",
+          "profit_factor: 4.8293 (200% of 2.2000)",
+          "block_selectivity_edge_r: 0.4685 (187% of 0.2500)",
+          "max_drawdown_pct: 0.0409 (200% of 0.1400)",
+          "min_strategy_trade_capture: 0.9268 (140% of 0.6600)"
+        ],
+        "weaknesses": [
+          "positive_alpha_block_rate: 0.0458 (25% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 4 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + official_mtm_net_return_pct: 3.7179 (84% of 4.4000)\n  + trades_per_21_sessions: 39.2903 (98% of 40.0000)\n  + profit_factor: 4.8293 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.4685 (187% of 0.2500)\n  + max_drawdown_pct: 0.0409 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.9268 (140% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0458 (25% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p4_disagreement_haircut_70\n  block reasons: {\"daily_gross_cap\": 31}\n\nGoal Progress:\n  official_mtm_net_return_pct: 3.7179 / 4.4000 (84%)\n  trades_per_21_sessions: 39.2903 / 40.0000 (98%)\n  profit_factor: 4.8293 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.4685 / 0.2500 (187%)\n  positive_alpha_block_rate: 0.0458 / 0.1800 (25%)\n  max_drawdown_pct: 0.0409 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.9268 / 0.6600 (140%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {
+            "daily_gross_cap": 31
+          },
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p4_disagreement_haircut_70"
+        }
+      },
+      "new_mutations": {
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "olr.confirmed_size_mult": 1.12,
+        "portfolio.agreement_boost_mult": 1.18
+      },
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    },
+    "5": {
+      "focus": "Quality-preserving frequency expansion",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.12,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.18,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": false,
+        "portfolio.frequency.enable_olr_shadow_slot6": false,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.12,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.18,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": true,
+        "portfolio.frequency.enable_olr_shadow_slot6": true,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 104.35367181078121,
+      "final_score": 108.93970141098023,
+      "kept_features": [
+        "p5_olr_slot6_guarded",
+        "p5_kalcb_secondary_confirmed"
+      ],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 4,
+          "best_name": "p5_olr_slot6_guarded",
+          "best_score": 107.37492464006229,
+          "best_delta_pct": 2.895205100937276,
+          "kept": true,
+          "rejected_count": 1
+        },
+        {
+          "round_num": 2,
+          "candidates_tested": 3,
+          "best_name": "p5_kalcb_secondary_confirmed",
+          "best_score": 108.93970141098023,
+          "best_delta_pct": 1.4573018571731937,
+          "kept": true,
+          "rejected_count": 1
+        },
+        {
+          "round_num": 3,
+          "candidates_tested": 1,
+          "best_name": "p5_combined_frequency_with_rank_gate",
+          "best_score": 105.75523261433868,
+          "best_delta_pct": -2.9231480859562784,
+          "kept": false,
+          "rejected_count": 0
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 486.0,
+        "trades": 486.0,
+        "eligible_trade_count": 536.0,
+        "entries_blocked_by_portfolio": 50.0,
+        "block_rate": 0.09328358208955224,
+        "positive_alpha_block_rate": 0.055970149253731345,
+        "blocked_positive_fraction": 0.6,
+        "accepted_avg_r": 1.235583128385704,
+        "blocked_avg_r": 0.6945535715444425,
+        "block_selectivity_edge_r": 0.5410295568412614,
+        "total_r": 703.2691415051933,
+        "risk_normalized_total_r": 1.019230639862599,
+        "net_profit": 386798027.8278567,
+        "net_return_pct": 3.867980278278567,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 3.867980278278567,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.04273119796789304,
+        "official_mtm_max_drawdown_pct": 0.04273119796789304,
+        "profit_factor": 4.601838637565638,
+        "win_rate": 0.6069958847736625,
+        "trades_per_21_sessions": 47.03225806451613,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 234.0,
+        "olr_trades": 252.0,
+        "kalcb_source_trade_capture": 0.9317073170731708,
+        "olr_source_trade_capture": 0.8879310344827587,
+        "min_strategy_trade_capture": 0.8879310344827587,
+        "max_strategy_trade_share": 0.5185185185185185,
+        "max_strategy_r_share": 0.6305284207143822,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {
+          "daily_gross_cap": 50
+        },
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 3.867980278278567,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 3.867980278278567,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 108.93970141098023,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 1.0299335896356598,
+        "score_risk_normalized_total_r": 1.1582166362074986,
+        "score_trade_frequency": 1.1758064516129032,
+        "score_block_selectivity": 0.9700746268656717,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 4,
+      "accepted_count": 2,
+      "elapsed_seconds": 0.19499826431274414,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 5,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 3.867980278278567,
+            "pct_of_target": 87.90864268814924
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 47.03225806451613,
+            "pct_of_target": 117.58064516129032
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.601838637565638,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.5410295568412614,
+            "pct_of_target": 200.0
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.055970149253731345,
+            "pct_of_target": 31.09452736318408
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.04273119796789304,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 0.8879310344827587,
+            "pct_of_target": 134.5350052246604
+          }
+        },
+        "strengths": [
+          "official_mtm_net_return_pct: 3.8680 (88% of 4.4000)",
+          "trades_per_21_sessions: 47.0323 (118% of 40.0000)",
+          "profit_factor: 4.6018 (200% of 2.2000)",
+          "block_selectivity_edge_r: 0.5410 (200% of 0.2500)",
+          "max_drawdown_pct: 0.0427 (200% of 0.1400)",
+          "min_strategy_trade_capture: 0.8879 (135% of 0.6600)"
+        ],
+        "weaknesses": [
+          "positive_alpha_block_rate: 0.0560 (31% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 5 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + official_mtm_net_return_pct: 3.8680 (88% of 4.4000)\n  + trades_per_21_sessions: 47.0323 (118% of 40.0000)\n  + profit_factor: 4.6018 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.5410 (200% of 0.2500)\n  + max_drawdown_pct: 0.0427 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.8879 (135% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0560 (31% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p5_combined_frequency_with_rank_gate\n  block reasons: {\"daily_gross_cap\": 50}\n\nGoal Progress:\n  official_mtm_net_return_pct: 3.8680 / 4.4000 (88%)\n  trades_per_21_sessions: 47.0323 / 40.0000 (118%)\n  profit_factor: 4.6018 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.5410 / 0.2500 (200%)\n  positive_alpha_block_rate: 0.0560 / 0.1800 (31%)\n  max_drawdown_pct: 0.0427 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.8879 / 0.6600 (135%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {
+            "daily_gross_cap": 50
+          },
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p5_combined_frequency_with_rank_gate"
+        }
+      },
+      "new_mutations": {
+        "portfolio.frequency.enable_kalcb_secondary": true,
+        "portfolio.frequency.enable_olr_shadow_slot6": true
+      },
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    },
+    "6": {
+      "focus": "Controlled-aggressive sizing and drawdown governors",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.0,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.12,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.18,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": true,
+        "portfolio.frequency.enable_olr_shadow_slot6": true,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.0055,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": false,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.25,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.25,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.2,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": true,
+        "portfolio.frequency.enable_olr_shadow_slot6": true,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.006,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": true,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 108.93970141098023,
+      "final_score": 114.34578075740293,
+      "kept_features": [
+        "p6_reference_risk_62bp_probe",
+        "p6_kalcb_confirmed_size_125",
+        "p6_olr_confirmed_size_125",
+        "p6_aggressive_controlled_package"
+      ],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 7,
+          "best_name": "p6_reference_risk_62bp_probe",
+          "best_score": 112.0856803756855,
+          "best_delta_pct": 2.8878167683211364,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 2,
+          "candidates_tested": 6,
+          "best_name": "p6_kalcb_confirmed_size_125",
+          "best_score": 113.68529503135491,
+          "best_delta_pct": 1.4271356076064947,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 3,
+          "candidates_tested": 5,
+          "best_name": "p6_olr_confirmed_size_125",
+          "best_score": 114.07536170820092,
+          "best_delta_pct": 0.3431109333343613,
+          "kept": true,
+          "rejected_count": 0
+        },
+        {
+          "round_num": 4,
+          "candidates_tested": 4,
+          "best_name": "p6_aggressive_controlled_package",
+          "best_score": 114.34578075740293,
+          "best_delta_pct": 0.23705298423136917,
+          "kept": true,
+          "rejected_count": 0
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 464.0,
+        "trades": 464.0,
+        "eligible_trade_count": 536.0,
+        "entries_blocked_by_portfolio": 72.0,
+        "block_rate": 0.13432835820895522,
+        "positive_alpha_block_rate": 0.07462686567164178,
+        "blocked_positive_fraction": 0.5555555555555556,
+        "accepted_avg_r": 1.2537144930532085,
+        "blocked_avg_r": 0.7430215860553542,
+        "block_selectivity_edge_r": 0.5106929069978543,
+        "total_r": 789.2006765345479,
+        "risk_normalized_total_r": 1.143769096426881,
+        "net_profit": 473520405.9207282,
+        "net_return_pct": 4.735204059207282,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 4.735204059207282,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.04263052740802644,
+        "official_mtm_max_drawdown_pct": 0.04263052740802644,
+        "profit_factor": 4.836419678720355,
+        "win_rate": 0.6142241379310345,
+        "trades_per_21_sessions": 44.903225806451616,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 230.0,
+        "olr_trades": 234.0,
+        "kalcb_source_trade_capture": 0.9219512195121952,
+        "olr_source_trade_capture": 0.8318965517241379,
+        "min_strategy_trade_capture": 0.8318965517241379,
+        "max_strategy_trade_share": 0.5043103448275862,
+        "max_strategy_r_share": 0.6675943400779779,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {
+          "daily_gross_cap": 72
+        },
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 4.735204059207282,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 4.735204059207282,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 114.34578075740293,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 1.260850718847815,
+        "score_risk_normalized_total_r": 1.25,
+        "score_trade_frequency": 1.1225806451612903,
+        "score_block_selectivity": 0.9234328358208956,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 7,
+      "accepted_count": 4,
+      "elapsed_seconds": 0.7530093193054199,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 6,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 4.735204059207282,
+            "pct_of_target": 107.61827407289277
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 44.903225806451616,
+            "pct_of_target": 112.25806451612902
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.836419678720355,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.5106929069978543,
+            "pct_of_target": 200.0
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.07462686567164178,
+            "pct_of_target": 41.459369817578775
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.04263052740802644,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 0.8318965517241379,
+            "pct_of_target": 126.04493207941483
+          }
+        },
+        "strengths": [
+          "official_mtm_net_return_pct: 4.7352 (108% of 4.4000)",
+          "trades_per_21_sessions: 44.9032 (112% of 40.0000)",
+          "profit_factor: 4.8364 (200% of 2.2000)",
+          "block_selectivity_edge_r: 0.5107 (200% of 0.2500)",
+          "max_drawdown_pct: 0.0426 (200% of 0.1400)",
+          "min_strategy_trade_capture: 0.8319 (126% of 0.6600)"
+        ],
+        "weaknesses": [
+          "positive_alpha_block_rate: 0.0746 (41% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 6 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + official_mtm_net_return_pct: 4.7352 (108% of 4.4000)\n  + trades_per_21_sessions: 44.9032 (112% of 40.0000)\n  + profit_factor: 4.8364 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.5107 (200% of 0.2500)\n  + max_drawdown_pct: 0.0426 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.8319 (126% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0746 (41% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p6_aggressive_controlled_package\n  block reasons: {\"daily_gross_cap\": 72}\n\nGoal Progress:\n  official_mtm_net_return_pct: 4.7352 / 4.4000 (108%)\n  trades_per_21_sessions: 44.9032 / 40.0000 (112%)\n  profit_factor: 4.8364 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.5107 / 0.2500 (200%)\n  positive_alpha_block_rate: 0.0746 / 0.1800 (41%)\n  max_drawdown_pct: 0.0426 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.8319 / 0.6600 (126%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {
+            "daily_gross_cap": 72
+          },
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p6_aggressive_controlled_package"
+        }
+      },
+      "new_mutations": {
+        "kalcb.confirmed_size_mult": 1.25,
+        "olr.confirmed_size_mult": 1.25,
+        "portfolio.agreement_boost_mult": 1.2,
+        "portfolio.reference_risk_pct": 0.006,
+        "portfolio.use_dynamic_drawdown_tiers": true
+      },
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    },
+    "7": {
+      "focus": "Robustness, ablation, and final promotion audit",
+      "base_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.25,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.25,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.2,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": true,
+        "portfolio.frequency.enable_olr_shadow_slot6": true,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.006,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": true,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "final_mutations": {
+        "blockers.block_olr_after_kalcb_failed_followthrough": false,
+        "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+        "blockers.boost_olr_after_kalcb_strong_eod": 1.15,
+        "blockers.haircut_olr_after_kalcb_negative_path": 0.65,
+        "blockers.kalcb_rank6_10_half_size_confirmed": true,
+        "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+        "blockers.sector_failure_haircut_mult": 1.0,
+        "kalcb.confirmed_size_mult": 1.25,
+        "kalcb.size_mult": 1.06,
+        "olr.confirmed_size_mult": 1.25,
+        "olr.size_mult": 0.94,
+        "portfolio.agreement_boost_mult": 1.2,
+        "portfolio.daily_loss_stop_r": 0.0,
+        "portfolio.disagreement_haircut_mult": 1.0,
+        "portfolio.dynamic_drawdown_tiers": [
+          [
+            0.06,
+            1.0
+          ],
+          [
+            0.09,
+            0.8
+          ],
+          [
+            0.12,
+            0.55
+          ],
+          [
+            0.15,
+            0.0
+          ]
+        ],
+        "portfolio.frequency.enable_kalcb_secondary": true,
+        "portfolio.frequency.enable_olr_shadow_slot6": true,
+        "portfolio.max_daily_gross": 2.1,
+        "portfolio.max_sector_gross": 9.99,
+        "portfolio.reference_risk_pct": 0.006,
+        "portfolio.risk_stance": "controlled_aggressive",
+        "portfolio.same_symbol_policy": "allow",
+        "portfolio.strategy_r_share_cap": 0.72,
+        "portfolio.use_dynamic_drawdown_tiers": true,
+        "portfolio.weekly_loss_stop_r": 0.0,
+        "source.holdout_excluded": true,
+        "source.kalcb.round": 3,
+        "source.olr.round": 5
+      },
+      "base_score": 114.34578075740293,
+      "final_score": 114.34578075740293,
+      "kept_features": [],
+      "rounds": [
+        {
+          "round_num": 1,
+          "candidates_tested": 4,
+          "best_name": "p7_cost_stress_guard",
+          "best_score": 113.91594286495005,
+          "best_delta_pct": -0.3759105841997166,
+          "kept": false,
+          "rejected_count": 1
+        }
+      ],
+      "final_metrics": {
+        "total_trades": 464.0,
+        "trades": 464.0,
+        "eligible_trade_count": 536.0,
+        "entries_blocked_by_portfolio": 72.0,
+        "block_rate": 0.13432835820895522,
+        "positive_alpha_block_rate": 0.07462686567164178,
+        "blocked_positive_fraction": 0.5555555555555556,
+        "accepted_avg_r": 1.2537144930532085,
+        "blocked_avg_r": 0.7430215860553542,
+        "block_selectivity_edge_r": 0.5106929069978543,
+        "total_r": 789.2006765345479,
+        "risk_normalized_total_r": 1.143769096426881,
+        "net_profit": 473520405.9207282,
+        "net_return_pct": 4.735204059207282,
+        "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
+        "official_mtm_net_return_pct": 4.735204059207282,
+        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "max_drawdown_pct": 0.04263052740802644,
+        "official_mtm_max_drawdown_pct": 0.04263052740802644,
+        "profit_factor": 4.836419678720355,
+        "win_rate": 0.6142241379310345,
+        "trades_per_21_sessions": 44.903225806451616,
+        "active_strategy_count": 2.0,
+        "kalcb_trades": 230.0,
+        "olr_trades": 234.0,
+        "kalcb_source_trade_capture": 0.9219512195121952,
+        "olr_source_trade_capture": 0.8318965517241379,
+        "min_strategy_trade_capture": 0.8318965517241379,
+        "max_strategy_trade_share": 0.5043103448275862,
+        "max_strategy_r_share": 0.6675943400779779,
+        "positive_slices": 4.0,
+        "same_bar_fill_count": 0.0,
+        "forced_replay_close_count": 0.0,
+        "rejected_order_count": 0.0,
+        "end_open_position_count": 0.0,
+        "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "source_data_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+        "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+        "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+        "holdout_excluded": true,
+        "holdout_excluded_from_optimization": true,
+        "train_start": "2025-05-12",
+        "train_end": "2026-03-10",
+        "session_count": 217.0,
+        "isolated_baseline_return_pct": 4.1728475583307265,
+        "isolated_baseline_total_r": 690.0,
+        "target_trades_per_21_sessions": 40.0,
+        "kalcb_source_train_return_pct": 2.5834272468722776,
+        "olr_source_train_return_pct": 1.5894203114584489,
+        "kalcb_source_train_trades": 205.0,
+        "olr_source_train_trades": 232.0,
+        "block_reason_counts": {
+          "daily_gross_cap": 72
+        },
+        "source_paths": {
+          "kalcb_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+          "kalcb_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+          "olr_optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+          "olr_run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+        },
+        "source_strategy_optimized_rounds": {
+          "kalcb": 3,
+          "olr": 5
+        },
+        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "promotion_status": "research_only",
+        "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_pass": false,
+        "official_replay_pass": false,
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "primary_promotion_value": 4.735204059207282,
+        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "metric_contract": {
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_value": 4.735204059207282,
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+          "official_metrics": [
+            "official_mtm_net_return_pct",
+            "max_drawdown_pct",
+            "profit_factor",
+            "total_trades"
+          ],
+          "proxy_metrics": [
+            "entries_blocked_by_portfolio",
+            "positive_alpha_block_rate",
+            "blocked_avg_r"
+          ],
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 0.0,
+          "end_open_position_count": 0.0,
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "execution_contract": {
+            "strategy": "portfolio_synergy",
+            "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+            "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+            "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+            "date_window": {
+              "start": "2025-05-12",
+              "end": "2026-03-10"
+            },
+            "initial_equity": 100000000.0,
+            "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+            "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+            "capability_level": "source_artifact_portfolio_replay",
+            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "primary_promotion_metric": "official_mtm_net_return_pct",
+            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+          },
+          "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+          "promotion_requires_audit_pass": false
+        },
+        "execution_contract": {
+          "strategy": "portfolio_synergy",
+          "source_fingerprint": "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e324edf7a7fa7a73c3c6",
+          "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+          "candidate_snapshot_hash": "fe60ac25390be1436cc881b002c86c017ae4e17053293f82cd2cbbea04bb2e28",
+          "date_window": {
+            "start": "2025-05-12",
+            "end": "2026-03-10"
+          },
+          "initial_equity": 100000000.0,
+          "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+          "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+          "capability_level": "source_artifact_portfolio_replay",
+          "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+          "primary_promotion_metric": "official_mtm_net_return_pct",
+          "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+        },
+        "cost_policy": {
+          "source_costs_preserved": true,
+          "portfolio_cost_stress_bps": 0.0
+        },
+        "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+        "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+        "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+        "capability_level": "source_artifact_portfolio_replay",
+        "score_total": 114.34578075740293,
+        "score_rejected": false,
+        "score_reject_reason": "",
+        "score_capital_normalized_mtm_return": 1.260850718847815,
+        "score_risk_normalized_total_r": 1.25,
+        "score_trade_frequency": 1.1225806451612903,
+        "score_block_selectivity": 0.9234328358208956,
+        "score_drawdown_control": 1.15,
+        "score_profit_quality": 1.15,
+        "score_robust_balance": 1.0,
+        "score_component_count": 7.0,
+        "phase_metric_basis": "train_only_source_fingerprinted_portfolio_arbitration",
+        "official_metric_keys": [
+          "official_mtm_net_return_pct",
+          "max_drawdown_pct",
+          "profit_factor",
+          "total_trades"
+        ],
+        "proxy_metric_keys": [
+          "entries_blocked_by_portfolio",
+          "positive_alpha_block_rate",
+          "blocked_avg_r"
+        ]
+      },
+      "total_candidates": 4,
+      "accepted_count": 0,
+      "elapsed_seconds": 0.2250070571899414,
+      "suggested_experiments": [],
+      "analysis": {
+        "phase": 7,
+        "goal_progress": {
+          "official_mtm_net_return_pct": {
+            "target": 4.4,
+            "actual": 4.735204059207282,
+            "pct_of_target": 107.61827407289277
+          },
+          "trades_per_21_sessions": {
+            "target": 40.0,
+            "actual": 44.903225806451616,
+            "pct_of_target": 112.25806451612902
+          },
+          "profit_factor": {
+            "target": 2.2,
+            "actual": 4.836419678720355,
+            "pct_of_target": 200.0
+          },
+          "block_selectivity_edge_r": {
+            "target": 0.25,
+            "actual": 0.5106929069978543,
+            "pct_of_target": 200.0
+          },
+          "positive_alpha_block_rate": {
+            "target": 0.18,
+            "actual": 0.07462686567164178,
+            "pct_of_target": 41.459369817578775
+          },
+          "max_drawdown_pct": {
+            "target": 0.14,
+            "actual": 0.04263052740802644,
+            "pct_of_target": 200.0
+          },
+          "min_strategy_trade_capture": {
+            "target": 0.66,
+            "actual": 0.8318965517241379,
+            "pct_of_target": 126.04493207941483
+          }
+        },
+        "strengths": [
+          "official_mtm_net_return_pct: 4.7352 (108% of 4.4000)",
+          "trades_per_21_sessions: 44.9032 (112% of 40.0000)",
+          "profit_factor: 4.8364 (200% of 2.2000)",
+          "block_selectivity_edge_r: 0.5107 (200% of 0.2500)",
+          "max_drawdown_pct: 0.0426 (200% of 0.1400)",
+          "min_strategy_trade_capture: 0.8319 (126% of 0.6600)"
+        ],
+        "weaknesses": [
+          "positive_alpha_block_rate: 0.0746 (41% of 0.1800)"
+        ],
+        "scoring_assessment": "EFFECTIVE",
+        "diagnostic_gaps": [],
+        "suggested_experiments": [],
+        "recommendation": "advance",
+        "recommendation_reason": "Gate passed.",
+        "report": "======================================================================\nPHASE 7 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + official_mtm_net_return_pct: 4.7352 (108% of 4.4000)\n  + trades_per_21_sessions: 44.9032 (112% of 40.0000)\n  + profit_factor: 4.8364 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.5107 (200% of 0.2500)\n  + max_drawdown_pct: 0.0426 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.8319 (126% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0746 (41% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p7_cost_stress_guard\n  block reasons: {\"daily_gross_cap\": 72}\n\nGoal Progress:\n  official_mtm_net_return_pct: 4.7352 / 4.4000 (108%)\n  trades_per_21_sessions: 44.9032 / 40.0000 (112%)\n  profit_factor: 4.8364 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.5107 / 0.2500 (200%)\n  positive_alpha_block_rate: 0.0746 / 0.1800 (41%)\n  max_drawdown_pct: 0.0426 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.8319 / 0.6600 (126%)",
+        "scoring_weight_overrides": null,
+        "extra": {
+          "score_component_count": 7,
+          "block_reason_counts": {
+            "daily_gross_cap": 72
+          },
+          "source_rounds": {
+            "kalcb": 3,
+            "olr": 5
+          },
+          "holdout_excluded": true,
+          "best_candidate": "p7_cost_stress_guard"
+        }
+      },
+      "new_mutations": {},
+      "applied_phase_mutations": true,
+      "adoption_reason": "gate_passed"
+    }
+  },
+  "phase_gate_results": {
+    "1": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 38.0,
+          "actual": 42.29032258064516,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.14,
+          "actual": 0.033684786559103175,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.7,
+          "actual": 4.531514116258975,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.9,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    },
+    "2": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 37.0,
+          "actual": 40.354838709677416,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.14,
+          "actual": 0.033684786559103175,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.7,
+          "actual": 4.562945312529046,
+          "passed": true
+        },
+        {
+          "name": "max_block_rate",
+          "target": 0.16,
+          "actual": 0.04576659038901602,
+          "passed": true
+        },
+        {
+          "name": "max_positive_alpha_block_rate",
+          "target": 0.12,
+          "actual": 0.029748283752860413,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.82,
+          "actual": 0.9512195121951219,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    },
+    "3": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 35.0,
+          "actual": 40.45161290322581,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.14,
+          "actual": 0.033758613975323475,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.75,
+          "actual": 4.724784740009121,
+          "passed": true
+        },
+        {
+          "name": "max_block_rate",
+          "target": 0.28,
+          "actual": 0.043478260869565216,
+          "passed": true
+        },
+        {
+          "name": "max_positive_alpha_block_rate",
+          "target": 0.18,
+          "actual": 0.02745995423340961,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.7,
+          "actual": 0.9512195121951219,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    },
+    "4": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 35.0,
+          "actual": 39.29032258064516,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.14,
+          "actual": 0.0408708071612922,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.75,
+          "actual": 4.829277217780362,
+          "passed": true
+        },
+        {
+          "name": "max_block_rate",
+          "target": 0.28,
+          "actual": 0.07093821510297482,
+          "passed": true
+        },
+        {
+          "name": "max_positive_alpha_block_rate",
+          "target": 0.18,
+          "actual": 0.04576659038901602,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.7,
+          "actual": 0.926829268292683,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    },
+    "5": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 39.0,
+          "actual": 47.03225806451613,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.145,
+          "actual": 0.04273119796789304,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.7,
+          "actual": 4.601838637565638,
+          "passed": true
+        },
+        {
+          "name": "max_block_rate",
+          "target": 0.3,
+          "actual": 0.09328358208955224,
+          "passed": true
+        },
+        {
+          "name": "max_positive_alpha_block_rate",
+          "target": 0.2,
+          "actual": 0.055970149253731345,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.66,
+          "actual": 0.8879310344827587,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    },
+    "6": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 39.0,
+          "actual": 44.903225806451616,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.14,
+          "actual": 0.04263052740802644,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.7,
+          "actual": 4.836419678720355,
+          "passed": true
+        },
+        {
+          "name": "max_block_rate",
+          "target": 0.3,
+          "actual": 0.13432835820895522,
+          "passed": true
+        },
+        {
+          "name": "max_positive_alpha_block_rate",
+          "target": 0.2,
+          "actual": 0.07462686567164178,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.66,
+          "actual": 0.8318965517241379,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    },
+    "7": {
+      "passed": true,
+      "criteria": [
+        {
+          "name": "min_trades_per_21_sessions",
+          "target": 39.0,
+          "actual": 44.903225806451616,
+          "passed": true
+        },
+        {
+          "name": "max_drawdown_pct",
+          "target": 0.14,
+          "actual": 0.04263052740802644,
+          "passed": true
+        },
+        {
+          "name": "min_profit_factor",
+          "target": 1.7,
+          "actual": 4.836419678720355,
+          "passed": true
+        },
+        {
+          "name": "max_block_rate",
+          "target": 0.28,
+          "actual": 0.13432835820895522,
+          "passed": true
+        },
+        {
+          "name": "max_positive_alpha_block_rate",
+          "target": 0.18,
+          "actual": 0.07462686567164178,
+          "passed": true
+        },
+        {
+          "name": "min_strategy_trade_capture",
+          "target": 0.66,
+          "actual": 0.8318965517241379,
+          "passed": true
+        },
+        {
+          "name": "hard_primary_promotion_metric",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_basis",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_official_metric_present",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_same_bar_fill_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_forced_replay_close_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_rejected_order_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_end_open_position_count",
+          "target": 0.0,
+          "actual": 0.0,
+          "passed": true
+        },
+        {
+          "name": "hard_source_fingerprint",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_feature_manifest_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        },
+        {
+          "name": "hard_candidate_snapshot_hash",
+          "target": 1.0,
+          "actual": 1.0,
+          "passed": true
+        }
+      ],
+      "failure_category": null,
+      "recommendations": []
+    }
+  },
+  "retry_count": {},
+  "scoring_retries": {},
+  "diagnostic_retries": {},
+  "phase_timestamps": {
+    "1": {
+      "started": "2026-05-27T03:44:26.240429+00:00",
+      "completed": "2026-05-27T03:44:26.505380+00:00"
+    },
+    "2": {
+      "started": "2026-05-27T03:44:26.524430+00:00",
+      "completed": "2026-05-27T03:44:26.954378+00:00"
+    },
+    "3": {
+      "started": "2026-05-27T03:44:26.981398+00:00",
+      "completed": "2026-05-27T03:44:27.548377+00:00"
+    },
+    "4": {
+      "started": "2026-05-27T03:44:27.569379+00:00",
+      "completed": "2026-05-27T03:44:28.216379+00:00"
+    },
+    "5": {
+      "started": "2026-05-27T03:44:28.240378+00:00",
+      "completed": "2026-05-27T03:44:28.517380+00:00"
+    },
+    "6": {
+      "started": "2026-05-27T03:44:28.543392+00:00",
+      "completed": "2026-05-27T03:44:29.440384+00:00"
+    },
+    "7": {
+      "started": "2026-05-27T03:44:29.494386+00:00",
+      "completed": "2026-05-27T03:44:29.860380+00:00"
+    }
+  },
+  "round_name": "kalcb_olr_portfolio_synergy_round_1"
+}

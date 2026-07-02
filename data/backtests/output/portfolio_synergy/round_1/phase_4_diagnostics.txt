@@ -1,0 +1,12 @@
+Phase 4: Causal cross-strategy confirmation and sizing overlays
+Score: 0.0000
+Return: 375.15%
+Trades/21 sessions: 38.71
+Block rate: 8.47%
+Positive-alpha block rate: 5.72%
+Accepted avg R: +1.412
+Blocked avg R: +1.016
+Max drawdown: 3.94%
+Profit factor: 4.78
+KALCB/OLR trades: 191/209
+Kept features: p4_confirmed_kalcb_size_112, p4_agreement_boost_118, p4_olr_boost_after_kalcb_strong_live_path_115

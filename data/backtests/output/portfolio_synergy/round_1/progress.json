@@ -1,0 +1,125 @@
+{
+  "phases": {
+    "1": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:45.623150+00:00",
+      "completed_phases": [
+        1
+      ],
+      "current_phase": 1,
+      "phase": 1,
+      "focus": "Latest KALCB/OLR artifact baseline and accounting integrity",
+      "candidate_count": 4,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    },
+    "2": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:47.155151+00:00",
+      "completed_phases": [
+        1,
+        2
+      ],
+      "current_phase": 2,
+      "phase": 2,
+      "focus": "Neutral capacity and low-friction portfolio caps",
+      "candidate_count": 12,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    },
+    "3": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:48.014147+00:00",
+      "completed_phases": [
+        1,
+        2,
+        3
+      ],
+      "current_phase": 3,
+      "phase": 3,
+      "focus": "Selective blockers that should block weaker trades first",
+      "candidate_count": 8,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    },
+    "4": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:49.154149+00:00",
+      "completed_phases": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "current_phase": 4,
+      "phase": 4,
+      "focus": "Causal cross-strategy confirmation and sizing overlays",
+      "candidate_count": 7,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    },
+    "5": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:49.692145+00:00",
+      "completed_phases": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "current_phase": 5,
+      "phase": 5,
+      "focus": "Quality-preserving frequency expansion",
+      "candidate_count": 4,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    },
+    "6": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:50.541145+00:00",
+      "completed_phases": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "current_phase": 6,
+      "phase": 6,
+      "focus": "Controlled-aggressive sizing and drawdown governors",
+      "candidate_count": 7,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    },
+    "7": {
+      "status": "completed",
+      "updated_at": "2026-05-27T09:05:50.901171+00:00",
+      "completed_phases": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "current_phase": 7,
+      "phase": 7,
+      "focus": "Robustness, ablation, and final promotion audit",
+      "candidate_count": 4,
+      "total_mutations": 32,
+      "scoring_retries": 0,
+      "diagnostic_retries": 0
+    }
+  },
+  "last_updated": "2026-05-27T09:05:50.921147+00:00",
+  "current_phase": 7
+}

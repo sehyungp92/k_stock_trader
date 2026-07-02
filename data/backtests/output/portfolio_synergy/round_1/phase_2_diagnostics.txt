@@ -1,0 +1,12 @@
+Phase 2: Neutral capacity and low-friction portfolio caps
+Score: 101.8273
+Return: 339.78%
+Trades/21 sessions: 40.35
+Block rate: 4.58%
+Positive-alpha block rate: 2.97%
+Accepted avg R: +1.402
+Blocked avg R: +0.875
+Max drawdown: 3.37%
+Profit factor: 4.56
+KALCB/OLR trades: 195/222
+Kept features: p2_gross_cap_2p10

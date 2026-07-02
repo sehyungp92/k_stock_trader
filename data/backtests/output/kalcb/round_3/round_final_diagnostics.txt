@@ -1,0 +1,366 @@
+======================================================================
+KALCB ROUND-3 SOURCE-FRONTIER FULL DIAGNOSTICS
+======================================================================
+Round name: round_3
+Focus: explain where the strategy is extracting alpha, where it is rejecting or admitting weak signals, and which entry/management layers still need work.
+Candidate source: C:\Users\sehyu\Documents\Other\Projects\k_stock_trader\data\backtests\output\kalcb\round_1\guarded_q3_full_diagnostics\train_guarded_prefilter_pool_rows.jsonl
+Candidate source section/rank: guarded_prefilter_pool / 0
+Source row: stock_sector_daily_ret5_spread>=-0.036622 & sector!=FINANCIAL
+Official path: KALCBReplayAdapter -> strategy_kalcb.core.step_kalcb_core() -> SimBroker.
+Research candidate generation remains upstream; trading decisions, fills, costs, sizing, exits, and metrics are shared-core/broker-owned.
+
+Baseline: broker_net=123.41%, MTM=123.41%, DD=5.71%, trades=205, audit_pass=True
+Final:    broker_net=258.34%, MTM=258.34%, DD=3.87%, trades=205, audit_pass=True
+Score:    immutable=53.948; components=7/7; fast/full audit=pass
+
+Hard warning: this is still training-only. Holdout and paper/live parity validation are mandatory before production use.
+
+======================================================================
+  1. Overview
+======================================================================
+
+Training window: 2025-05-12 -> 2026-03-31 (217 sessions)
+Holdout policy: training-only compiled replay; dates at or after holdout_start are excluded; holdout is locked audit only and not used for candidate acceptance
+broker_net=258.34%, official_mtm=258.34%, DD=3.87%, trades=205, WR=66.34%, avg_MFE=12.09R, MFE_capture=43.34%
+selected=643, conversion=31.88%, active_days=97/217, avg_trade_net=2.26%, active_day_net=1.43%
+Baseline delta: broker_net +134.93%; DD -1.84%; trades +0
+
+======================================================================
+  2. Executive Verdicts
+======================================================================
+
+Signal extraction: GOOD (source/frontier phase lifted broker net by +134.93% and trades by +0; pool conversion is 31.88%, so the broad frontier is not being naively chased).
+Discrimination: REVIEW (selected-candidate conversion 31.88%, MAE<=-1R 68.78%; top full-replay gate=entry_max_signal_bars (12214)).
+First30 analysis: REVIEW (helpful_fields=1/5, best_delta=first30_signal_bar_cpr:+0.047, worst_delta=first30_rel_volume:-2.375).
+Entry mechanism: GOOD (phase 3 keeps first30 as anchor and only promotes secondary route branches that survive shared-core route metadata and fold checks).
+Trade management: REVIEW (MFE capture 43.34%, EOD flatten share 69.76%, target-hit share 2.44%).
+Exit mechanism: REVIEW (the shared core supports target, partial, MFE floor/giveback, late giveback, conditional stop, and VWAP-fail actions; appendix phases only promote exit changes after positive quantitative proof).
+Primary bottleneck: trade management/MFE capture.
+
+======================================================================
+  3. Optimization Path And Score
+======================================================================
+
+Phase 1: round_3 OOS-ablation promotion of quick-exit, 45bp fixed stop, 55R target, and 100% max notional cap; applied=True; accepted=1; kept=combo_stop0045_quick_exit, risk.max_position_notional_pct=1.0, exit.target_r=55.0; score=53.948; net=258.34%; DD=3.87%; trades=205
+  round 1: best=hn_notional1p0_target55p0 score=53.948 delta=134.932% kept=True rejected=0
+
+Immutable score=53.948; component limit=7/7.
+  broker_net_return_pct: weight=+0.240, scaled=0.9980, contribution=23.951
+  broker_expected_total_r: weight=+0.160, scaled=0.6321, contribution=10.114
+  frequency: weight=+0.120, scaled=0.7250, contribution=8.700
+  worst_fold_net: weight=+0.150, scaled=1.0000, contribution=15.000
+  avg_mfe_capture: weight=+0.150, scaled=0.4050, contribution=6.075
+  broker_max_drawdown_pct: weight=-0.110, scaled=0.5155, contribution=-5.671
+  mae_tail_loss: weight=-0.070, scaled=0.6030, contribution=-4.221
+
+======================================================================
+  4. Candidate Surfacing And Source Quality
+======================================================================
+
+Source file hash: 0387086e629b; sweep hash: a6558cb07d80; row=stock_sector_daily_ret5_spread>=-0.036622 & sector!=FINANCIAL
+Train selected: 643 names over 187 selected days; active day share=44.70%; avg selections/session=2.96
+Candidate pool=643, initial-active=643, frontier-expansion=0, candidate-pool conversion=31.88%.
+Research boundary: premarket uses prior completed daily/index/flow rows; first30 uses only completed 09:00-09:25 bars; the trading core receives final KALCBDailySnapshot candidates only.
+Candidate surfacing diagnostics:
+  Frontier-role performance:
+  initial_active               n= 205 WR= 66.34% avgR=  +5.938 totalR=+1217.296 PF=  5.39
+  Frontier-rank bucket performance:
+  rank 2-3                     n=  80 WR= 71.25% avgR=  +7.132 totalR= +570.532 PF=  6.90
+  rank 4-5                     n=  43 WR= 58.14% avgR=  +3.169 totalR= +136.279 PF=  2.53
+  rank 1                       n=  43 WR= 79.07% avgR= +11.358 totalR= +488.413 PF= 26.69
+  rank 6-10                    n=  38 WR= 50.00% avgR=  +0.541 totalR=  +20.541 PF=  1.28
+  rank 11-30                   n=   1 WR=100.00% avgR=  +1.532 totalR=   +1.532 PF=999.00
+  Top symbols by total R:
+    047040: n=6, totalR=+100.938, avgR=+16.823
+    323410: n=3, totalR=+96.417, avgR=+32.139
+    086520: n=5, totalR=+92.493, avgR=+18.499
+    003670: n=4, totalR=+72.897, avgR=+18.224
+    005380: n=6, totalR=+68.637, avgR=+11.439
+    377300: n=4, totalR=+63.039, avgR=+15.760
+  Weakest symbols by total R:
+    006260: n=3, totalR=-24.986, avgR=-8.329
+    375500: n=4, totalR=-15.259, avgR=-3.815
+    298050: n=3, totalR=-10.746, avgR=-3.582
+    010120: n=2, totalR=-7.846, avgR=-3.923
+    185750: n=1, totalR=-5.812, avgR=-5.812
+    068270: n=1, totalR=-5.720, avgR=-5.720
+
+Opportunity coverage and route blockage:
+  Scope: snapshot_level_route_eligibility_approximation; this is a candidate-snapshot approximation, not a replay fill model.
+  Snapshot candidates=643 across 187 active snapshot sessions; first30 metadata coverage=643.
+  Route-eligible candidates=643 (100.00%); realized trades=205; realized/eligible=31.88%; realized/all candidates=31.88%.
+  Unrouteable candidates=0 (0.00%).
+  Route coverage:
+    auto_pullback_rank8_r0p015     mode=pullback_acceptance eligible=  123 days=  73 realized=  12 conv=  9.76%
+    first30_open_anchor            mode=first30_open       eligible=  643 days= 187 realized= 193 conv= 30.02%
+  Targeted surface check: shadow rank<=8 and relvol>=q85 candidates=0, realized=0; initial-active same surface candidates=162, realized=147.
+  Experiment hints:
+    - Snapshot route eligibility materially exceeds realized trades; inspect intraday path, duplicate-position, and broker-capacity gates.
+
+======================================================================
+  5. Signal Funnel And Gate Attribution
+======================================================================
+
+Entry plan: first30_open
+Entry routes: 2 configured; route metadata is included in neutral SubmitEntry actions for paper/live parity.
+Entry thresholds: max_signal_bars=1, min_bar_ret=0.01, min_vwap_ret=0.0, min_close_location=0.0, require_above_prev_close=False
+Source/frontier gates: require_initial_active=True, max_frontier_rank=None, min_frontier_score=None, min_flow=None, min_accum=None, min_first30_rel_volume=1.0, min_first30_signal_cpr=None, min_first30_open_drawdown=None, min_first30_low_vs_prev_close=None, first30_range_atr=[None, None]
+Quality-vote gate: min_votes=6, ret=0.01, cpr=0.75, relvol=2.0, range_atr_min=0.75, range_atr_max=None, flow=-0.05, accum=0.0, frontier_rank=20
+Signal conversion=31.88%; selected=643; trades=205; avg_trades/session=0.945
+Full-replay gate attribution:
+  Rejection reasons:
+    entry_signal_window_expired        12214
+    entry_min_bar_ret                  1280
+    entry_min_vwap_ret                 1050
+    entry_context_min:first30_rel_volume 833
+    below_avwap                        447
+    pullback_acceptance_missing        185
+    entry_quality_votes                19
+    heat_cap_exceeded                  18
+  First failed gates:
+    entry_max_signal_bars              12214
+    entry_min_bar_ret                  1280
+    entry_min_vwap_ret                 1050
+    entry_context_min:first30_rel_volume 833
+    entry_quality_first30_signal_cpr   391
+    pullback_acceptance_reclaim        108
+    pullback_acceptance_touch          77
+    entry_quality_flow_score           26
+  Diagnostic note: waiting_for_first30_signal is scheduling noise (0/16059 rejections), not a quality filter. Real discrimination is from the non-waiting gates.
+
+======================================================================
+  6. First30 Signal Truthfulness
+======================================================================
+
+Verdict: REVIEW
+Coverage: first30 metadata present on 205/205 trades.
+Headline: helpful_fields=1/5, best_delta=first30_signal_bar_cpr:+0.047, worst_delta=first30_rel_volume:-2.375
+Winner vs loser feature deltas:
+  First30 return               winners=+0.046 losers=+0.047 delta=-0.001 n=205
+  First30 close vs VWAP        winners=+0.015 losers=+0.016 delta=-0.001 n=205
+  First30 relative volume      winners=+11.260 losers=+13.635 delta=-2.375 n=205
+  First30 close location       winners=+0.867 losers=+0.874 delta=-0.007 n=205
+  Signal-bar CPR               winners=+0.696 losers=+0.648 delta=+0.047 n=205
+  Open drawdown                winners=-0.007 losers=-0.009 delta=+0.003 n=205
+  Low vs previous close        winners=+0.005 losers=+0.004 delta=+0.000 n=205
+  Range/ATR                    winners=+1.600 losers=+1.725 delta=-0.124 n=205
+First30 bucket expectancy:
+  first30_ret:
+    -0.005..0          n=   3 WR=100.00% avgR= +29.393 totalR=  +88.180
+    0..0.005           n=   5 WR= 60.00% avgR=  +1.409 totalR=   +7.046
+    0.005..0.015       n=  12 WR= 50.00% avgR=  +5.633 totalR=  +67.598
+    <-0.005            n=   2 WR=100.00% avgR=  +6.418 totalR=  +12.837
+    >=0.015            n= 183 WR= 66.67% avgR=  +5.692 totalR=+1041.635
+  first30_vwap_ret:
+    -0.003..0          n=   2 WR=100.00% avgR=  +1.738 totalR=   +3.475
+    0..0.003           n=  14 WR= 78.57% avgR= +12.468 totalR= +174.551
+    0.003..0.01        n=  50 WR= 70.00% avgR=  +5.294 totalR= +264.716
+    <-0.003            n=   2 WR= 50.00% avgR=  +0.364 totalR=   +0.728
+    >=0.01             n= 137 WR= 63.50% avgR=  +5.648 totalR= +773.825
+  first30_rel_volume:
+    1..1.5             n=   3 WR=100.00% avgR=  +7.706 totalR=  +23.118
+    1.5..2.5           n=   6 WR= 66.67% avgR=  +4.044 totalR=  +24.266
+    >=2.5              n= 196 WR= 65.82% avgR=  +5.969 totalR=+1169.912
+  first30_close_location:
+    0.25..0.5          n=   6 WR=100.00% avgR=  +4.458 totalR=  +26.750
+    0.5..0.75          n=  19 WR= 68.42% avgR= +10.324 totalR= +196.151
+    >=0.75             n= 180 WR= 65.00% avgR=  +5.524 totalR= +994.395
+  - First30 return is not separating winners cleanly; combine it with source/flow context rather than tightening it alone.
+  - Close-vs-VWAP is weak or misleading; avoid assuming VWAP premium is alpha without a cohort check.
+  - Relative volume is not yet proving stronger realized trades; verify expected-volume normalization before increasing this gate.
+
+======================================================================
+  7. Entry Mechanism And Timing
+======================================================================
+
+Trade frequency: 205 trades, avg_trades/session=0.945, selected-candidate conversion=31.88%.
+Entry type performance:
+  KRX_FIRST30_OPEN             n= 193 WR= 67.36% avgR=  +6.393 totalR=+1233.872 PF=  6.02
+  KRX_PULLBACK_ACCEPTANCE      n=  12 WR= 50.00% avgR=  -1.381 totalR=  -16.575 PF=  0.47
+Entry route performance:
+  first30_open_anchor          n= 193 WR= 67.36% avgR=  +6.393 totalR=+1233.872 PF=  6.02
+  auto_pullback_rank8_r0p015   n=  12 WR= 50.00% avgR=  -1.381 totalR=  -16.575 PF=  0.47
+Entry timing buckets:
+  09:30                        n= 193 WR= 67.36% avgR=  +6.393 totalR=+1233.872 PF=  6.02
+  10:30                        n=  12 WR= 50.00% avgR=  -1.381 totalR=  -16.575 PF=  0.47
+Candidate-rank buckets at entry:
+  rank 2-3                     n=  80 WR= 71.25% avgR=  +7.132 totalR= +570.532 PF=  6.90
+  rank 4-5                     n=  43 WR= 58.14% avgR=  +3.169 totalR= +136.279 PF=  2.53
+  rank 1                       n=  43 WR= 79.07% avgR= +11.358 totalR= +488.413 PF= 26.69
+  rank 6-10                    n=  38 WR= 50.00% avgR=  +0.541 totalR=  +20.541 PF=  1.28
+  rank 11-30                   n=   1 WR=100.00% avgR=  +1.532 totalR=   +1.532 PF=999.00
+Interpretation: selected candidates face meaningful entry gating; evaluate missed-trade shadow before tightening further.
+
+======================================================================
+  8. Exit And Trade Management Fitness
+======================================================================
+
+Exit plan: failed_followthrough_bars=6, failed_followthrough_mfe_r=0.75, failed_followthrough_close_r=-0.25, persistent=None
+Hard stop enabled=False, stop_mode=fixed_pct, stop_pct=0.0045, target_r=55.0
+Partials=False, trail_start=0.0, trail_gap=0.0, quick_exit=True
+Stopless exits: mfe_giveback=None, start=NoneR, gap=NoneR, min_hold=None; late_giveback_bars=None, vwap_fail_after_mfe=NoneR, time_decay_bars=None
+Conditional/cohort protection: conditional_stop_activate=NoneR, gap=NoneR; shadow_failed_followthrough_bars=None
+Exit shares: eod_flatten=69.76%, stopout=0.00%, target_hit=2.44%, partial_hit=0.00%.
+Exit reason decomposition:
+  eod_flatten                  n= 143 WR= 87.41% avgR=  +8.250 totalR=+1179.741 PF= 14.99
+  quick_exit                   n=  32 WR=  0.00% avgR=  -4.160 totalR= -133.127 PF=  0.00
+  failed_followthrough         n=  16 WR=  0.00% avgR=  -3.179 totalR=  -50.869 PF=  0.00
+  path_quality_exit            n=   9 WR= 66.67% avgR=  +0.132 totalR=   +1.184 PF=  1.13
+  target_r                     n=   5 WR=100.00% avgR= +44.073 totalR= +220.367 PF=999.00
+MFE capture by exit reason:
+  eod_flatten                    n= 143 avgR=+8.250 capture=53.42% giveback=+5.689R
+  failed_followthrough           n=  16 avgR=-3.179 capture=0.00% giveback=+3.605R
+  path_quality_exit              n=   9 avgR=+0.132 capture=8.79% giveback=+13.226R
+  quick_exit                     n=  32 avgR=-4.160 capture=0.00% giveback=+7.523R
+  target_r                       n=   5 avgR=+44.073 capture=85.37% giveback=+5.866R
+Hold-duration alpha curve:
+  7-12 bars              n=  51 WR=  5.88% avgR=  -1.516 totalR=  -77.319
+  13-24 bars             n=   1 WR=100.00% avgR= +67.475 totalR=  +67.475
+  25-48 bars             n=   9 WR= 66.67% avgR=  +0.132 totalR=   +1.184
+  >48 bars               n= 144 WR= 87.50% avgR=  +8.514 totalR=+1225.956
+Interpretation: high-extension target capture is now harvesting a small set of large winners while leaving most trades on EOD flatten.
+Appendix management veto: broad MFE giveback, partial exits, time decay, VWAP-fail-after-MFE, hard stop, and MFE-floor variants were quantitatively probed before the append run and excluded unless they showed positive score support.
+
+======================================================================
+  9. MFE / MAE And Lost Alpha
+======================================================================
+
+Avg MFE=12.09R, median MFE=8.79R, MFE>=1R share=89.76%.
+Avg MAE=-3.25R, MAE<=-1R share=68.78%.
+MFE capture=43.34%; broker MFE capture=43.77%; average hold=52.7 bars.
+Winners: n=136, avgR=+10.990, avgMFE=+16.521R, avgGiveback=+5.531R.
+Losers: n=69, avgR=-4.019, avgMAE=-6.145R, losers with MFE>1R=69.57%.
+Diagnostic capture frontier: actual totalR=+1217.296; 50% of positive MFE would be +1238.812R; 75% would be +1858.218R before costs/behavioral side effects.
+Accepted losers: count=69, share=33.66%, avg_MAE=-6.14R, avg_MFE=3.34R, MAE<=-1R=100.00%
+Frontier-role cohorts:
+  - initial_active: trades=205, avg_net=2.26%, win=66.34%, capture=43.34%, MAE<=-1R=68.78%
+Top lost-alpha trades:
+  2026-03-26 950160: actual=+8.432R, MFE=+30.131R, lost=+21.699R, exit=eod_flatten
+  2026-02-02 263750: actual=-16.279R, MFE=+5.413R, lost=+21.692R, exit=eod_flatten
+  2026-03-19 047040: actual=+1.081R, MFE=+21.504R, lost=+20.423R, exit=path_quality_exit
+  2026-01-30 058470: actual=+12.759R, MFE=+32.174R, lost=+19.415R, exit=eod_flatten
+  2026-02-05 323410: actual=-6.267R, MFE=+12.916R, lost=+19.183R, exit=path_quality_exit
+  2025-07-01 006260: actual=-11.186R, MFE=+7.870R, lost=+19.057R, exit=eod_flatten
+  2026-01-16 298050: actual=-10.152R, MFE=+8.874R, lost=+19.027R, exit=quick_exit
+  2026-01-22 018880: actual=-11.653R, MFE=+6.594R, lost=+18.247R, exit=quick_exit
+
+======================================================================
+  10. Risk, Sizing, And Capacity
+======================================================================
+
+risk_per_trade_pct=0.0055, max_position_notional_pct=1.0, intraday_leverage=2.0
+max_positions=8, max_per_sector=8, heat_cap_pct=0.04, hard_max_drawdown_pct=0.08
+Final broker DD=3.87% vs hard ceiling=8.00%; worst fold DD=3.68%; worst fold net=83.83%
+Exposure-normalized slot/broker ratio=1.0000x; portfolio-equivalent minus broker=0.00%.
+
+======================================================================
+  11. Fold, Period, And Concentration Stability
+======================================================================
+
+Fold 1 (2025-05-12 -> 2025-10-20): net=83.83%, DD=2.83%, trades=124, active_days=50, avg_MFE=11.20R, capture=46.51%, conversion=33.79%; delta_vs_baseline net=+22.83%, DD=+0.13%
+Fold 2 (2025-10-21 -> 2026-03-31): net=174.51%, DD=3.68%, trades=81, active_days=47, avg_MFE=13.45R, capture=38.48%, conversion=29.35%; delta_vs_baseline net=+112.11%, DD=-4.94%
+Fold verdict: worst_net=83.83%, median_net=129.17%, worst_DD=3.68%.
+
+Monthly expectancy (worst and best months):
+  Worst 2026-02: n=9, WR=33.33%, avgR=-1.480, totalR=-13.323
+  Worst 2025-08: n=7, WR=57.14%, avgR=+1.638, totalR=+11.464
+  Worst 2025-11: n=16, WR=43.75%, avgR=+1.786, totalR=+28.575
+  Worst 2025-09: n=15, WR=66.67%, avgR=+2.645, totalR=+39.681
+  Best  2025-06: n=22, WR=72.73%, avgR=+10.620, totalR=+233.644
+  Best  2025-10: n=37, WR=62.16%, avgR=+6.023, totalR=+222.848
+  Best  2026-01: n=16, WR=75.00%, avgR=+10.995, totalR=+175.927
+  Best  2025-05: n=19, WR=84.21%, avgR=+8.693, totalR=+165.167
+Weekday mix:
+  Tue                          n=  48 WR= 68.75% avgR=  +6.273 totalR= +301.087 PF=  6.26
+  Fri                          n=  48 WR= 50.00% avgR=  +3.557 totalR= +170.734 PF=  2.76
+  Mon                          n=  45 WR= 73.33% avgR=  +6.797 totalR= +305.875 PF=  7.08
+  Thu                          n=  36 WR= 63.89% avgR=  +4.859 totalR= +174.915 PF=  4.30
+  Wed                          n=  28 WR= 82.14% avgR=  +9.453 totalR= +264.685 PF= 14.28
+Rolling 20-trade expectancy: latest=+6.999R, best=+12.115R, worst=+1.238R, negative_windows=0/186.
+Streaks: max_win=15, max_loss=5, worst_consecutive_loss=-26.368R.
+
+======================================================================
+  12. Paper/Live Parity And Implementation Contract
+======================================================================
+
+Shared decision core: live_shared_core
+Strategy core version: kalcb-core-v13
+Phase framework version: fixed_trade_plan_round_v1
+Phase auto version: kalcb-source-frontier-phase-auto-v13
+Primary objective metric: official_mtm_net_return_pct, basis=SimBroker.equity_curve_bar_level_mtm
+Research scoring objective: broker_net_return_pct, basis=closed_trade_net_pnl_over_initial_equity
+Official metric basis: SimBroker.equity_curve_bar_level_mtm
+Fill timing: next_5m_open; auction mode: non_auction_continuous
+Implementation lessons contract:
+  {
+    "backtest_role": "thin replay driver over KALCBReplayAdapter and SimBroker",
+    "completed_bar_policy": "first30 uses completed 09:00-09:25 bars; signals fill next 5m open",
+    "execution_model": "all entries, exits, stops, partials, and flattens route through neutral actions and SimBroker",
+    "risk_basis": "SimBroker mark-to-market equity curve",
+    "shared_core": "strategy_kalcb.core.step_kalcb_core"
+  }
+Parity status: pending_paper_live_evidence; training replay audit pass=True.
+Expected contract: mutation_hash=1f9656cd7d43, candidate_snapshot=a5a4285ac64d, shared_core=strategy_kalcb.core.step_kalcb_core.
+Backtest baselines: market_bars=7819f89845d6, decisions=3beaf7ff5a41, actions=9c0ff5e48135, fills=f1db93cfa3ff, trades=b6d78ef4b3f6.
+Promotion requires zero decision/action/OMS/fill/trade/state/snapshot/bar mismatches; diagnostic-only entry_rejected emissions may differ only if state and trades are unchanged.
+Paper/live evidence must include daily snapshots, completed 5m bars, decision stream, neutral actions, OMS intents, fills, trade outcomes, and restart-hydration state snapshots.
+
+======================================================================
+  13. Fast/Full Replay Audit And Artifact Pointers
+======================================================================
+
+Status: pass; pass=True; max_abs_metric_delta=0.000000000000
+Fill hash match=True; trade hash match=True; trading decision hash match=True; strategy action hash match=True
+Fast decisions=1466; full decisions=17525; suppressed entry rejections=16059
+Same-bar fills=0, forced replay closes=0, rejected orders=0, end-open positions=0
+Scope: only entry_rejected diagnostics may differ between fast and full replay paths.
+Artifact pointers:
+  source=C:\Users\sehyu\Documents\Other\Projects\k_stock_trader\data\backtests\output\kalcb\round_1\guarded_q3_full_diagnostics\train_guarded_prefilter_pool_rows.jsonl
+  cache_key=a58787ac282e3ceb; cache_hit=False; compiled_bars=161536; snapshots=214; selections=135
+  source_fingerprint=947f6438b334; feature_manifest=a58787ac282e; candidate_snapshot=6caab8b373e3
+  final_compiled_replay=c26a47fd1fae; final_candidate_artifact=a5a4285ac64d; optimized_mutations=1f9656cd7d43
+  parity_contract=paper_live_parity_contract.json; snapshot_manifest=paper_live_parity_inputs/daily_snapshot_manifest.json; market_bar_digest=paper_live_parity_inputs/replay_market_bar_digest.json
+
+======================================================================
+  14. Holdout And Promotion Boundary
+======================================================================
+
+Holdout status: excluded from this optimization round by design.
+Promotion status: research_only_until_holdout_and_paper_parity.
+Required next validation: run untouched holdout through the same shared-core replay path, then require paper/live parity before any live promotion.
+Reason: Round 1 holdout was negative and breached the drawdown ceiling; Round 2 training gains are not sufficient evidence of production alpha.
+
+======================================================================
+  15. Strengths, Weaknesses, And Verdict
+======================================================================
+
+Strengths:
+  + Net return improved by +134.93% while drawdown improved by 1.84%.
+  + Frequency was preserved: 205 -> 205 trades.
+  + Fast/full replay parity is clean, with 16059 suppressed rejection diagnostics and no fill/trade drift.
+  + Worst fold stayed positive at 83.83%.
+Weaknesses / risks:
+  - MFE capture fell from 46.42% to 43.34%; the strategy still needs holdout proof that captured excursion alpha is durable.
+  - Frontier expansion and source-quality gates remain intentionally hard to promote; any accepted expansion still needs locked holdout and paper parity before being treated as production alpha.
+  - Trade management remains path-dependent: many losers first had real MFE, but the tested protection families mostly cut right-tail alpha faster than they reduced drawdown.
+  - The sample is small and training-only; positive train folds do not remove the need for locked holdout and paper parity.
+  - High-extension targets are structural improvements, not proof of edge by themselves; promotion still depends on audit-clean fold and holdout behavior.
+
+Verdict: this round is an audit-clean training-only optimization. It is not live-ready until untouched holdout validation and paper/live decision-stream parity both pass.
+
+## Locked Holdout Addendum
+
+Selected candidate: hn_notional1p0_target55p0
+Holdout official MTM: 8.87%
+Holdout closed-trade net: 8.87%
+Holdout max drawdown: 6.58%
+Holdout trades: 16
+Holdout win rate: 43.75%
+Holdout audit pass: True
+Same-bar fills: 0
+Forced replay closes: 0
+Rejected orders: 0
+End open positions: 0
+Paper/live parity status: pending_paper_live_evidence
+
+Production promotion remains blocked until paper/live decision, action, fill, trade, state, snapshot, and bar hashes match the contract.

@@ -1,0 +1,67 @@
+======================================================================
+PORTFOLIO_SYNERGY END-OF-ROUND EVALUATION
+======================================================================
+
+Phase Progression Summary:
+  Phase 1: score 94.7031 -> 97.3455 (2 accepted)
+  Phase 2: score 97.3455 -> 101.8273 (1 accepted)
+  Phase 3: score 101.8273 -> 101.9607 (1 accepted)
+  Phase 4: score 101.9607 -> 103.4951 (3 accepted)
+  Phase 5: score 0.0000 -> 108.7883 (2 accepted)
+  Phase 6: score 108.7883 -> 113.7233 (2 accepted)
+  Phase 7: score 113.7233 -> 113.7233 (0 accepted)
+
+Cumulative Mutations Applied:
+  blockers.block_olr_after_kalcb_failed_followthrough: False
+  blockers.block_olr_after_kalcb_quick_exit_r_lt: 0.0
+  blockers.boost_olr_after_kalcb_strong_eod: 1.0
+  blockers.boost_olr_after_kalcb_strong_live_path: 1.15
+  blockers.haircut_olr_after_kalcb_negative_path: 1.0
+  blockers.kalcb_rank6_10_half_size_confirmed: True
+  blockers.kalcb_rank6_10_requires_olr_sector_confirm: False
+  blockers.sector_failure_haircut_mult: 1.0
+  kalcb.confirmed_size_mult: 1.25
+  kalcb.size_mult: 1.06
+  olr.confirmed_size_mult: 1.0
+  olr.size_mult: 0.94
+  portfolio.agreement_boost_mult: 1.18
+  portfolio.capacity_rank_mode: chronological
+  portfolio.daily_loss_stop_r: 0.0
+  portfolio.disagreement_haircut_mult: 1.0
+  portfolio.dynamic_drawdown_tiers: [[0.06, 1.0], [0.09, 0.8], [0.12, 0.55], [0.15, 0.0]]
+  portfolio.frequency.enable_kalcb_secondary: True
+  portfolio.frequency.enable_olr_shadow_slot6: True
+  portfolio.max_daily_gross: 2.1
+  portfolio.max_sector_gross: 9.99
+  portfolio.olr_close_reserve_gross: 0.0
+  portfolio.olr_close_reserve_priority_floor: 1.15
+  portfolio.reference_risk_pct: 0.0062
+  portfolio.risk_stance: controlled_aggressive
+  portfolio.same_symbol_policy: allow
+  portfolio.strategy_r_share_cap: 0.72
+  portfolio.use_dynamic_drawdown_tiers: False
+  portfolio.weekly_loss_stop_r: 0.0
+  source.holdout_excluded: True
+  source.kalcb.round: 3
+  source.olr.round: 5
+
+Signal Extraction
+No report provided.
+
+Signal Discrimination
+No report provided.
+
+Entry Mechanism
+No report provided.
+
+Trade Management
+No report provided.
+
+Exit Mechanism
+No report provided.
+
+Lessons Alignment
+The optimisation layer is a thin portfolio arbitration replay over source-fingerprinted KALCB/OLR artifacts. It does not duplicate source strategy decisions, keeps fill timing explicit, emits canonical accepted/blocked trade records, and marks the artifact as research-only until full replay and parity checks are complete.
+
+Overall Verdict
+Research-only controlled-aggressive portfolio candidate selected. Holdout was excluded; promote only after full source replay, holdout, and paper-live parity audits.

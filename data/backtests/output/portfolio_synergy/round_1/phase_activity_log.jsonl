@@ -1,0 +1,147 @@
+{"timestamp": "2026-05-27T03:42:32.904514+00:00", "phase": 1, "action": "phase_start", "focus": "Latest KALCB/OLR artifact baseline and accounting integrity", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:42:33.203507+00:00", "phase": 1, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:33.232513+00:00", "phase": 1, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:42:33.239512+00:00", "phase": 1, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:33.266534+00:00", "phase": 2, "action": "phase_start", "focus": "Neutral capacity and low-friction portfolio caps", "candidate_count": 8}
+{"timestamp": "2026-05-27T03:42:33.791511+00:00", "phase": 2, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:33.828526+00:00", "phase": 2, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:33.841514+00:00", "phase": 2, "action": "decision_improve_scoring", "retry": 1}
+{"timestamp": "2026-05-27T03:42:34.266511+00:00", "phase": 2, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:34.298538+00:00", "phase": 2, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:34.312510+00:00", "phase": 2, "action": "decision_improve_scoring", "retry": 2}
+{"timestamp": "2026-05-27T03:42:34.745510+00:00", "phase": 2, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:34.778509+00:00", "phase": 2, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:34.787508+00:00", "phase": 2, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:34.819507+00:00", "phase": 3, "action": "phase_start", "focus": "Selective blockers that should block weaker trades first", "candidate_count": 8}
+{"timestamp": "2026-05-27T03:42:35.534509+00:00", "phase": 3, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:35.564511+00:00", "phase": 3, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:35.578519+00:00", "phase": 3, "action": "decision_improve_scoring", "retry": 1}
+{"timestamp": "2026-05-27T03:42:36.057511+00:00", "phase": 3, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:36.082565+00:00", "phase": 3, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:36.095507+00:00", "phase": 3, "action": "decision_improve_scoring", "retry": 2}
+{"timestamp": "2026-05-27T03:42:36.521080+00:00", "phase": 3, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:36.543026+00:00", "phase": 3, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:36.552030+00:00", "phase": 3, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:36.579028+00:00", "phase": 4, "action": "phase_start", "focus": "Causal cross-strategy confirmation and sizing overlays", "candidate_count": 7}
+{"timestamp": "2026-05-27T03:42:37.168034+00:00", "phase": 4, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:37.195027+00:00", "phase": 4, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:37.208027+00:00", "phase": 4, "action": "decision_improve_scoring", "retry": 1}
+{"timestamp": "2026-05-27T03:42:37.622031+00:00", "phase": 4, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:37.645079+00:00", "phase": 4, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:37.656032+00:00", "phase": 4, "action": "decision_improve_scoring", "retry": 2}
+{"timestamp": "2026-05-27T03:42:38.068080+00:00", "phase": 4, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:38.090031+00:00", "phase": 4, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:38.100080+00:00", "phase": 4, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:38.129040+00:00", "phase": 5, "action": "phase_start", "focus": "Quality-preserving frequency expansion", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:42:38.337076+00:00", "phase": 5, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:38.361079+00:00", "phase": 5, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:42:38.372027+00:00", "phase": 5, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:38.399080+00:00", "phase": 6, "action": "phase_start", "focus": "Controlled-aggressive sizing and drawdown governors", "candidate_count": 7}
+{"timestamp": "2026-05-27T03:42:38.927078+00:00", "phase": 6, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:38.948027+00:00", "phase": 6, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:38.966078+00:00", "phase": 6, "action": "decision_improve_scoring", "retry": 1}
+{"timestamp": "2026-05-27T03:42:39.359081+00:00", "phase": 6, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:39.382028+00:00", "phase": 6, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:39.396040+00:00", "phase": 6, "action": "decision_improve_scoring", "retry": 2}
+{"timestamp": "2026-05-27T03:42:39.790029+00:00", "phase": 6, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:39.812039+00:00", "phase": 6, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "MISALIGNED"}
+{"timestamp": "2026-05-27T03:42:39.826033+00:00", "phase": 6, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:39.853086+00:00", "phase": 7, "action": "phase_start", "focus": "Robustness, ablation, and final promotion audit", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:42:40.002027+00:00", "phase": 7, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:40.026028+00:00", "phase": 7, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "INEFFECTIVE"}
+{"timestamp": "2026-05-27T03:42:40.042027+00:00", "phase": 7, "action": "decision_improve_scoring", "retry": 1}
+{"timestamp": "2026-05-27T03:42:40.170029+00:00", "phase": 7, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:40.204029+00:00", "phase": 7, "action": "analysis_complete", "recommendation": "improve_scoring", "scoring_assessment": "INEFFECTIVE"}
+{"timestamp": "2026-05-27T03:42:40.228029+00:00", "phase": 7, "action": "decision_improve_scoring", "retry": 2}
+{"timestamp": "2026-05-27T03:42:40.415037+00:00", "phase": 7, "action": "gate_check", "passed": false, "failure_category": "structural_issue"}
+{"timestamp": "2026-05-27T03:42:40.459032+00:00", "phase": 7, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "INEFFECTIVE"}
+{"timestamp": "2026-05-27T03:42:40.481032+00:00", "phase": 7, "action": "decision_advance", "gate_passed": false, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:42:40.568033+00:00", "phase": 7, "action": "end_of_round", "completed_phases": [1, 2, 3, 4, 5, 6, 7]}
+{"timestamp": "2026-05-27T03:44:26.246399+00:00", "phase": 1, "action": "phase_start", "focus": "Latest KALCB/OLR artifact baseline and accounting integrity", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:44:26.484379+00:00", "phase": 1, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:26.504379+00:00", "phase": 1, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:26.509379+00:00", "phase": 1, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 3}
+{"timestamp": "2026-05-27T03:44:26.532386+00:00", "phase": 2, "action": "phase_start", "focus": "Neutral capacity and low-friction portfolio caps", "candidate_count": 8}
+{"timestamp": "2026-05-27T03:44:26.927381+00:00", "phase": 2, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:26.953395+00:00", "phase": 2, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:26.960379+00:00", "phase": 2, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 1}
+{"timestamp": "2026-05-27T03:44:26.991391+00:00", "phase": 3, "action": "phase_start", "focus": "Selective blockers that should block weaker trades first", "candidate_count": 8}
+{"timestamp": "2026-05-27T03:44:27.524378+00:00", "phase": 3, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:27.547382+00:00", "phase": 3, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:27.554379+00:00", "phase": 3, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 2}
+{"timestamp": "2026-05-27T03:44:27.578391+00:00", "phase": 4, "action": "phase_start", "focus": "Causal cross-strategy confirmation and sizing overlays", "candidate_count": 7}
+{"timestamp": "2026-05-27T03:44:28.186429+00:00", "phase": 4, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:28.215379+00:00", "phase": 4, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:28.225379+00:00", "phase": 4, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 3}
+{"timestamp": "2026-05-27T03:44:28.251433+00:00", "phase": 5, "action": "phase_start", "focus": "Quality-preserving frequency expansion", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:44:28.493432+00:00", "phase": 5, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:28.516378+00:00", "phase": 5, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:28.527379+00:00", "phase": 5, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 2}
+{"timestamp": "2026-05-27T03:44:28.556379+00:00", "phase": 6, "action": "phase_start", "focus": "Controlled-aggressive sizing and drawdown governors", "candidate_count": 7}
+{"timestamp": "2026-05-27T03:44:29.392383+00:00", "phase": 6, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:29.439383+00:00", "phase": 6, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:29.463386+00:00", "phase": 6, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 5}
+{"timestamp": "2026-05-27T03:44:29.520382+00:00", "phase": 7, "action": "phase_start", "focus": "Robustness, ablation, and final promotion audit", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:44:29.823382+00:00", "phase": 7, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:44:29.858383+00:00", "phase": 7, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:44:29.887384+00:00", "phase": 7, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:44:29.984385+00:00", "phase": 7, "action": "end_of_round", "completed_phases": [1, 2, 3, 4, 5, 6, 7]}
+{"timestamp": "2026-05-27T03:46:24.237581+00:00", "phase": 1, "action": "phase_start", "focus": "Latest KALCB/OLR artifact baseline and accounting integrity", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:46:24.650582+00:00", "phase": 1, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:24.685574+00:00", "phase": 1, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:24.694578+00:00", "phase": 1, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 3}
+{"timestamp": "2026-05-27T03:46:24.728571+00:00", "phase": 2, "action": "phase_start", "focus": "Neutral capacity and low-friction portfolio caps", "candidate_count": 12}
+{"timestamp": "2026-05-27T03:46:25.614598+00:00", "phase": 2, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:25.645574+00:00", "phase": 2, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:25.656593+00:00", "phase": 2, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 1}
+{"timestamp": "2026-05-27T03:46:25.688636+00:00", "phase": 3, "action": "phase_start", "focus": "Selective blockers that should block weaker trades first", "candidate_count": 8}
+{"timestamp": "2026-05-27T03:46:26.404599+00:00", "phase": 3, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:26.433573+00:00", "phase": 3, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:26.443598+00:00", "phase": 3, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 2}
+{"timestamp": "2026-05-27T03:46:26.476574+00:00", "phase": 4, "action": "phase_start", "focus": "Causal cross-strategy confirmation and sizing overlays", "candidate_count": 7}
+{"timestamp": "2026-05-27T03:46:27.176572+00:00", "phase": 4, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:27.204572+00:00", "phase": 4, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:27.216576+00:00", "phase": 4, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 3}
+{"timestamp": "2026-05-27T03:46:27.255632+00:00", "phase": 5, "action": "phase_start", "focus": "Quality-preserving frequency expansion", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:46:27.549575+00:00", "phase": 5, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:27.577601+00:00", "phase": 5, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:27.591575+00:00", "phase": 5, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 2}
+{"timestamp": "2026-05-27T03:46:27.628575+00:00", "phase": 6, "action": "phase_start", "focus": "Controlled-aggressive sizing and drawdown governors", "candidate_count": 7}
+{"timestamp": "2026-05-27T03:46:28.385574+00:00", "phase": 6, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:28.409572+00:00", "phase": 6, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:28.424573+00:00", "phase": 6, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 5}
+{"timestamp": "2026-05-27T03:46:28.459572+00:00", "phase": 7, "action": "phase_start", "focus": "Robustness, ablation, and final promotion audit", "candidate_count": 4}
+{"timestamp": "2026-05-27T03:46:28.663598+00:00", "phase": 7, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T03:46:28.696568+00:00", "phase": 7, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T03:46:28.715572+00:00", "phase": 7, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T03:46:28.776633+00:00", "phase": 7, "action": "end_of_round", "completed_phases": [1, 2, 3, 4, 5, 6, 7]}
+{"timestamp": "2026-05-27T09:05:44.906153+00:00", "phase": 1, "action": "phase_start", "focus": "Latest KALCB/OLR artifact baseline and accounting integrity", "candidate_count": 4}
+{"timestamp": "2026-05-27T09:05:45.543149+00:00", "phase": 1, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:45.600150+00:00", "phase": 1, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:45.620150+00:00", "phase": 1, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 3}
+{"timestamp": "2026-05-27T09:05:45.682147+00:00", "phase": 2, "action": "phase_start", "focus": "Neutral capacity and low-friction portfolio caps", "candidate_count": 12}
+{"timestamp": "2026-05-27T09:05:47.080147+00:00", "phase": 2, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:47.130146+00:00", "phase": 2, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:47.153145+00:00", "phase": 2, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 1}
+{"timestamp": "2026-05-27T09:05:47.212159+00:00", "phase": 3, "action": "phase_start", "focus": "Selective blockers that should block weaker trades first", "candidate_count": 8}
+{"timestamp": "2026-05-27T09:05:47.949145+00:00", "phase": 3, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:47.993153+00:00", "phase": 3, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:48.012153+00:00", "phase": 3, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 1}
+{"timestamp": "2026-05-27T09:05:48.070173+00:00", "phase": 4, "action": "phase_start", "focus": "Causal cross-strategy confirmation and sizing overlays", "candidate_count": 7}
+{"timestamp": "2026-05-27T09:05:49.094145+00:00", "phase": 4, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:49.133146+00:00", "phase": 4, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:49.152149+00:00", "phase": 4, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 3}
+{"timestamp": "2026-05-27T09:05:49.203150+00:00", "phase": 5, "action": "phase_start", "focus": "Quality-preserving frequency expansion", "candidate_count": 4}
+{"timestamp": "2026-05-27T09:05:49.631144+00:00", "phase": 5, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:49.670151+00:00", "phase": 5, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:49.690143+00:00", "phase": 5, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 2}
+{"timestamp": "2026-05-27T09:05:49.739146+00:00", "phase": 6, "action": "phase_start", "focus": "Controlled-aggressive sizing and drawdown governors", "candidate_count": 7}
+{"timestamp": "2026-05-27T09:05:50.484144+00:00", "phase": 6, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:50.518145+00:00", "phase": 6, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:50.540144+00:00", "phase": 6, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 2}
+{"timestamp": "2026-05-27T09:05:50.590144+00:00", "phase": 7, "action": "phase_start", "focus": "Robustness, ablation, and final promotion audit", "candidate_count": 4}
+{"timestamp": "2026-05-27T09:05:50.840145+00:00", "phase": 7, "action": "gate_check", "passed": true, "failure_category": null}
+{"timestamp": "2026-05-27T09:05:50.878173+00:00", "phase": 7, "action": "analysis_complete", "recommendation": "advance", "scoring_assessment": "EFFECTIVE"}
+{"timestamp": "2026-05-27T09:05:50.900171+00:00", "phase": 7, "action": "decision_advance", "gate_passed": true, "new_mutation_count": 0}
+{"timestamp": "2026-05-27T09:05:51.021171+00:00", "phase": 7, "action": "end_of_round", "completed_phases": [1, 2, 3, 4, 5, 6, 7]}
+{"timestamp": "2026-05-27T10:52:57.463913+00:00", "phase": 7, "action": "end_of_round", "completed_phases": [1, 2, 3, 4, 5, 6, 7]}

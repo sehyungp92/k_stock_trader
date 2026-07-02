@@ -1,0 +1,33 @@
+======================================================================
+PHASE 7 ANALYSIS
+======================================================================
+
+Recommendation: advance
+Reason: Gate passed.
+Scoring assessment: EFFECTIVE
+
+Strengths:
+  + official_mtm_net_return_pct: 4.6124 (105% of 4.4000)
+  + trades_per_21_sessions: 45.7742 (114% of 40.0000)
+  + profit_factor: 4.5959 (200% of 2.2000)
+  + block_selectivity_edge_r: 0.5133 (200% of 0.2500)
+  + max_drawdown_pct: 0.0413 (200% of 0.1400)
+  + min_strategy_trade_capture: 0.8491 (129% of 0.6600)
+
+Weaknesses:
+  - positive_alpha_block_rate: 0.0690 (38% of 0.1800)
+
+Extra Analysis:
+  score components: 7
+  holdout excluded: True
+  best candidate: p7_cost_stress_guard
+  block reasons: {"daily_gross_cap": 63}
+
+Goal Progress:
+  official_mtm_net_return_pct: 4.6124 / 4.4000 (105%)
+  trades_per_21_sessions: 45.7742 / 40.0000 (114%)
+  profit_factor: 4.5959 / 2.2000 (200%)
+  block_selectivity_edge_r: 0.5133 / 0.2500 (200%)
+  positive_alpha_block_rate: 0.0690 / 0.1800 (38%)
+  max_drawdown_pct: 0.0413 / 0.1400 (200%)
+  min_strategy_trade_capture: 0.8491 / 0.6600 (129%)

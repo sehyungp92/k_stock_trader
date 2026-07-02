@@ -1,0 +1,33 @@
+======================================================================
+PHASE 5 ANALYSIS
+======================================================================
+
+Recommendation: advance
+Reason: Gate passed.
+Scoring assessment: EFFECTIVE
+
+Strengths:
+  + official_mtm_net_return_pct: 3.8953 (89% of 4.4000)
+  + trades_per_21_sessions: 46.4516 (116% of 40.0000)
+  + profit_factor: 4.5453 (200% of 2.2000)
+  + block_selectivity_edge_r: 0.5127 (200% of 0.2500)
+  + max_drawdown_pct: 0.0429 (200% of 0.1400)
+  + min_strategy_trade_capture: 0.8707 (132% of 0.6600)
+
+Weaknesses:
+  - positive_alpha_block_rate: 0.0616 (34% of 0.1800)
+
+Extra Analysis:
+  score components: 7
+  holdout excluded: True
+  best candidate: p5_combined_frequency_with_rank_gate
+  block reasons: {"daily_gross_cap": 56}
+
+Goal Progress:
+  official_mtm_net_return_pct: 3.8953 / 4.4000 (89%)
+  trades_per_21_sessions: 46.4516 / 40.0000 (116%)
+  profit_factor: 4.5453 / 2.2000 (200%)
+  block_selectivity_edge_r: 0.5127 / 0.2500 (200%)
+  positive_alpha_block_rate: 0.0616 / 0.1800 (34%)
+  max_drawdown_pct: 0.0429 / 0.1400 (200%)
+  min_strategy_trade_capture: 0.8707 / 0.6600 (132%)

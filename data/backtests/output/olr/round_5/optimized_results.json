@@ -1,0 +1,584 @@
+{
+  "evaluations_jsonl": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\evaluations.jsonl",
+  "selected": {
+    "artifact_paths": {
+      "evaluations": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\evaluations.jsonl",
+      "optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json",
+      "optimized_results": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_results.json",
+      "round_evaluation": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_evaluation.txt",
+      "round_final_diagnostics": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_final_diagnostics.txt",
+      "round_final_full_diagnostics": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_final_full_diagnostics.json",
+      "run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\run_summary.json"
+    },
+    "artifact_promotion_policy": "training_only_until_holdout_and_paper_parity",
+    "auction_mode": "resting_close_auction_after_14_30_decision",
+    "audit_pass": true,
+    "audit_status": "direct_official_training_replay_paper_live_pending",
+    "candidate_snapshot_hash": "615d02c4d7e186d98ac9b371447813d41f60c325c56205ee61e534bf2eb9a33b",
+    "capability_level": "real_replay",
+    "changed_mutations": {
+      "olr.afternoon.score_band_rules": {
+        "from": [
+          {
+            "max_score": 300.0,
+            "name": "base_low_lt300"
+          },
+          {
+            "allowed_sectors": [
+              "CHEMICALS",
+              "SEMICONDUCTORS",
+              "DEFENSE",
+              "ELECTRONICS",
+              "IT",
+              "SHIPBUILDING",
+              "FINANCIAL"
+            ],
+            "max_score": 500.0,
+            "min_score": 400.0,
+            "name": "mid_400_500"
+          },
+          {
+            "min_score": 650.0,
+            "name": "base_high_gt650"
+          }
+        ],
+        "to": [
+          {
+            "max_score": 300.0,
+            "name": "base_low_lt300"
+          },
+          {
+            "allowed_sectors": [
+              "CHEMICALS",
+              "SEMICONDUCTORS",
+              "DEFENSE",
+              "ELECTRONICS",
+              "IT",
+              "SHIPBUILDING",
+              "FINANCIAL"
+            ],
+            "max_score": 500.0,
+            "min_score": 400.0,
+            "name": "mid_400_500_static_sector_prior"
+          },
+          {
+            "max_score": 500.0,
+            "min_score": 400.0,
+            "name": "mid_400_500_looser_breakout_dynamic_overlay",
+            "sector_admission": {
+              "min_sector_intraday_ret_pct": 2.0,
+              "min_stock_sector_daily_ret5_gap_pct": 11.0,
+              "mode": "dynamic_confirmed_rotation"
+            }
+          },
+          {
+            "min_score": 650.0,
+            "name": "base_high_gt650"
+          }
+        ]
+      }
+    },
+    "comparison_vs_round_4": {
+      "oos": {
+        "drawdown_delta": 0.0,
+        "net_delta": 0.0,
+        "trade_delta": 0.0,
+        "win_delta": 0.0
+      },
+      "train": {
+        "drawdown_delta": 0.0,
+        "net_delta": 0.0,
+        "trade_delta": 0.0,
+        "win_delta": 0.0
+      }
+    },
+    "cost_policy": {
+      "auction_adverse_bps": 0.0,
+      "auction_limit_offset_bps": 150.0,
+      "auction_nonfill_rate": 0.0,
+      "auction_slippage_bps": 0.0,
+      "commission_bps": 2.0,
+      "market_entry_price_buffer_bps": 150.0,
+      "slippage_bps": 5.0,
+      "tax_bps_on_sell": 18.0
+    },
+    "decision_hash": "9ea031e2f78fbc0ce18e711d99f0a78edc44f8cbea70314431018b3dc7b3f79d",
+    "dynamic_sector_admission": {
+      "live_backtest_parity": {
+        "decision_cutoff": "timestamp < 14:30 KST",
+        "live_generator": "strategy_olr.research_generator.generate_afternoon_candidate_snapshot",
+        "same_day_daily_flow_visible": false,
+        "same_day_daily_ohlcv_visible": false,
+        "shared_selector": "strategy_olr.research.afternoon_selection_from_contexts"
+      },
+      "rejected_reason_counts": {
+        "afternoon_ret_below_floor": 1512,
+        "afternoon_score_band_rule_miss": 146,
+        "gap_outside_bounds": 2,
+        "lagged_flow_5d_below_floor": 871,
+        "lagged_sector_flow_below_floor": 859,
+        "low_vs_prev_close_below_floor": 1,
+        "missing_completed_afternoon_bars": 10,
+        "mode_requires_nonnegative_afternoon_ret": 1512,
+        "open_drawdown_above_cap": 3,
+        "vwap_ret_below_floor": 178
+      },
+      "role": "retain static mid-band sector prior and add looser breakout dynamic admission overlay",
+      "score_band_rules": [
+        {
+          "max_score": 300.0,
+          "name": "base_low_lt300"
+        },
+        {
+          "allowed_sectors": [
+            "CHEMICALS",
+            "SEMICONDUCTORS",
+            "DEFENSE",
+            "ELECTRONICS",
+            "IT",
+            "SHIPBUILDING",
+            "FINANCIAL"
+          ],
+          "max_score": 500.0,
+          "min_score": 400.0,
+          "name": "mid_400_500_static_sector_prior"
+        },
+        {
+          "max_score": 500.0,
+          "min_score": 400.0,
+          "name": "mid_400_500_looser_breakout_dynamic_overlay",
+          "sector_admission": {
+            "min_sector_intraday_ret_pct": 2.0,
+            "min_stock_sector_daily_ret5_gap_pct": 11.0,
+            "mode": "dynamic_confirmed_rotation"
+          }
+        },
+        {
+          "min_score": 650.0,
+          "name": "base_high_gt650"
+        }
+      ],
+      "selected_rule_counts": {
+        "base_high_gt650": 94,
+        "base_low_lt300": 347,
+        "mid_400_500_static_sector_prior": 38
+      },
+      "tradeoff_note": "Adopted as a parity-safe dynamic exception layer: static historical sector prior is retained, while non-listed sectors can enter the mid band when same-day sector breakout and stock-vs-sector leadership are both strong."
+    },
+    "end_open_position_count": 0.0,
+    "entry_fill_count": 232.0,
+    "entry_level_trade_count": 232.0,
+    "entry_level_win_rate": 0.5517241379310345,
+    "execution_contract": {
+      "auction_mode": "resting_close_auction_after_14_30_decision",
+      "candidate_generation_cutoffs": {
+        "daily": "row_date < trade_date",
+        "stage2_intraday": "timestamp < 14:30 KST"
+      },
+      "candidate_snapshot_hash": "615d02c4d7e186d98ac9b371447813d41f60c325c56205ee61e534bf2eb9a33b",
+      "capability_level": "real_replay",
+      "cost_policy": {
+        "auction_adverse_bps": 0.0,
+        "auction_limit_offset_bps": 150.0,
+        "auction_nonfill_rate": 0.0,
+        "auction_slippage_bps": 0.0,
+        "commission_bps": 2.0,
+        "market_entry_price_buffer_bps": 150.0,
+        "slippage_bps": 5.0,
+        "tax_bps_on_sell": 18.0
+      },
+      "date_window": {
+        "end": "2026-03-31",
+        "start": "2025-05-12"
+      },
+      "feature_manifest_hash": "9ca35622ef6fafb87558433dd74e17dbe5e972e23438f5f87ce07cac98a8da5b",
+      "fill_timing": "research_only_14_30_decision",
+      "initial_equity": 10000000.0,
+      "paper_live_parity_status": "required_before_promotion",
+      "phase_framework_version": "shared-phase-auto-v2-official-mtm-contract",
+      "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+      "primary_promotion_metric": "official_mtm_net_return_pct",
+      "replay_mode": "olr_core_simbroker_cached_training",
+      "source_fingerprint": "25cef58f0d446de02f8e849e1f48b8331ed6a1d081a532ba98a9e3f9f810e689",
+      "strategy": "olr",
+      "strategy_core_version": "olr-research-v4"
+    },
+    "feature_manifest_hash": "9ca35622ef6fafb87558433dd74e17dbe5e972e23438f5f87ce07cac98a8da5b",
+    "fill_hash": "014f1c20296dde418b054f5d1c2f9220da10abb0b709be52450e030a9269793a",
+    "fill_timing": "research_only_14_30_decision",
+    "final_diagnostics": {
+      "generated_at_utc": "2026-05-27T10:50:38Z",
+      "mode": "round5_official_train_replay_hash_contract_refresh",
+      "round_evaluation_exists": true,
+      "round_evaluation_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_evaluation.txt",
+      "round_final_diagnostics_exists": true,
+      "round_final_diagnostics_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_final_diagnostics.txt",
+      "round_final_full_diagnostics_exists": true,
+      "round_final_full_diagnostics_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_final_full_diagnostics.json",
+      "strategy": "olr"
+    },
+    "final_state_hash": "993f54276d86a3dcba4ed5cee69a39b45947166d0792692f51f5401ecf4e83b0",
+    "forced_replay_close_count": 0.0,
+    "generated_at_utc": "2026-05-27T10:50:38Z",
+    "holdout_days": 42,
+    "holdout_diagnostics": {
+      "holdout_days": 42,
+      "metrics": {
+        "auction_nonfill_count": 0.0,
+        "auction_order_count": 30.0,
+        "avg_r": 0.36792672960116063,
+        "candidate_snapshot_count": 24.0,
+        "candidate_snapshot_hash": "61ed6efc4814f78282f580a2c16520c81d7c0786c09149b77579d9b6d9041498",
+        "close_to_close_alpha_capture_pct": 0.0,
+        "end_open_position_count": 1.0,
+        "entry_fill_count": 32.0,
+        "entry_level_avg_r": 0.3209343587798534,
+        "entry_level_expected_total_r": 9.948965122175455,
+        "entry_level_profit_factor": 2.920742658218945,
+        "entry_level_trade_count": 31.0,
+        "entry_level_win_rate": 0.5161290322580645,
+        "exit_fill_count": 31.0,
+        "exit_leg_count": 31.0,
+        "exit_leg_to_entry_ratio": 1.0,
+        "expectancy": 68725.51646661303,
+        "expected_total_r": 11.40572861763598,
+        "expired_order_count": 0.0,
+        "final_equity": 12129697.791505001,
+        "forced_replay_close_count": 0.0,
+        "gross_exposure_avg_pct": 0.41916725369432056,
+        "gross_loss": 1012753.9499999991,
+        "gross_profit": 3372336.225000003,
+        "legacy_slot_metric_basis": "non_official_research_labels",
+        "max_drawdown_pct": 0.05911397880195744,
+        "mfe_capture": 0.33885817784784455,
+        "net_gains": 3239692.704585003,
+        "net_losses": 1109201.6941199992,
+        "net_profit": 2130491.010465004,
+        "net_return_pct": 0.2130491010465004,
+        "net_return_pct_basis": "closed_trade_net_pnl_over_initial_equity",
+        "official_metric_basis": "SimBroker.equity_curve_bar_level_mtm",
+        "official_mtm_max_drawdown_pct": 0.05911397880195744,
+        "official_mtm_net_return_pct": 0.21296977915050008,
+        "official_mtm_sharpe": 1.1418609038255774,
+        "official_performance": false,
+        "official_trade_plan_supported": 1.0,
+        "open_order_count": 0.0,
+        "open_position_count": 1.0,
+        "partial_exit_leg_count": 0.0,
+        "profit_factor": 2.920742658218945,
+        "rejected_order_count": 0.0,
+        "replay_event_count": 203517.0,
+        "replay_mode": "olr_core_simbroker",
+        "same_bar_fill_count": 0.0,
+        "sharpe": 1.1418609038255774,
+        "strategy_core_version": "olr-research-v4",
+        "total_trades": 31.0,
+        "trade_entry_plan_mode": "confirm_next_bar",
+        "trade_entry_plan_name": "confirm_b6_vwap_cap25",
+        "trade_exit_plan_mode": "managed",
+        "trade_exit_plan_name": "mfe_fade1_g125",
+        "win_rate": 0.5161290322580645
+      },
+      "promotion_note": "Untouched holdout remains diagnostic only; paper/live parity is still required before production promotion.",
+      "refresh_status": "retained_locked_holdout_artifact",
+      "retained_at_utc": "2026-05-27T10:50:38Z",
+      "source": {
+        "candidate_snapshot_hash": "61ed6efc4814f78282f580a2c16520c81d7c0786c09149b77579d9b6d9041498",
+        "date_count": 28,
+        "date_end": "2026-05-12",
+        "date_start": "2026-04-01",
+        "feature_bundle_hash": "1980c040470f9e185cc06553839b88a37f8b3fa1a3de3df5daadf9703695602b",
+        "source_fingerprint": "1980c040470f9e185cc06553839b88a37f8b3fa1a3de3df5daadf9703695602b",
+        "streaming_compile": true,
+        "validation_source_label": "round5_looser_breakout_dynamic_admission_overlay"
+      }
+    },
+    "live_parity_fill_timing": "research_only_14_30_decision",
+    "max_drawdown_pct": 0.0886834922791243,
+    "metric_contract": {
+      "audit_pass": true,
+      "audit_status": "direct_official_training_replay_paper_live_pending",
+      "closed_trade_return_basis": "closed_trade_net_pnl_over_initial_equity",
+      "execution_contract": {
+        "auction_mode": "resting_close_auction_after_14_30_decision",
+        "candidate_generation_cutoffs": {
+          "daily": "row_date < trade_date",
+          "stage2_intraday": "timestamp < 14:30 KST"
+        },
+        "candidate_snapshot_hash": "615d02c4d7e186d98ac9b371447813d41f60c325c56205ee61e534bf2eb9a33b",
+        "capability_level": "real_replay",
+        "cost_policy": {
+          "auction_adverse_bps": 0.0,
+          "auction_limit_offset_bps": 150.0,
+          "auction_nonfill_rate": 0.0,
+          "auction_slippage_bps": 0.0,
+          "commission_bps": 2.0,
+          "market_entry_price_buffer_bps": 150.0,
+          "slippage_bps": 5.0,
+          "tax_bps_on_sell": 18.0
+        },
+        "date_window": {
+          "end": "2026-03-31",
+          "start": "2025-05-12"
+        },
+        "feature_manifest_hash": "9ca35622ef6fafb87558433dd74e17dbe5e972e23438f5f87ce07cac98a8da5b",
+        "fill_timing": "research_only_14_30_decision",
+        "initial_equity": 10000000.0,
+        "paper_live_parity_status": "required_before_promotion",
+        "phase_framework_version": "shared-phase-auto-v2-official-mtm-contract",
+        "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+        "primary_promotion_metric": "official_mtm_net_return_pct",
+        "replay_mode": "olr_core_simbroker_cached_training",
+        "source_fingerprint": "25cef58f0d446de02f8e849e1f48b8331ed6a1d081a532ba98a9e3f9f810e689",
+        "strategy": "olr",
+        "strategy_core_version": "olr-research-v4"
+      },
+      "legacy_closed_trade_metrics": [
+        "net_return_pct"
+      ],
+      "official_metrics": [
+        "official_mtm_net_return_pct"
+      ],
+      "official_replay_pass": true,
+      "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+      "primary_promotion_metric": "official_mtm_net_return_pct",
+      "primary_promotion_value": 1.5894203114584489,
+      "promotion_requires_audit_pass": true,
+      "proxy_metrics": [],
+      "required_hygiene_metrics": [
+        "same_bar_fill_count",
+        "forced_replay_close_count",
+        "rejected_order_count",
+        "end_open_position_count"
+      ]
+    },
+    "mutations": {
+      "olr.afternoon.max_flow_divergence": 9.99,
+      "olr.afternoon.max_gap": 0.2,
+      "olr.afternoon.max_open_drawdown": 0.2,
+      "olr.afternoon.max_prior_ret20": 999.0,
+      "olr.afternoon.max_range_atr": 99.0,
+      "olr.afternoon.min_bar_count": 1,
+      "olr.afternoon.min_close_location": 0.0,
+      "olr.afternoon.min_flow_5d": 0.0,
+      "olr.afternoon.min_flow_agreement": -9.99,
+      "olr.afternoon.min_flow_z": -9.99,
+      "olr.afternoon.min_foreign_flow_5d": -9.99,
+      "olr.afternoon.min_foreign_z": -9.99,
+      "olr.afternoon.min_gap": -0.2,
+      "olr.afternoon.min_high_from_open": -0.2,
+      "olr.afternoon.min_institutional_flow_5d": -9.99,
+      "olr.afternoon.min_institutional_z": -9.99,
+      "olr.afternoon.min_lagged_flow_score": -999.0,
+      "olr.afternoon.min_low_vs_prev_close": -0.2,
+      "olr.afternoon.min_market_score": -9.99,
+      "olr.afternoon.min_prior_ret20": -100.0,
+      "olr.afternoon.min_prior_ret5": -100.0,
+      "olr.afternoon.min_prior_ret60": -100.0,
+      "olr.afternoon.min_rel_volume": 0.0,
+      "olr.afternoon.min_ret": 0.0,
+      "olr.afternoon.min_sector_flow": 0.0,
+      "olr.afternoon.min_sector_foreign_flow": -9.99,
+      "olr.afternoon.min_sector_institutional_flow": -9.99,
+      "olr.afternoon.min_vwap_ret": -0.02,
+      "olr.afternoon.reject_score_max": 0.0,
+      "olr.afternoon.reject_score_min": 0.0,
+      "olr.afternoon.require_close_above_prev": false,
+      "olr.afternoon.score_band_rules": [
+        {
+          "max_score": 300.0,
+          "name": "base_low_lt300"
+        },
+        {
+          "allowed_sectors": [
+            "CHEMICALS",
+            "SEMICONDUCTORS",
+            "DEFENSE",
+            "ELECTRONICS",
+            "IT",
+            "SHIPBUILDING",
+            "FINANCIAL"
+          ],
+          "max_score": 500.0,
+          "min_score": 400.0,
+          "name": "mid_400_500_static_sector_prior"
+        },
+        {
+          "max_score": 500.0,
+          "min_score": 400.0,
+          "name": "mid_400_500_looser_breakout_dynamic_overlay",
+          "sector_admission": {
+            "min_sector_intraday_ret_pct": 2.0,
+            "min_stock_sector_daily_ret5_gap_pct": 11.0,
+            "mode": "dynamic_confirmed_rotation"
+          }
+        },
+        {
+          "min_score": 650.0,
+          "name": "base_high_gt650"
+        }
+      ],
+      "olr.afternoon.score_mode": "momentum",
+      "olr.afternoon.top_n": 8,
+      "olr.afternoon.use_lagged_flow_score": true,
+      "olr.afternoon.weight_sector_rotation": 0.0005,
+      "olr.afternoon.weight_stock_sector_leadership": 0.001,
+      "olr.allocation.max_position_pct": 0.65,
+      "olr.allocation.min_selected": 1,
+      "olr.allocation.mode": "rank_weighted",
+      "olr.allocation.rank_decay": 1.5,
+      "olr.allocation.target_gross_exposure": 1.2,
+      "olr.execution.auction_fill_time": "15:30",
+      "olr.frontier.active_selection_mode": "hot",
+      "olr.overnight.slot_count": 5,
+      "olr.premarket.frontier_size": 30,
+      "olr.premarket.min_adv20_krw": 0.0,
+      "olr.premarket.min_foreign5_z": -9.99,
+      "olr.research.max_box_range_pct": 0.0,
+      "olr.research.max_flow_divergence": 9.99,
+      "olr.research.max_median_spread_pct": 0.35,
+      "olr.research.min_accumulation_score": -1.0,
+      "olr.research.min_adv20_krw": 2000000000.0,
+      "olr.research.min_compression_score": 0.0,
+      "olr.research.min_flow_5d": -9.99,
+      "olr.research.min_flow_agreement": -9.99,
+      "olr.research.min_flow_z": -9.99,
+      "olr.research.min_foreign_flow_5d": -9.99,
+      "olr.research.min_history_days": 60,
+      "olr.research.min_institutional_flow_5d": -9.99,
+      "olr.research.min_price_krw": 1000.0,
+      "olr.research.min_rs_percentile": 0.0,
+      "olr.research.min_sector_flow_5d": -9.99,
+      "olr.research.min_sector_flow_agreement": -9.99,
+      "olr.research.min_sector_foreign_flow_5d": -9.99,
+      "olr.research.min_sector_institutional_flow_5d": -9.99,
+      "olr.research.min_sector_participation": 0.5,
+      "olr.research.min_trend_score": 0.0,
+      "olr.research.require_spread": false,
+      "olr.research.top_long_count": 20,
+      "olr.research.weights.accumulation": 0.1,
+      "olr.research.weights.compression": 0.1,
+      "olr.research.weights.daily_signal": 0.1,
+      "olr.research.weights.daily_trend": 0.16,
+      "olr.research.weights.flow": 0.05,
+      "olr.research.weights.flow_agreement": 0.02,
+      "olr.research.weights.foreign_flow": 0.03,
+      "olr.research.weights.institutional_flow": 0.02,
+      "olr.research.weights.relative_strength": 0.2,
+      "olr.research.weights.sector_participation": 0.07,
+      "olr.research.weights.sector_regime": 0.07,
+      "olr.research.weights.stock_regime": 0.08,
+      "olr.signal.allow_secular": true,
+      "olr.signal.bb_pctb_trigger": 0.05,
+      "olr.signal.cdd_max": 99,
+      "olr.signal.cdd_min_for_rsi5": 2,
+      "olr.signal.daily_max_score": 100.0,
+      "olr.signal.daily_min_score": 0.0,
+      "olr.signal.daily_rescue_min_score": 0.0,
+      "olr.signal.daily_signal_family": "discrete_pullback_v2",
+      "olr.signal.daily_structure_weight": 0.0,
+      "olr.signal.depth_atr_trigger": 1.5,
+      "olr.signal.flow_policy": "soft_penalty_rescue",
+      "olr.signal.gap_down_trigger_pct": -2.0,
+      "olr.signal.gap_max_pct": 20.0,
+      "olr.signal.max_parent_20d_return_pct": 999.0,
+      "olr.signal.max_relative_strength_pct": 100.0,
+      "olr.signal.min_market_breadth_pct": 0.0,
+      "olr.signal.min_market_heat_score": 0.0,
+      "olr.signal.min_parent_20d_return_pct": -20.0,
+      "olr.signal.min_relative_strength_pct": 0.0,
+      "olr.signal.relative_strength_trigger_pct": 70.0,
+      "olr.signal.rescue_size_mult": 0.65,
+      "olr.signal.roc5_drop_trigger_pct": -3.0,
+      "olr.signal.rsi2_trigger_thresh": 15.0,
+      "olr.signal.rsi5_trigger_thresh": 30.0,
+      "olr.signal.secular_sizing_mult": 0.65,
+      "olr.signal.signal_floor": 0.0,
+      "olr.signal.structure_size_mult_max": 1.25,
+      "olr.signal.structure_size_mult_min": 0.7,
+      "olr.signal.structure_sizing_enabled": false,
+      "olr.signal.volume_climax_trigger": 2.0,
+      "olr.trade_plan.entry": {
+        "max_signal_bars": 6,
+        "max_vwap_extension_pct": 0.025,
+        "min_bar_ret": -0.001,
+        "min_close_location": 0.5,
+        "min_vwap_ret": 0.0,
+        "mode": "confirm_next_bar",
+        "name": "confirm_b6_vwap_cap25"
+      },
+      "olr.trade_plan.exit": {
+        "hard_stop_enabled": false,
+        "mfe_fade_floor_r": 0.0,
+        "mfe_fade_gap_r": 1.25,
+        "mfe_fade_start_r": 1.0,
+        "mode": "managed",
+        "name": "mfe_fade1_g125"
+      },
+      "olr.universe.complete_size": 103
+    },
+    "net_return_pct": 1.5894203114584473,
+    "neutral_action_hash": "cf24f1484995bd7fada10e0036abc383e8a1f02bb2d306a97f0409db2da61f53",
+    "official_metric_basis": "SimBroker.equity_curve_bar_level_mtm",
+    "official_mtm_max_drawdown_pct": 0.0886834922791243,
+    "official_mtm_net_return_pct": 1.5894203114584489,
+    "official_replay_pass": true,
+    "oos_window": {
+      "date_end": "2026-05-12",
+      "date_start": "2026-04-01",
+      "sessions": 28
+    },
+    "paper_live_parity_status": "required_before_promotion",
+    "phase_score_component_count": 7.0,
+    "phase_score_spec_hash": "fc9c79938cb9850601e5fec19405d2d9687c3e5b8ee9479dc6bd34899029daab",
+    "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+    "primary_promotion_metric": "official_mtm_net_return_pct",
+    "primary_promotion_value": 1.5894203114584489,
+    "profit_factor": 3.0213689546817073,
+    "promotion_requires_audit_pass": true,
+    "promotion_status": "training_only_paper_live_pending",
+    "refresh_note": "Official training replay refreshed under the current audit/hash contract; locked OOS holdout diagnostics were retained unchanged.",
+    "rejected_order_count": 0.0,
+    "round": 5,
+    "round_source": "round_5_looser_breakout_dynamic_exception_overlay",
+    "same_bar_fill_count": 0.0,
+    "score_band_attribution": {
+      "dynamic_overlay_realized_total_r": 0.0,
+      "dynamic_overlay_selected_count": 0.0,
+      "dynamic_overlay_trade_count": 0.0,
+      "realized_total_r": {
+        "base_high_gt650": 13.155763890214978,
+        "base_low_lt300": 42.800071307674884,
+        "mid_400_500_static_sector_prior": 9.716187578300437
+      },
+      "selected_counts": {
+        "base_high_gt650": 86,
+        "base_low_lt300": 373,
+        "mid_400_500_static_sector_prior": 34
+      },
+      "trade_counts": {
+        "base_high_gt650": 46,
+        "base_low_lt300": 158,
+        "mid_400_500_static_sector_prior": 28
+      }
+    },
+    "selected_label": "looser_breakout_dynamic_admission_overlay",
+    "shared_decision_core": true,
+    "sharpe": 4.211752911608041,
+    "sharpe_ratio": 4.211752911608041,
+    "source_fingerprint": "25cef58f0d446de02f8e849e1f48b8331ed6a1d081a532ba98a9e3f9f810e689",
+    "source_round": 4,
+    "source_snapshot_hash": "4713562b149682a966e71309c5f3cf32786a642a438b599b6673c7d07d81190b",
+    "state_snapshot_hash": "993f54276d86a3dcba4ed5cee69a39b45947166d0792692f51f5401ecf4e83b0",
+    "strategy": "olr",
+    "strategy_core_version": "olr-research-v4",
+    "total_trades": 232.0,
+    "trade_hash": "f7097d6cff13f3fe1ec1fed7d2bb4bae092d7b8063341ac5610836efd328c7b1",
+    "train_window": {
+      "date_end": "2026-03-31",
+      "date_start": "2025-05-12",
+      "sessions": 217
+    },
+    "win_rate": 0.5517241379310345
+  }
+}

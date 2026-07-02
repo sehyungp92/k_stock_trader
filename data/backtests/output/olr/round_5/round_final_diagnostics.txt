@@ -1,0 +1,68 @@
+# OLR Phased Auto Diagnostics
+
+- Generated: 2026-05-27T10:50:38.532551+00:00
+- Phase: 5
+- Official training MTM return: 158.942%
+- Closed-trade net return: 158.942%
+- Max drawdown: 8.868%
+- Final equity: 25894203.11
+- Entry fills: 232
+- Completed entry-level trades: 232
+- Exit fills: 232
+- End open positions: 0
+- Entry-level profit factor: 3.021
+- Entry-level expected total R: 51.427
+- Alpha capture: 0.308
+- Discrimination quality: 0.480
+- Negative selected label share: 47.667%
+- Score top-bottom label spread: 0.335%
+- Score components: 7
+- Greedy accepted features: 0/0
+- Shared core: None
+- Fill timing: None
+- Cost policy: auction_adverse_bps=0.0, auction_limit_offset_bps=150.0, auction_nonfill_rate=0.0, auction_slippage_bps=0.0, commission_bps=2.0, market_entry_price_buffer_bps=150.0, slippage_bps=5.0, tax_bps_on_sell=18.0
+- Holdout excluded: True
+- Paper/live parity: required_before_promotion
+
+## Replay Audit Evidence
+- Same-bar fills: 0
+- Forced replay closes: 0
+- Rejected orders: 0
+- Auction orders: 219
+- Auction nonfills: 1
+- Open orders: 0
+- Expired orders: 1
+- Decision hash: 9ea031e2f78f
+- Neutral action hash: cf24f1484995
+- Fill hash: 014f1c20296d
+- Trade hash: f7097d6cff13
+- Source snapshot hash: 4713562b1496
+- Final state hash: 993f54276d86
+- Official metric basis: SimBroker.equity_curve_bar_level_mtm
+
+## Score-Band Attribution
+- Dynamic overlay selected candidates: 0
+- Dynamic overlay realized trades: 0
+- Dynamic overlay realized total R: 0.000
+- Rule realized: base_low_lt300 trades=158 total_R=42.800
+- Rule realized: base_high_gt650 trades=46 total_R=13.156
+- Rule realized: mid_400_500_static_sector_prior trades=28 total_R=9.716
+
+## Execution Assumptions
+- Auction mode: resting_close_auction_after_14_30_decision
+- Official headline uses SimBroker mark-to-market final equity; closed-trade net is shown only as a reconciliation field.
+- Close-auction fills still require paper/live reconciliation before production promotion.
+
+## Kept Features
+_None accepted._
+
+## Locked OOS Holdout
+- Official MTM return: 21.297%
+- Entry fills: 32
+- Entry-level win rate: 51.613%
+- Max drawdown: 5.911%
+- Profit factor: 2.921
+- Refresh status: retained from the locked round-5 holdout artifact; not rerun during this train-artifact refresh.
+
+## Verdict
+Round 5 training performance is unchanged after the audit/hash refresh. Production promotion remains blocked until paper/live parity evidence is available.

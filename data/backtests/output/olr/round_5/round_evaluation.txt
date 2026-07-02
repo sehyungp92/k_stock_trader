@@ -1,0 +1,26 @@
+OLR Round 5 Evaluation Refresh
+==============================
+Generated: 2026-05-27T10:50:38Z
+Selected label: looser_breakout_dynamic_admission_overlay
+
+Training replay:
+- MTM return: 158.942%
+- Entry fills: 232
+- Entry win rate: 55.172%
+- Max drawdown: 8.868%
+- Profit factor: 3.021
+
+Locked OOS holdout:
+- MTM return: 21.297%
+- Entry fills: 32
+- Entry win rate: 51.613%
+- Max drawdown: 5.911%
+- Profit factor: 2.921
+
+Audit hashes:
+- Decision hash: 9ea031e2f78fbc0ce18e711d99f0a78edc44f8cbea70314431018b3dc7b3f79d
+- Neutral action hash: cf24f1484995bd7fada10e0036abc383e8a1f02bb2d306a97f0409db2da61f53
+- Fill hash: 014f1c20296dde418b054f5d1c2f9220da10abb0b709be52450e030a9269793a
+- Trade hash: f7097d6cff13f3fe1ec1fed7d2bb4bae092d7b8063341ac5610836efd328c7b1
+- Source snapshot hash: 4713562b149682a966e71309c5f3cf32786a642a438b599b6673c7d07d81190b
+- Final state hash: 993f54276d86a3dcba4ed5cee69a39b45947166d0792692f51f5401ecf4e83b0

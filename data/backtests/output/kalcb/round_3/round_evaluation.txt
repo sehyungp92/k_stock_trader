@@ -1,0 +1,23 @@
+KALCB round_3 promotion evaluation
+
+Selected candidate: hn_notional1p0_target55p0
+
+Train shared-core replay:
+  net=258.34%, MTM=258.34%, DD=3.87%, trades=205, WR=66.34%
+
+Locked holdout replay:
+  net=8.87%, MTM=8.87%, DD=6.58%, trades=16, WR=43.75%
+
+Mutation delta from round_2:
+  kalcb.exit.quick_exit_enabled: {'from': False, 'to': True}
+  kalcb.exit.stop_pct: {'from': 0.003, 'to': 0.0045}
+  kalcb.exit.target_r: {'from': 70.0, 'to': 55.0}
+  kalcb.risk.max_position_notional_pct: {'from': 0.5, 'to': 1.0}
+
+Live/backtest parity alignment:
+  status=pending_paper_live_evidence
+  same_bar_fill_count=0
+  fill_timing=next_5m_open
+  auction_mode=non_auction_continuous
+
+Deployment note: artifact remains research-only until paper/live hash evidence matches the contract.

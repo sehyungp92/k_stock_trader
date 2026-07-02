@@ -1,0 +1,19 @@
+{
+  "daily_snapshot_manifest_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshot_manifest.json",
+  "diagnostics_summary_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\diagnostics_summary.json",
+  "fast_suppression_audit_status": "pass",
+  "holdout_policy": "training-only compiled replay; dates at or after holdout_start are excluded; holdout is locked audit only and not used for candidate acceptance",
+  "live_parity_audit_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\live_parity_audit.json",
+  "paper_live_parity_contract_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_contract.json",
+  "replay_market_bar_digest_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\replay_market_bar_digest.json",
+  "report_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\round_final_diagnostics.txt",
+  "round": 3,
+  "round_name": "round_3",
+  "source_ref": {
+    "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_1\\guarded_q3_full_diagnostics\\train_guarded_prefilter_pool_rows.jsonl",
+    "rank": 0,
+    "row_name": "stock_sector_daily_ret5_spread>=-0.036622 & sector!=FINANCIAL",
+    "section": "guarded_prefilter_pool"
+  },
+  "strategy": "kalcb"
+}

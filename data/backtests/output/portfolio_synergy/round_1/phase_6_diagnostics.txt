@@ -1,0 +1,12 @@
+Phase 6: Controlled-aggressive sizing and drawdown governors
+Score: 113.7233
+Return: 461.24%
+Trades/21 sessions: 45.77
+Block rate: 11.75%
+Positive-alpha block rate: 6.90%
+Accepted avg R: +1.245
+Blocked avg R: +0.732
+Max drawdown: 4.13%
+Profit factor: 4.60
+KALCB/OLR trades: 231/242
+Kept features: p6_reference_risk_62bp_probe, p6_kalcb_confirmed_size_125

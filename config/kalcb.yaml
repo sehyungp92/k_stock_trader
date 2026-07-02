@@ -15,7 +15,7 @@ kalcb:
     ws_budget: 8
   frontier:
     enabled: true
-    size: 104
+    size: 103
     selection_mode: opportunity
     active_selection_mode: liquidity
     rest_safety_fraction: 0.50

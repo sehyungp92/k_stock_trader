@@ -1,0 +1,33 @@
+======================================================================
+PHASE 4 ANALYSIS
+======================================================================
+
+Recommendation: advance
+Reason: Gate passed.
+Scoring assessment: EFFECTIVE
+
+Strengths:
+  + official_mtm_net_return_pct: 3.7515 (85% of 4.4000)
+  + trades_per_21_sessions: 38.7097 (97% of 40.0000)
+  + profit_factor: 4.7834 (200% of 2.2000)
+  + block_selectivity_edge_r: 0.3963 (159% of 0.2500)
+  + max_drawdown_pct: 0.0394 (200% of 0.1400)
+  + min_strategy_trade_capture: 0.9009 (136% of 0.6600)
+
+Weaknesses:
+  - positive_alpha_block_rate: 0.0572 (32% of 0.1800)
+
+Extra Analysis:
+  score components: 7
+  holdout excluded: True
+  best candidate: p4_disagreement_haircut_70
+  block reasons: {"daily_gross_cap": 37}
+
+Goal Progress:
+  official_mtm_net_return_pct: 3.7515 / 4.4000 (85%)
+  trades_per_21_sessions: 38.7097 / 40.0000 (97%)
+  profit_factor: 4.7834 / 2.2000 (200%)
+  block_selectivity_edge_r: 0.3963 / 0.2500 (159%)
+  positive_alpha_block_rate: 0.0572 / 0.1800 (32%)
+  max_drawdown_pct: 0.0394 / 0.1400 (200%)
+  min_strategy_trade_capture: 0.9009 / 0.6600 (136%)

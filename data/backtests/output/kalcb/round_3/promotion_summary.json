@@ -1,0 +1,69 @@
+{
+  "strategy": "kalcb",
+  "round": 3,
+  "round_name": "round_3",
+  "selected_candidate": "hn_notional1p0_target55p0",
+  "generated_at_utc": "2026-05-27T10:32:50.629506+00:00",
+  "optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\optimized_config.json",
+  "run_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\run_summary.json",
+  "round_final_diagnostics": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\round_final_diagnostics.txt",
+  "diagnostics_summary": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\diagnostics_summary.json",
+  "live_parity_audit": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\live_parity_audit.json",
+  "paper_live_parity_contract": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_contract.json",
+  "holdout_evaluation": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\holdout_evaluation.json",
+  "manifest": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\rounds_manifest.json",
+  "train_headline": {
+    "broker_net_return_pct": 2.583427246872277,
+    "official_mtm_net_return_pct": 2.5834272468722776,
+    "broker_max_drawdown_pct": 0.03866584890291983,
+    "trade_count": 205.0,
+    "total_trades": 205.0,
+    "win_rate": 0.6634146341463415,
+    "avg_trade_net_pct": 0.022582303843678923,
+    "avg_mfe_capture": 0.43340476165378683,
+    "avg_mfe_r": 12.085969337026539,
+    "avg_mae_r": -3.2475027129979153,
+    "worst_fold_net": 0.8382877308580234,
+    "median_fold_net": 1.2917136234361386,
+    "same_bar_fill_count": 0.0,
+    "forced_replay_close_count": 0.0,
+    "rejected_order_count": 0.0,
+    "end_open_position_count": 0.0
+  },
+  "holdout_headline": {
+    "broker_net_return_pct": 0.08869534829112251,
+    "official_mtm_net_return_pct": 0.08869534829112302,
+    "broker_max_drawdown_pct": 0.06582142849442243,
+    "trade_count": 16.0,
+    "total_trades": 16.0,
+    "win_rate": 0.4375,
+    "avg_trade_net_pct": 0.00713277099371863,
+    "avg_mfe_capture": 0.2116981953702023,
+    "avg_mfe_r": 12.12043942708334,
+    "avg_mae_r": -6.086975572916658,
+    "worst_fold_net": 0.008513147092030068,
+    "median_fold_net": 0.044347674145561254,
+    "same_bar_fill_count": 0.0,
+    "forced_replay_close_count": 0.0,
+    "rejected_order_count": 0.0,
+    "end_open_position_count": 0.0
+  },
+  "mutation_delta_from_round_2": {
+    "kalcb.exit.quick_exit_enabled": {
+      "from": false,
+      "to": true
+    },
+    "kalcb.exit.stop_pct": {
+      "from": 0.003,
+      "to": 0.0045
+    },
+    "kalcb.exit.target_r": {
+      "from": 70.0,
+      "to": 55.0
+    },
+    "kalcb.risk.max_position_notional_pct": {
+      "from": 0.5,
+      "to": 1.0
+    }
+  }
+}

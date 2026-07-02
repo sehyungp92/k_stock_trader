@@ -103,6 +103,27 @@ logs/
 *.log
 *.log.*
 
+# Latest phased auto-optimisation outputs used to align live configs
+!data/backtests/
+data/backtests/*
+!data/backtests/output/
+data/backtests/output/*
+!data/backtests/output/kalcb/
+data/backtests/output/kalcb/*
+!data/backtests/output/kalcb/rounds_manifest.json
+!data/backtests/output/kalcb/round_3/
+!data/backtests/output/kalcb/round_3/**
+!data/backtests/output/olr/
+data/backtests/output/olr/*
+!data/backtests/output/olr/rounds_manifest.json
+!data/backtests/output/olr/round_5/
+!data/backtests/output/olr/round_5/**
+!data/backtests/output/portfolio_synergy/
+data/backtests/output/portfolio_synergy/*
+!data/backtests/output/portfolio_synergy/rounds_manifest.json
+!data/backtests/output/portfolio_synergy/round_1/
+!data/backtests/output/portfolio_synergy/round_1/**
+
 # SQLite databases
 *.db
 *.sqlite

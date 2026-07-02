@@ -10,7 +10,7 @@ BASE_MUTATIONS = {
     "kalcb.session.entry_window_end": "13:00",
     "kalcb.session.ws_budget": 8,
     "kalcb.frontier.enabled": True,
-    "kalcb.frontier.size": 104,
+    "kalcb.frontier.size": 103,
     "kalcb.frontier.selection_mode": "opportunity",
     "kalcb.frontier.active_selection_mode": "liquidity",
     "kalcb.frontier.rest_safety_fraction": 0.50,

@@ -1,0 +1,107 @@
+{
+  "comparison_vs_round_4": {
+    "oos": {
+      "drawdown_delta": 0.0,
+      "net_delta": 0.0,
+      "trade_delta": 0.0,
+      "win_delta": 0.0
+    },
+    "train": {
+      "drawdown_delta": 0.0,
+      "net_delta": 0.0,
+      "trade_delta": 0.0,
+      "win_delta": 0.0
+    }
+  },
+  "dynamic_sector_admission": {
+    "live_backtest_parity": {
+      "decision_cutoff": "timestamp < 14:30 KST",
+      "live_generator": "strategy_olr.research_generator.generate_afternoon_candidate_snapshot",
+      "same_day_daily_flow_visible": false,
+      "same_day_daily_ohlcv_visible": false,
+      "shared_selector": "strategy_olr.research.afternoon_selection_from_contexts"
+    },
+    "rejected_reason_counts": {
+      "afternoon_ret_below_floor": 1512,
+      "afternoon_score_band_rule_miss": 146,
+      "gap_outside_bounds": 2,
+      "lagged_flow_5d_below_floor": 871,
+      "lagged_sector_flow_below_floor": 859,
+      "low_vs_prev_close_below_floor": 1,
+      "missing_completed_afternoon_bars": 10,
+      "mode_requires_nonnegative_afternoon_ret": 1512,
+      "open_drawdown_above_cap": 3,
+      "vwap_ret_below_floor": 178
+    },
+    "role": "retain static mid-band sector prior and add looser breakout dynamic admission overlay",
+    "score_band_rules": [
+      {
+        "max_score": 300.0,
+        "name": "base_low_lt300"
+      },
+      {
+        "allowed_sectors": [
+          "CHEMICALS",
+          "SEMICONDUCTORS",
+          "DEFENSE",
+          "ELECTRONICS",
+          "IT",
+          "SHIPBUILDING",
+          "FINANCIAL"
+        ],
+        "max_score": 500.0,
+        "min_score": 400.0,
+        "name": "mid_400_500_static_sector_prior"
+      },
+      {
+        "max_score": 500.0,
+        "min_score": 400.0,
+        "name": "mid_400_500_looser_breakout_dynamic_overlay",
+        "sector_admission": {
+          "min_sector_intraday_ret_pct": 2.0,
+          "min_stock_sector_daily_ret5_gap_pct": 11.0,
+          "mode": "dynamic_confirmed_rotation"
+        }
+      },
+      {
+        "min_score": 650.0,
+        "name": "base_high_gt650"
+      }
+    ],
+    "selected_rule_counts": {
+      "base_high_gt650": 94,
+      "base_low_lt300": 347,
+      "mid_400_500_static_sector_prior": 38
+    },
+    "tradeoff_note": "Adopted as a parity-safe dynamic exception layer: static historical sector prior is retained, while non-listed sectors can enter the mid band when same-day sector breakout and stock-vs-sector leadership are both strong."
+  },
+  "generated_at_utc": "2026-05-27T10:50:38Z",
+  "oos": {
+    "entry_fill_count": 32.0,
+    "entry_level_win_rate": 0.5161290322580645,
+    "official_mtm_max_drawdown_pct": 0.05911397880195744,
+    "official_mtm_net_return_pct": 0.21296977915050008,
+    "profit_factor": 2.920742658218945
+  },
+  "refresh_note": "Official training replay refreshed under the current audit/hash contract; locked OOS holdout diagnostics were retained unchanged.",
+  "round": 5,
+  "selected_label": "looser_breakout_dynamic_admission_overlay",
+  "source_lineage": {
+    "candidate_snapshot_hash": "615d02c4d7e186d98ac9b371447813d41f60c325c56205ee61e534bf2eb9a33b",
+    "decision_hash": "9ea031e2f78fbc0ce18e711d99f0a78edc44f8cbea70314431018b3dc7b3f79d",
+    "feature_manifest_hash": "9ca35622ef6fafb87558433dd74e17dbe5e972e23438f5f87ce07cac98a8da5b",
+    "fill_hash": "014f1c20296dde418b054f5d1c2f9220da10abb0b709be52450e030a9269793a",
+    "final_state_hash": "993f54276d86a3dcba4ed5cee69a39b45947166d0792692f51f5401ecf4e83b0",
+    "neutral_action_hash": "cf24f1484995bd7fada10e0036abc383e8a1f02bb2d306a97f0409db2da61f53",
+    "source_fingerprint": "25cef58f0d446de02f8e849e1f48b8331ed6a1d081a532ba98a9e3f9f810e689",
+    "source_snapshot_hash": "4713562b149682a966e71309c5f3cf32786a642a438b599b6673c7d07d81190b",
+    "trade_hash": "f7097d6cff13f3fe1ec1fed7d2bb4bae092d7b8063341ac5610836efd328c7b1"
+  },
+  "train": {
+    "entry_fill_count": 232.0,
+    "entry_level_win_rate": 0.5517241379310345,
+    "official_mtm_max_drawdown_pct": 0.0886834922791243,
+    "official_mtm_net_return_pct": 1.5894203114584489,
+    "profit_factor": 3.0213689546817073
+  }
+}

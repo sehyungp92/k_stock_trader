@@ -1,0 +1,73 @@
+{
+  "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+  "checks": [
+    {
+      "details": "",
+      "name": "score_component_count_lte_7",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "source_fingerprint_present",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "feature_manifest_hash_present",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "candidate_snapshot_hash_present",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "holdout_excluded_from_optimization",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "no_same_bar_fills",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "no_forced_replay_closes",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "no_rejected_orders",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "no_end_open_positions",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "legacy_eod_outcome_boost_not_active",
+      "passed": true
+    },
+    {
+      "details": "",
+      "name": "portfolio_rules_use_live_known_fields",
+      "passed": true
+    }
+  ],
+  "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+  "generated_at_utc": "2026-05-27T10:52:57.391921+00:00",
+  "live_known_fields": "strategy,symbol,sector,session_index,entry_minute,rank_bucket,route,score_band,expected_r,quality_score,gross_unit,sector_confirmed,symbol_confirmed,conflict,early_exit_reason",
+  "note": "This pass means the portfolio arbitration layer no longer depends on post-trade KALCB/OLR outcomes for live admission or sizing. It is not a substitute for a full source-engine replay or paper/live OMS parity audit.",
+  "offline_only_fields": "net_r,mae_r,mfe_r,pnl_cash,weighted_r,blocked_avg_r,accepted_avg_r",
+  "production_promotion_status": "blocked_until_full_source_replay_holdout_and_paper_live_parity",
+  "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+  "scope": "portfolio_arbitration_layer",
+  "source_strategy_contracts": {
+    "kalcb": "next_5m_open, non_auction_continuous, source round 3 artifact",
+    "olr": "14:30 decision, resting close auction, source round 5 artifact"
+  },
+  "status": "pass"
+}

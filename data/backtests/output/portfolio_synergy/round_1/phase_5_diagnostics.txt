@@ -1,0 +1,12 @@
+Phase 5: Quality-preserving frequency expansion
+Score: 108.7883
+Return: 389.53%
+Trades/21 sessions: 46.45
+Block rate: 10.45%
+Positive-alpha block rate: 6.16%
+Accepted avg R: +1.239
+Blocked avg R: +0.726
+Max drawdown: 4.29%
+Profit factor: 4.55
+KALCB/OLR trades: 232/248
+Kept features: p5_kalcb_secondary_confirmed, p5_olr_slot6_guarded

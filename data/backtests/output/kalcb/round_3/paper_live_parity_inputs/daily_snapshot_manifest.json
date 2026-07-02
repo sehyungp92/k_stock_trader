@@ -1,0 +1,1692 @@
+{
+  "aggregate_snapshot_hash": "d1d109715e4b3b6634c5b6ca0fa6f869e8e31c3c4b5b645ffd01be203612066d",
+  "artifact_type": "kalcb_daily_snapshot_manifest",
+  "candidate_artifact_hash": "a5a4285ac64d23c6c8769f7d0b6854c99cac310dea8a7cdc374d9b6d274890af",
+  "compiled_replay_fingerprint": "c26a47fd1fae37f84d0f12b82558f6711b6d50a9bcd5e670a652bb8a24e8515d",
+  "snapshot_count": 187,
+  "snapshots": [
+    {
+      "active_symbol_count": 8,
+      "artifact_hash": "3a917647fb2442f6b3afd5e2ed482a3ab8934d1e9485c6fc1b690fa459432676",
+      "candidate_pool_count": 8,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-12_3a917647fb24.json",
+      "source_fingerprint": "fc6ea1fe5cb2dd4ee04c84c6103e52a2f3a1038717fe5827f0783eb2361010d6",
+      "symbol_count": 8,
+      "trade_date": "2025-05-12"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "46bf884a740948869567c21ee8e582c0475cb1080a8e168766fb459085057cbb",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-13_46bf884a7409.json",
+      "source_fingerprint": "56b0995fd95bd2be109ed237e8f299983ad087292a9f2dad5d3c1f4cdc3741b3",
+      "symbol_count": 4,
+      "trade_date": "2025-05-13"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "d913b8f9c0a2dc188ceef0add1bb8813a1b8b043a13e97bbf5d6c87d88b468ea",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-14_d913b8f9c0a2.json",
+      "source_fingerprint": "609191195d578326f25ff956fe75dadba4a5cb56a153df2390bab3b8669b7ecf",
+      "symbol_count": 4,
+      "trade_date": "2025-05-14"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "96faa64dd1ae1e925ae69749628459771cb712bc01c193e9d4bc128f30a7c0de",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-16_96faa64dd1ae.json",
+      "source_fingerprint": "65570b6a6a5844e910b21180c0d2d3209bcb25473aa5ca928f408f6fb7ed384a",
+      "symbol_count": 2,
+      "trade_date": "2025-05-16"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "03c4e7804c95b7446fea4fd409fe6f901454d65f94ce56b4fd3a34c5d7636aaf",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-19_03c4e7804c95.json",
+      "source_fingerprint": "d4a6faff74a1b33cf906cbf517ed6d07429026f21dbf939d478c2679e13cc9f2",
+      "symbol_count": 2,
+      "trade_date": "2025-05-19"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "fbafb998afc1cb7dc3f7bf3ce152fece938315d92ad8eb2f16e4bb2dad8ca982",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-20_fbafb998afc1.json",
+      "source_fingerprint": "9d420410272c81558693816dd16a1a69aa502bb334edd5469e7009d10fe76bb0",
+      "symbol_count": 5,
+      "trade_date": "2025-05-20"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "9f2c14d576c122d78611d93f5644e5828e70b5213af036a906dfaf0cd916a859",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-21_9f2c14d576c1.json",
+      "source_fingerprint": "d9885420054181c8da750bf57711209c40f6ce4431fe4534f9241b7c96410831",
+      "symbol_count": 4,
+      "trade_date": "2025-05-21"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "fa54ce1400fe62b346ff632985d4faf14b2a6e1ca8199ca7a3b2d92a12cfd398",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-22_fa54ce1400fe.json",
+      "source_fingerprint": "e643872db546173dadf1dc53e1ec9ccd49d8967ad712389ee574c948538a05ac",
+      "symbol_count": 3,
+      "trade_date": "2025-05-22"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "7ae1dc07b447e8d119f9ece1a7aa71a9137e1866dfefa9239dc810ab301ca76b",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-23_7ae1dc07b447.json",
+      "source_fingerprint": "8599d49535aee1fb86b191e9a10f655edb822c15d42a2a822bcfaa686be21b79",
+      "symbol_count": 3,
+      "trade_date": "2025-05-23"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "8f5af44fd9f137988b81066a70e21a448c6bfc78d9ae29ed64fddae5ee9574c1",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-26_8f5af44fd9f1.json",
+      "source_fingerprint": "c8299232c56c1009a7b3b07bf92da87dc3eb43d6f49f21d6b0ccfd371b1275aa",
+      "symbol_count": 2,
+      "trade_date": "2025-05-26"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "09cd2c8805ec4b3bd906e6d1de326e392dd2cd6d0b84f294a925bf9f64c13878",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-27_09cd2c8805ec.json",
+      "source_fingerprint": "18e01a3234130964f56fb70d1251279b2afe2b236547e7041323a166f6895600",
+      "symbol_count": 5,
+      "trade_date": "2025-05-27"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "fb2c4545e43811387a354d348c17a7eed11dd92e03550cea1fcc06be976a5041",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-28_fb2c4545e438.json",
+      "source_fingerprint": "88dc1af92bbe7bb20d0b1cd222b2dc28e8c8068d81ba89c6e756afd516210d2a",
+      "symbol_count": 5,
+      "trade_date": "2025-05-28"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "d4957e3d54d093029ef47365a7999d212370ccf362b24b57ed513e9bb2206e7a",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-29_d4957e3d54d0.json",
+      "source_fingerprint": "85c5db9b575c21c486430f5417258a80d7b7b33d7c530894268ab4cdfd51035d",
+      "symbol_count": 5,
+      "trade_date": "2025-05-29"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "b8a0c3d2ad7fda7bb04bb61ecf4de3e8aa686cb873584f865c5f8c003c4196f7",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-05-30_b8a0c3d2ad7f.json",
+      "source_fingerprint": "564b087ab2aaa274b706c64ed6fefdef67277e58ed75c8b9bf109949ae3434bb",
+      "symbol_count": 2,
+      "trade_date": "2025-05-30"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "165525e5f3caa24ace5ceaaf15e93c58eda294c1b55b26f9c67156b6c7803dd7",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-02_165525e5f3ca.json",
+      "source_fingerprint": "395019ffcca6411da67c373a479d7b8bdb340ac5876cb889185ca879e332f3e0",
+      "symbol_count": 7,
+      "trade_date": "2025-06-02"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "65bff3fef864f74010a5985788b01278bb9dc17ba1a5227676bd0f7a64196449",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-04_65bff3fef864.json",
+      "source_fingerprint": "fd3a76a93f04481af645c8f14aecc411dd34de714824d83cc2c1c9893d606f4e",
+      "symbol_count": 6,
+      "trade_date": "2025-06-04"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "33117ade61441b93181ff042021f898d1f68e3a5e520ce9d05de039e137a9799",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-05_33117ade6144.json",
+      "source_fingerprint": "384cd47519e856f742e4ad26a710c78af0e8001a81918d636cbc8098a7c2a2ae",
+      "symbol_count": 2,
+      "trade_date": "2025-06-05"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "f3c56a39e836b738d13c4683918ce8051e45c989ebd8b0dff720617ac4417c56",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-09_f3c56a39e836.json",
+      "source_fingerprint": "119d95d6537599aaf1ff6f3f131dabde5eeb022666e0e10ca58fecfc917bce0e",
+      "symbol_count": 2,
+      "trade_date": "2025-06-09"
+    },
+    {
+      "active_symbol_count": 8,
+      "artifact_hash": "03a99692b32b8e109bd3a1fa4b57ceb0d47216744b9a491ada7bea71d52407e6",
+      "candidate_pool_count": 8,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-10_03a99692b32b.json",
+      "source_fingerprint": "bd84ed6f2187694385a26e9d0f0dfb3e6c10bc588c94456e0a4fa669542e0b9b",
+      "symbol_count": 8,
+      "trade_date": "2025-06-10"
+    },
+    {
+      "active_symbol_count": 9,
+      "artifact_hash": "7c314b065325b562289dbe2862746bab521067628ddf19e2c0cd364627ec34b2",
+      "candidate_pool_count": 9,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-11_7c314b065325.json",
+      "source_fingerprint": "58b9501a516eae7d5546d2f2b938f3815590cdbc7f27e5d408b534e4e815d3fb",
+      "symbol_count": 9,
+      "trade_date": "2025-06-11"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "5cef54e55883338914b244425181ecf0c41928e32436e6b81de05abbc64e506a",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-12_5cef54e55883.json",
+      "source_fingerprint": "4bd4c9f973988aef6d00b41b1d777713d609c6f29907efd93234507e58ab821c",
+      "symbol_count": 5,
+      "trade_date": "2025-06-12"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "cbbc3c92878054393a51d6b58599c62b0055bee38f6ff2d65d90c87aa36a3412",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-17_cbbc3c928780.json",
+      "source_fingerprint": "d3275a844f848b0adf68c43fdb2036b292fde76193c2bd22990f089d1fbf4448",
+      "symbol_count": 6,
+      "trade_date": "2025-06-17"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "24ad84f74fe67d78b1f956bf39d9b1af3b54a32889c63e67ecb56cdb007a9d54",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-18_24ad84f74fe6.json",
+      "source_fingerprint": "f6b491a440d6f730b54dc7e546daa695a1ebef7d63af6e29cbf26c2d64ccd4d8",
+      "symbol_count": 3,
+      "trade_date": "2025-06-18"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "4070220254b9ba8e21c8baf6525bffab041d5078fdffa01813599aa0f03dd6d4",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-19_4070220254b9.json",
+      "source_fingerprint": "39826cc98978ba7b9186312369994d642731bedc8ec313c114d0f2bc1078f066",
+      "symbol_count": 3,
+      "trade_date": "2025-06-19"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "75e05bc74bf02195263bf8f950b04e446ef0d8f243eff85ca9cee169ab5be513",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-24_75e05bc74bf0.json",
+      "source_fingerprint": "cbe0def0e368d04b264d951c605f33afada22a4b619feb64c50f78fff7ea35ef",
+      "symbol_count": 4,
+      "trade_date": "2025-06-24"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "75943050a31a6fb8b3ea053d496a3125948759419191608a40931d6223a34e34",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-25_75943050a31a.json",
+      "source_fingerprint": "5a1c8c27973b1966cf81ca08bffe2e8294756ca89256618f927010b3dc9e2d63",
+      "symbol_count": 1,
+      "trade_date": "2025-06-25"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "ca792f3237b519a524a6f12f755d2706366264fde5bcb7addaafa4bdb65ab7dc",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-26_ca792f3237b5.json",
+      "source_fingerprint": "11174a05019c2b4733d3afc3e762f807db7b51acc80129d5ea79434a0734c2a4",
+      "symbol_count": 2,
+      "trade_date": "2025-06-26"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "22e342759e9a7e4ca991aefaeaff38cbaa65a9c7c7dfc831ac6ae5ed9d172e86",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-27_22e342759e9a.json",
+      "source_fingerprint": "388c4203948b5429ae067ca268832ae9f2a96fecd37a36607954f22d05a2af8c",
+      "symbol_count": 1,
+      "trade_date": "2025-06-27"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "ba334c2e07ca212b5de224ec4c91db615752974b834b6e949dfd02809e18676d",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-06-30_ba334c2e07ca.json",
+      "source_fingerprint": "f8191641320e880cb1327dba69a37cc7a32f8056031ff89ead238e5969977e53",
+      "symbol_count": 2,
+      "trade_date": "2025-06-30"
+    },
+    {
+      "active_symbol_count": 11,
+      "artifact_hash": "4679792e0ca1de2b02dda003abf3a4d204623a9eec38bec2c8f08c0f2521a4b9",
+      "candidate_pool_count": 11,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-01_4679792e0ca1.json",
+      "source_fingerprint": "ab6bea15ae0b872f0e04de852c834015953a537fa006fd9b7eb10e1da768a706",
+      "symbol_count": 11,
+      "trade_date": "2025-07-01"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "2c7cb1140e26f34b27a25c04c3aa26e94f4ed8fc50bcc3d2f6e62001072bd0d7",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-02_2c7cb1140e26.json",
+      "source_fingerprint": "ceaf35b1b764c7a800375908639f332bff1b1e147c5d3cc4278234dcdfd2005e",
+      "symbol_count": 1,
+      "trade_date": "2025-07-02"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "329b7ed6a66c79f55d60f3cdac09aed59d81b9ab46d6d7b06aed4c8094cf2213",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-03_329b7ed6a66c.json",
+      "source_fingerprint": "9f71e3ceb656a3ab5c2c7a6fec7305328612db866696ba220604c84d7f066904",
+      "symbol_count": 5,
+      "trade_date": "2025-07-03"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "9142ef86f0abe1e249894190259cc3ac45bbb9b99a8602766ae4658b32aade9e",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-04_9142ef86f0ab.json",
+      "source_fingerprint": "78fce2c364cd8b5b45ec434ed492b4150590ec5b513a0afa74f6e67831e82952",
+      "symbol_count": 1,
+      "trade_date": "2025-07-04"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "eeaa7732d2a12c816217eb33ffdcc595b38bd109f611d4c87a2d50fedf5088a2",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-07_eeaa7732d2a1.json",
+      "source_fingerprint": "42d500133d18799863dccda83584bff8ac426c825c1e04dd71c7f13188e4f9cb",
+      "symbol_count": 2,
+      "trade_date": "2025-07-07"
+    },
+    {
+      "active_symbol_count": 10,
+      "artifact_hash": "364653c36099f7831dea13a51cde0aacd2df1538a5613486bbd3b5bbbac67e3c",
+      "candidate_pool_count": 10,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-08_364653c36099.json",
+      "source_fingerprint": "c5bd7c43ae84b526f5cdca9c0f877a27f3cd8b2b6b4db0d54fd0429589532e9b",
+      "symbol_count": 10,
+      "trade_date": "2025-07-08"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "99d1ddafcdda54806ade4ff4200abb0b8e9e895fa286187559ba8d5213c3756a",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-09_99d1ddafcdda.json",
+      "source_fingerprint": "2c41f0e739da1cd7b6dec25650c4b3ab3a3b0ce161288f3d6f8dc5b1bdc14d22",
+      "symbol_count": 2,
+      "trade_date": "2025-07-09"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "4daef66c76854ac43c27c591316eb14b3a2c58b87c5f1a96463288ab07bf0872",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-10_4daef66c7685.json",
+      "source_fingerprint": "461d9c3a3da70339065944fccdd42f533eb6806ee7e632f7cf8f1012da956290",
+      "symbol_count": 5,
+      "trade_date": "2025-07-10"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "b6b90be45a54ae3d9274e98b3521b51117ca0c864b78b0cc51e87a5f58ecc93d",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-11_b6b90be45a54.json",
+      "source_fingerprint": "11daedc283c6564cb5a8cd9d024aa6f2a3659a38fd7201207ae1113b51b7a89e",
+      "symbol_count": 5,
+      "trade_date": "2025-07-11"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "91b73437cfb2ea5210a8988614616c0ca041b1c455e1dc5d54bde013bd90406f",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-14_91b73437cfb2.json",
+      "source_fingerprint": "b7a692d932efd9e12662d439d574f6854321246ad36ca9578e876ebb998ea38e",
+      "symbol_count": 7,
+      "trade_date": "2025-07-14"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "489b31e424c2018e154a49600efb8abbda45e3f6fd5906086c81c322a96dc506",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-15_489b31e424c2.json",
+      "source_fingerprint": "73af375e99c6a5829d360e968ac5f1e03f780731bbf877180c076c00db4034a7",
+      "symbol_count": 3,
+      "trade_date": "2025-07-15"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "cb30e4d43713dece8f6df1e5bf93569efd20378d393b37e1d63d7f5fe7a43880",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-16_cb30e4d43713.json",
+      "source_fingerprint": "c2d9e7711431245ce121fed8b62a69ffc466ac5e5d183e681308a9409d61c03a",
+      "symbol_count": 2,
+      "trade_date": "2025-07-16"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "a8f9ff558fabc0793955c8c168a760ef341b1ef60a844c4bad125aa4d6a60edb",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-17_a8f9ff558fab.json",
+      "source_fingerprint": "d578072af58ebc18aad129ee033f70a5d8361686955ac731473d17b9ad2a58d5",
+      "symbol_count": 2,
+      "trade_date": "2025-07-17"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "836c96429fb48d543fee1baa92c28fd8c486572eac7495c8ab185e58fe185957",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-18_836c96429fb4.json",
+      "source_fingerprint": "e67016cc75224e49af52b88c3a2deb90a3268a95a8bc5369c9cf79a8571abd6d",
+      "symbol_count": 7,
+      "trade_date": "2025-07-18"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "51de4b9e31577c6b3d70090fcb011fce6dd2986d1c5a10449402299bb03dc31f",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-21_51de4b9e3157.json",
+      "source_fingerprint": "55cfb0f0b90d745183f5df48ecb2cb11272ac1f174a35a4d3366930c118d9362",
+      "symbol_count": 2,
+      "trade_date": "2025-07-21"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "8e4a0ff5d5e342b239bffb51efc8715a3fe19f9cba0e936c584d24585d8dc589",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-22_8e4a0ff5d5e3.json",
+      "source_fingerprint": "26a50cbc993b9d29188b474181761b029a3887a86d4b0e2e41c1f8e4933800de",
+      "symbol_count": 2,
+      "trade_date": "2025-07-22"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "fb4cff5824abde8b5339a76f69ec5738f42b71e317b5e617ddb04a448cde6a82",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-23_fb4cff5824ab.json",
+      "source_fingerprint": "aa64bdb872d573445d97f53e9a203af8d9f7ffcfb3cad3ad728b7858615a933a",
+      "symbol_count": 2,
+      "trade_date": "2025-07-23"
+    },
+    {
+      "active_symbol_count": 9,
+      "artifact_hash": "83342e397bb7347ef73e9f45ac286f4e09c9534dbd33f65f4f69ab67dd9e57b0",
+      "candidate_pool_count": 9,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-24_83342e397bb7.json",
+      "source_fingerprint": "a4725fba77195fc0e19d21903e3a032d596dd329dde380a789114b4ed5cbba95",
+      "symbol_count": 9,
+      "trade_date": "2025-07-24"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "1d2f992a7b234c4fd4127574b035e66b8c6be8560736129ee40418d51d9f4c15",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-25_1d2f992a7b23.json",
+      "source_fingerprint": "2fb871d7e9bcd1e0415118a3c837a0013aa55efeb4cacca14c6553d755ca4aff",
+      "symbol_count": 3,
+      "trade_date": "2025-07-25"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "ae8764f2b6c4cc54c4d4f40498af6068428215eb13909a9a67903c46e6ec9985",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-28_ae8764f2b6c4.json",
+      "source_fingerprint": "22994b0a837cd5e84aeb6dd76c33e877bca97a61b3315f6bfd73a5e44e064524",
+      "symbol_count": 2,
+      "trade_date": "2025-07-28"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "647365fc5e8ee96233a8cd14e7f0d28a01b55029a4c7bf8d9053ed35121d5846",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-29_647365fc5e8e.json",
+      "source_fingerprint": "b4690d3e39d333f072dccce82e55e5b06438711d4c40b42816ac48935c72ad89",
+      "symbol_count": 2,
+      "trade_date": "2025-07-29"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "9d86d367436780f6e3b35f8d298a9d71a890427b2acc1b22d6a0d029444360e7",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-30_9d86d3674367.json",
+      "source_fingerprint": "d7e3fe18129ec9f9ae09444ed145d48d9a609729519a4df81d1b9d8a89e8c3c1",
+      "symbol_count": 3,
+      "trade_date": "2025-07-30"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "fa60948e77fd1bfa50e16220fa9d0b59110de42df6ef542cc4f34d74f6afa5c3",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-07-31_fa60948e77fd.json",
+      "source_fingerprint": "9856618cfc8272729d3f07f0bbe45b5508f130572193479136823a7cc1db1e78",
+      "symbol_count": 7,
+      "trade_date": "2025-07-31"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "c5ee9a89bb45c5799922a361ec120d6dc80f1084c83191ea4e7885ecd8a1382d",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-01_c5ee9a89bb45.json",
+      "source_fingerprint": "52ae66c40f54d7f93f9a408d377aa5d797f3b8d0c554214badfb4caec2e68438",
+      "symbol_count": 1,
+      "trade_date": "2025-08-01"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "ba236fc987734618e4c82ae78879370395cba86656e31c8032c970d2ae4a6d53",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-04_ba236fc98773.json",
+      "source_fingerprint": "68d5719aa5b5042bfde851d73015d17e2b3b3653bac7a88585195318a4da949f",
+      "symbol_count": 3,
+      "trade_date": "2025-08-04"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "37c0e02c4f4c15ed5b42f1317448d6fc06fd737d5c6d4feb1ca68988dcc62d58",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-05_37c0e02c4f4c.json",
+      "source_fingerprint": "f504cf20c03bb13a282f1c0733e75c8d4fa82b2b454eb2a0ff150f08297839e0",
+      "symbol_count": 5,
+      "trade_date": "2025-08-05"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "6e74edb65ac400cd0b4c59f0255353cd927f935ff2a51d2a66ff4842df55787c",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-06_6e74edb65ac4.json",
+      "source_fingerprint": "961d90d9b6a7057954a6db020fb267076765c929a5b033fa441f1be604794119",
+      "symbol_count": 3,
+      "trade_date": "2025-08-06"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "89ba85a4483d0eae2f592f39029677cea6a432ae474643a2eb416c1540926b3d",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-08_89ba85a4483d.json",
+      "source_fingerprint": "cda57431400295306be2cdceac2bb4c1e6d5b7c46da5dfc5f9bff6813d77c42e",
+      "symbol_count": 4,
+      "trade_date": "2025-08-08"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "f214beda96833952bfe9a3bc2d00bc508b5a677f7e1c729289c35a40233664ff",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-11_f214beda9683.json",
+      "source_fingerprint": "aa77a044ba6fa90bad67639fce5ac0e16ea14846565c99be963e2ce9987e6dd9",
+      "symbol_count": 1,
+      "trade_date": "2025-08-11"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "7921b5507a2b7100fe4dd8bbbd5602f110f1ea7dbb118d90a9275917f293674d",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-12_7921b5507a2b.json",
+      "source_fingerprint": "49d0f735893b27f1a885a88ef4f4dbe7da5a35c21828679e1af009ef09a42ea7",
+      "symbol_count": 5,
+      "trade_date": "2025-08-12"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "7c9cfd4f86033576d4e9fa369478899e9198ffcb85c9d3550d33e9cc097c50c0",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-13_7c9cfd4f8603.json",
+      "source_fingerprint": "0039de669bf0b0272b3713d8567cafe5d68c18410b13427c46b19655284b0cb4",
+      "symbol_count": 2,
+      "trade_date": "2025-08-13"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "95c9f318fd3a03b0cad1aa96d4d86e68e830a9e0a61f5cfd0ae7ad6c7ab256b3",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-14_95c9f318fd3a.json",
+      "source_fingerprint": "db5573be551aa493ef7c37493f012898fb37560a745a6e59b0b0d7785dbb40d2",
+      "symbol_count": 2,
+      "trade_date": "2025-08-14"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "9f6bf64f6c9a0ae928b6e28c2847b233675e3ce31e0fd26f3f608a86ca021957",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-18_9f6bf64f6c9a.json",
+      "source_fingerprint": "eb52bd029aeda216cf6024d47e273f272753f261455c3c8b9f3ecb64cf7e2396",
+      "symbol_count": 3,
+      "trade_date": "2025-08-18"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "fe45d60572b05b1101eb4b358e02a78d9226c0cfe602d3ff13ba328e24fabd6a",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-21_fe45d60572b0.json",
+      "source_fingerprint": "f441cfb652830a41cd0564ac409b063d2514fc983e2ba15b81314db9ad50692f",
+      "symbol_count": 5,
+      "trade_date": "2025-08-21"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "8feda19af3c8e9c9f689a59a984930d831fdfe60bace115df5ed948c42014b3d",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-22_8feda19af3c8.json",
+      "source_fingerprint": "3e09cfc7d066a7ca6c502b9aa06f962bcee026dd4cf03b186beb291170230aa9",
+      "symbol_count": 4,
+      "trade_date": "2025-08-22"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "1f199e70624ad85b2d17340fab8ec2093f444a8a90a9e70d7ee4c5b1d2fc6531",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-25_1f199e70624a.json",
+      "source_fingerprint": "62ecf1c87aa6bc4b15a6f85466fd2a3f1f0a4ab176295a26a58e713970b8eb00",
+      "symbol_count": 1,
+      "trade_date": "2025-08-25"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "5a5f9badee731a4b7586ff9ad1839d311b73ba884f00570e74149dbcb4e9fd67",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-26_5a5f9badee73.json",
+      "source_fingerprint": "ed1d3def9c31c58178c51a7c4fca8f4ecf2e4573708d79b3eed6d03ec80efd4e",
+      "symbol_count": 2,
+      "trade_date": "2025-08-26"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "34485f2693ec58157da1a36325b36f27c3f93da766707e248cdea991a696ba11",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-27_34485f2693ec.json",
+      "source_fingerprint": "0c7a0ff6341800bb54a8ae94c550c6c2297bf6d7ff7592fb053c9543920c8e95",
+      "symbol_count": 3,
+      "trade_date": "2025-08-27"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "304d0655bfba192e3c384c1968f0f288e93b7a7c8ed7d8728f3a1d48afd05904",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-28_304d0655bfba.json",
+      "source_fingerprint": "d9280f95580be30dee43f3b4f96e43c566a4537fa506a948939454d7dbaf81ec",
+      "symbol_count": 2,
+      "trade_date": "2025-08-28"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "b5debfb77a429a16416b76d8799b62fa56d04de7870cc63d72f4240d3300616c",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-08-29_b5debfb77a42.json",
+      "source_fingerprint": "c7a6fc8446ff14fca06802e03fa66d55f14aa23c95346af4a9ca0c722c3753e4",
+      "symbol_count": 3,
+      "trade_date": "2025-08-29"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "8fe53cbde4ffab629d50c3e63ae5bceb47ee557bc221222b29367ac17ea04fa0",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-01_8fe53cbde4ff.json",
+      "source_fingerprint": "5243e0c8e07231ba3cf347cf9d4a35169f0498ff09a84d570ea47b67094c2a37",
+      "symbol_count": 2,
+      "trade_date": "2025-09-01"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "5e011c7a9609b7a7afcb7080a5728375076bc3aa88c859ac4551b8ca8b87f0c0",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-02_5e011c7a9609.json",
+      "source_fingerprint": "787463222f543985ef87b8d094d5a578fa63748562e5cefddf971b77c9676376",
+      "symbol_count": 1,
+      "trade_date": "2025-09-02"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "91f1c437642f40a2108c57b49947df78e587e41b398d8a5668540418eebf97b4",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-03_91f1c437642f.json",
+      "source_fingerprint": "bef7daac18488e2fc97b587a19ec46e42797aaa8eb1bb0c401cb6e3fe5dc5f4a",
+      "symbol_count": 4,
+      "trade_date": "2025-09-03"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "92449680cca41b3a2f29e9dc749c34572b3a988d868fe216f734110460cdccd0",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-04_92449680cca4.json",
+      "source_fingerprint": "749e1451b31daddf9e932ee7213acea08b61488e19a16ae039d8ed75c926953a",
+      "symbol_count": 3,
+      "trade_date": "2025-09-04"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "3eb97eba66c7f7038a89a6221afaa1bf4affd6a213d0c22758624ff796c275d5",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-08_3eb97eba66c7.json",
+      "source_fingerprint": "d57e35af848427014c672fbc21128a1eee8b00e90ec79a2ae678bbbad9537381",
+      "symbol_count": 3,
+      "trade_date": "2025-09-08"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "b5a63c781eed9cf082ec7a81838cc8c2932304262350b147b7676a8407e04f39",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-10_b5a63c781eed.json",
+      "source_fingerprint": "10b790549a7cc2c405bf76ba86bc42ca08127a50f447c440a6d118e2d87b3770",
+      "symbol_count": 6,
+      "trade_date": "2025-09-10"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "36def89ddaed9596e57f7254d0ad6113317979c0858c9a337aa64650092d87fc",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-11_36def89ddaed.json",
+      "source_fingerprint": "a645194b02f803f9f73ef181387c220aca879ab12699dd1cbda4839aef3097a1",
+      "symbol_count": 4,
+      "trade_date": "2025-09-11"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "bfcc229a6be85f87f963b5a4aa65c8cc05284570471a3eb12cb7eb0f25e193fb",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-12_bfcc229a6be8.json",
+      "source_fingerprint": "2c6aa5beafe57b5c27d2a8315ade7e478ddf2ca134a37895dba607e9b5ca4283",
+      "symbol_count": 1,
+      "trade_date": "2025-09-12"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "1ea18a5cadb395a220117805f3179ae4cfaa1d70be2b8b3b22f7fa2ebb31598e",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-15_1ea18a5cadb3.json",
+      "source_fingerprint": "071e3d8aafa1d04d586c7b8d62a1aa3e89bd2804cf90ed93f31324dcc7655241",
+      "symbol_count": 4,
+      "trade_date": "2025-09-15"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "7fc78ada39ed1813ab218fe410214f95ecb866783da389a487134910b022a8d4",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-16_7fc78ada39ed.json",
+      "source_fingerprint": "826c2805290a4556d3e2589d9f052f4a96ef104e4a114320112286748f5a8b7e",
+      "symbol_count": 3,
+      "trade_date": "2025-09-16"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "9e9c403253cd751fcd232d388465930b8044e27b75b56271273bf3ed8d99ecfe",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-17_9e9c403253cd.json",
+      "source_fingerprint": "968ff9f3157eebdf20c12a7ddb5687d280f9616737dd84a6524dcd2fe1fd1b13",
+      "symbol_count": 6,
+      "trade_date": "2025-09-17"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "562881a01cd3c1bcc0700503044ba2d7ee1ed8e389ea25278e62e9e19c27a6da",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-18_562881a01cd3.json",
+      "source_fingerprint": "38382ff075f634f5832e3038c109c6953efeda1f3e2adc6eba4bf21710bf7e60",
+      "symbol_count": 1,
+      "trade_date": "2025-09-18"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "068c4cc96130533bbf527fda15cb01721e5f68cbff055d59ff6bd959c7e1d5c3",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-19_068c4cc96130.json",
+      "source_fingerprint": "14396d9fc8f3ba273b53eb85ec707dedd351e7cb8254273de8a85bf37bc73293",
+      "symbol_count": 5,
+      "trade_date": "2025-09-19"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "b89734e20b56c07fbe928d678685cc76220579d75e103694e72a03c41435ad07",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-22_b89734e20b56.json",
+      "source_fingerprint": "908da3a985170d4b0c5b5753da12ce47d995e8cc80f0208a533d90a5e5f6201a",
+      "symbol_count": 7,
+      "trade_date": "2025-09-22"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "6e1ce6925c5f988c6f8d239c41187afd512fde5af77ebc30a4314a420b1b6706",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-23_6e1ce6925c5f.json",
+      "source_fingerprint": "943f608d6143ef31517ec62f97587d0880b25613b89faed82e738328d710371d",
+      "symbol_count": 7,
+      "trade_date": "2025-09-23"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "1778dbc5b8d4f8a993e7ebc55fa5513b78dea4ac5f2092165f8f19fd16767ba4",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-24_1778dbc5b8d4.json",
+      "source_fingerprint": "acc1f4de48ff13cc94deb9c9e153ea7e9f6aff3c37ba2da662bac43bb6eccaf0",
+      "symbol_count": 2,
+      "trade_date": "2025-09-24"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "abea3a5081a7f046589027f15fb1d494fc01bd84b4f4e426a3423a3be8ea83f4",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-25_abea3a5081a7.json",
+      "source_fingerprint": "50b85083d1cece219d4c2f943a106cf90ff6326a7b36ffc75d5b40d7809689e1",
+      "symbol_count": 1,
+      "trade_date": "2025-09-25"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "aacda5b4882d60a7cbaf31a3e0199e5d965b3ca10e8e0bd95afcafb88001293e",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-29_aacda5b4882d.json",
+      "source_fingerprint": "8177e796f8cde656e12ab157b56676bb557066eaf3e2142314fd8aab982119b2",
+      "symbol_count": 2,
+      "trade_date": "2025-09-29"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "09c6ee08aba0becd52585b64fc5daa9621877def0b084691b63f4b5bb078638d",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-09-30_09c6ee08aba0.json",
+      "source_fingerprint": "526151df70254bc1499271b3896b256b7c9cdad669d3d2ea6c412e0a83aa0416",
+      "symbol_count": 1,
+      "trade_date": "2025-09-30"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "fd61392443b8f2621d281881503f015a769060c0f41532528484a7e04bbb326b",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-01_fd61392443b8.json",
+      "source_fingerprint": "fa1b186ff1ac7162e5be7e54a1103b9688cdb1f61503c49d7fba802ca9d0bc8a",
+      "symbol_count": 2,
+      "trade_date": "2025-10-01"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "376b292c1a4dbcfdc3d8010ec723cf3d78593fd1ea2cafe3e4613f4e447e8d08",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-02_376b292c1a4d.json",
+      "source_fingerprint": "6b209baa67d0142b9a593321f97570ae0d97d622e4fc43c6aaf5c82dc7475f1c",
+      "symbol_count": 3,
+      "trade_date": "2025-10-02"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "4e3eefbc22927124e17827804b63ad2db304294521824ac4f07f70924668307e",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-10_4e3eefbc2292.json",
+      "source_fingerprint": "8601624b12cc05ad4446dd3d9b288360d081260528d8f5a5a92a318e74f7ff0f",
+      "symbol_count": 5,
+      "trade_date": "2025-10-10"
+    },
+    {
+      "active_symbol_count": 9,
+      "artifact_hash": "e63a2c23bd6c142e72c1616033fc44046452921a6654539db13f67813fcc3a7c",
+      "candidate_pool_count": 9,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-13_e63a2c23bd6c.json",
+      "source_fingerprint": "4993fd329c9fdd4f22e5ed74e3b8370915cf4f2f289f253815e05e586f4a34c9",
+      "symbol_count": 9,
+      "trade_date": "2025-10-13"
+    },
+    {
+      "active_symbol_count": 10,
+      "artifact_hash": "31272e66b36a09bc8538ac1a9767fdc70acb586d7d9c46f062b39de0938a320e",
+      "candidate_pool_count": 10,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-14_31272e66b36a.json",
+      "source_fingerprint": "a71c5ab55da1f95c021b15f54594c495d390d3d68154bfdc98c58c97920c8fa7",
+      "symbol_count": 10,
+      "trade_date": "2025-10-14"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "3715f4fe066cb5c446ad28f76ebff7763dc39a80b813643f36febc9f6de37e6c",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-15_3715f4fe066c.json",
+      "source_fingerprint": "4af6e4f5fce806f462c3c452990e880eb768f3f39d17e838f0e11ce62bcd34a2",
+      "symbol_count": 2,
+      "trade_date": "2025-10-15"
+    },
+    {
+      "active_symbol_count": 8,
+      "artifact_hash": "0bc7bd0cb4f96ca013544abdf0456d6400cbb87501b8cf69d9a1ce8b04bf579c",
+      "candidate_pool_count": 8,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-16_0bc7bd0cb4f9.json",
+      "source_fingerprint": "7a4abdf7eb3ff7eec44f0bfffe311d524589efad6178fcff17c033b3d14227a2",
+      "symbol_count": 8,
+      "trade_date": "2025-10-16"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "d0bec30aacfd95eee136174e1aedb5c2ba4e574f548a4545de2d3a3468e3ac79",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-17_d0bec30aacfd.json",
+      "source_fingerprint": "49320bce829d2ea07ecf05449826924a0f91ae3d899b9958413775dead34ca51",
+      "symbol_count": 6,
+      "trade_date": "2025-10-17"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "017d7e7813e2be621804919a67278233ea2c27edcfeb7932cc10de12c7a0eccb",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-21_017d7e7813e2.json",
+      "source_fingerprint": "d2d69002553329a90177f3e9b850edc16b281c36ee2daf7c783e1cfc2891d7b7",
+      "symbol_count": 5,
+      "trade_date": "2025-10-21"
+    },
+    {
+      "active_symbol_count": 11,
+      "artifact_hash": "e7c475d24cd0c3aff322f7e9c12a9b53a650e04581d7b981850f27d836845714",
+      "candidate_pool_count": 11,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-23_e7c475d24cd0.json",
+      "source_fingerprint": "d2654886b1da6220be933513c456d25e46e3b85ec414bcf19f01d09f2a75309e",
+      "symbol_count": 11,
+      "trade_date": "2025-10-23"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "21e8a45742df75b2e615dc9c4a8682a80221eac1bc2d275a1a98f3e3e86d4a57",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-27_21e8a45742df.json",
+      "source_fingerprint": "8eb4ee87c05e801ce804ea5749b0a3c73f848955b0694b23569b4dbdf255f104",
+      "symbol_count": 5,
+      "trade_date": "2025-10-27"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "a09c9eaed3a996868e5f253635d6715203be956fd0b46d9fd53d56e2e20b9161",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-28_a09c9eaed3a9.json",
+      "source_fingerprint": "be2094d6599e795b180ab66ddd20e0a52ebfc2f1b2965d0796911322b66ffabe",
+      "symbol_count": 1,
+      "trade_date": "2025-10-28"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "1e8e7756a46c003950dd61e0c1f87af2f00a7b5e9ba5a3a459f3fef91b8cf3cc",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-29_1e8e7756a46c.json",
+      "source_fingerprint": "43bd627871f2a5d54f2a8fd5df3392c039520172c828e86565b835637e688476",
+      "symbol_count": 1,
+      "trade_date": "2025-10-29"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "d22430958995d1cde27a9b062a5dcead5cd2653c076d5e06f1246040a345482c",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-30_d22430958995.json",
+      "source_fingerprint": "ef2aa3dd8c3b9c9d8fadb93a854c8dab81c10a61ddfc9184ac6aee5913163049",
+      "symbol_count": 1,
+      "trade_date": "2025-10-30"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "2789ed9d0912c9e763852e32082bb5d04dc05327a0735d751d11aaf32446dea7",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-10-31_2789ed9d0912.json",
+      "source_fingerprint": "ab2c417e20e9298878ca0b2579d166a0df21d3c06b8da0fa17b66afd507beae3",
+      "symbol_count": 5,
+      "trade_date": "2025-10-31"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "02cc7a13135d853389f739dce8b49aec9ff91e6b77e7e8857180689c8e8350a6",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-03_02cc7a13135d.json",
+      "source_fingerprint": "352d31836bdba180b8300882a89245f420da4c028ceac1f2cd1ad86777b30902",
+      "symbol_count": 1,
+      "trade_date": "2025-11-03"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "71ff8bb217f965572d99be4405c7d6e3f1f03871679f88252677b3e1bc43a6c4",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-04_71ff8bb217f9.json",
+      "source_fingerprint": "b3f7bd5c8dc5840f58689b6376d8c69ec81510b737cf0616f4cfab40fc342546",
+      "symbol_count": 3,
+      "trade_date": "2025-11-04"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "a2b287dbc0eedc8c6788dbce410478213c3e88eda0fb6640b323f2ac6cf360dc",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-06_a2b287dbc0ee.json",
+      "source_fingerprint": "43dfa77d2a3a72f3073138387be411400c9283730b58cfdde60efc5a679546d9",
+      "symbol_count": 1,
+      "trade_date": "2025-11-06"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "3cb2e07f6b3eead4d54aedbdc8902d2ed4d053f1f99a3d0948bddcd9d2cf1594",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-07_3cb2e07f6b3e.json",
+      "source_fingerprint": "66a8796c8bc1979e13f2dd9566981a387ae797b4b4c7e38397db427d2f564f96",
+      "symbol_count": 2,
+      "trade_date": "2025-11-07"
+    },
+    {
+      "active_symbol_count": 8,
+      "artifact_hash": "905cd74ac84ebbf6516898957630d3ac2decd84d9e09f598f22d8a5acdcd67de",
+      "candidate_pool_count": 8,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-10_905cd74ac84e.json",
+      "source_fingerprint": "60e9bba37c3307ad4519c118a6408737fb49d7ede5f7f155e2fce4f8eaa3bef0",
+      "symbol_count": 8,
+      "trade_date": "2025-11-10"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "be993e6a62a7eba5190d6d4fc45847216dc497f335470af52f86b8d9090ce09c",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-11_be993e6a62a7.json",
+      "source_fingerprint": "7b0bfbb91475733a64a7285430da77af81744713550eb1f7f7ae481fd85e7c24",
+      "symbol_count": 5,
+      "trade_date": "2025-11-11"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "f7b77a23d954e83cb0b4b8dcba566cbe4c9c6f05e77dad9def76400a128fecf1",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-12_f7b77a23d954.json",
+      "source_fingerprint": "27991c9d9f19be74fa0f105a3c8181907b51661c76b33f79e94900f8ae57211d",
+      "symbol_count": 3,
+      "trade_date": "2025-11-12"
+    },
+    {
+      "active_symbol_count": 9,
+      "artifact_hash": "b9b34566fb03d85e588e3ad46973cab55af025b1e82f8bbdc5ffb0930dfd051f",
+      "candidate_pool_count": 9,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-14_b9b34566fb03.json",
+      "source_fingerprint": "1c5212439db0e0c777a185a57ec9853029635d56be5d7a09d29fea1d2952822b",
+      "symbol_count": 9,
+      "trade_date": "2025-11-14"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "c6ee720c8c9df11e7f57e38a7d3e0fa5dddb02d70e02671eedca56be9ebfc4c2",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-17_c6ee720c8c9d.json",
+      "source_fingerprint": "ffb0cc2fc0e86f126dd6325888b810372863a31ecd6a95d342d37f0f7494fa97",
+      "symbol_count": 2,
+      "trade_date": "2025-11-17"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "6bc0f8141c04d22721f5ca0d599fc616650bb3150de382dcfe0e3bc5a7da1e2b",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-18_6bc0f8141c04.json",
+      "source_fingerprint": "196c3fdf9d04150dfab4d39226bfcd20e78ed5f07792546ccb6c2ac1647aa7c5",
+      "symbol_count": 3,
+      "trade_date": "2025-11-18"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "ba36b59870162351f2de1b0f57b9cce0138b0deeb25bc911a1a4ece51cf77542",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-20_ba36b5987016.json",
+      "source_fingerprint": "aaf0ac27afe13bbd478e91f562ae1eb21fc6eefdb37f457de3278b657b78d518",
+      "symbol_count": 1,
+      "trade_date": "2025-11-20"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "10e8d57c05e9096abacdb2f091cae33a83bdbb22896009626c3f6a22b454773e",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-21_10e8d57c05e9.json",
+      "source_fingerprint": "b6269f53ae5607a0cb39458b97c80d3a74b9fd386fa2b8a13cd8b821378fe4b7",
+      "symbol_count": 2,
+      "trade_date": "2025-11-21"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "8ba9f9168b5900f8caf28a95f51ea1a1d40485cfee92038711605b099204e5c6",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-26_8ba9f9168b59.json",
+      "source_fingerprint": "622d30db148d16b60820c679445ffcde471f97b520a860231667a7629dc1d4af",
+      "symbol_count": 3,
+      "trade_date": "2025-11-26"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "5393fed5bc69a41606b2cc871d20c25861636452d180305ffb20769ddbe6ee62",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-11-28_5393fed5bc69.json",
+      "source_fingerprint": "cd0e224c5a7d89f9fa60428ee5070044c632b25a24cae70c46c87b1fd1171cda",
+      "symbol_count": 3,
+      "trade_date": "2025-11-28"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "871736b2af8abed5222167b584679f6551406b023386d3c765d38a19270d3708",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-01_871736b2af8a.json",
+      "source_fingerprint": "1c812bb3408d87f37ab6c61ee60c13463ec9e7bf6ccbdd50160ae72c5b7514a4",
+      "symbol_count": 3,
+      "trade_date": "2025-12-01"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "4c131c5ef0e4f49d006d0667396ebcaf16adc71c30b29980b4f31f34775d9239",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-02_4c131c5ef0e4.json",
+      "source_fingerprint": "2000439e818dc4e2f8672c7505ab7342165b8588fd6c572e26314971dff2da1a",
+      "symbol_count": 1,
+      "trade_date": "2025-12-02"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "b92f171b97163d191014a7c732b6cd079d30f8efd1ff30f2f8e96a297f1d02d9",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-03_b92f171b9716.json",
+      "source_fingerprint": "5a25a39d31279ed3a4830eb715273f9463160236774aa8291ba3fd22acfdaa41",
+      "symbol_count": 1,
+      "trade_date": "2025-12-03"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "80ed14306c31070548352292f88b40ba6170b6db927b59354ccf0cc559f6e1dc",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-04_80ed14306c31.json",
+      "source_fingerprint": "8a6c9fcc80b53b77efc507eb362ece84c2140b98ad9adff3f11706c1eb5a0546",
+      "symbol_count": 1,
+      "trade_date": "2025-12-04"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "ae7b823a80ed9cbeea9f2360cb711a3fb4f139e89d645700f8d34571eea25e2b",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-05_ae7b823a80ed.json",
+      "source_fingerprint": "ed83b895db19cebac1a7bb4af6ad0aefae3787732530b237f18081d412cdcea5",
+      "symbol_count": 3,
+      "trade_date": "2025-12-05"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "35762c468589eb020688b11b9f85cb22d5f60ac53bb6e291b4bbe9d0c635edb3",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-08_35762c468589.json",
+      "source_fingerprint": "d261f012858629ec2f6faf62f8d956515ec72028efaafdcafdd8daf7d65ddbfb",
+      "symbol_count": 3,
+      "trade_date": "2025-12-08"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "f7bba8951477818015d645b84adf226a4c535fd587955fca6666e996161e40a8",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-09_f7bba8951477.json",
+      "source_fingerprint": "49ad649f6744521d355bcb800a77bc12036280f1d7020e8dcff27be45ae57521",
+      "symbol_count": 4,
+      "trade_date": "2025-12-09"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "023e22c40618b6928628b5af76bd4efe45a8cdbb13b0afee286be67992deb503",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-10_023e22c40618.json",
+      "source_fingerprint": "357acf3304ce924f432b65d45e0e25fd24d7920bf8cc465094e69feb824e0f61",
+      "symbol_count": 5,
+      "trade_date": "2025-12-10"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "ceaa07ebf5e73fbe688ab353037ea3ca79e2093881738ec14e689064ee0cd850",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-11_ceaa07ebf5e7.json",
+      "source_fingerprint": "038f3c511fc02ce5d50be03a0ffdba30a0b2a156b58d2eae2b064910005d634a",
+      "symbol_count": 3,
+      "trade_date": "2025-12-11"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "532a8dfee5b5f1ca506cc6c383fefbccaf68a5d2352d2c65aa1c20d741e6913f",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-12_532a8dfee5b5.json",
+      "source_fingerprint": "c57cce3373e259a9de05bf8812d7343bfd9de1b035d4f6b0eab1e8d9ee63e6e5",
+      "symbol_count": 7,
+      "trade_date": "2025-12-12"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "f707a0821ae454c3e10ca4a244b5aac852587ef88ce90407c54d2a25e3078598",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-15_f707a0821ae4.json",
+      "source_fingerprint": "f8b7960f596cd4fc173106592255fb441ba13b83e07e5d70f6b3ad8edf7de003",
+      "symbol_count": 4,
+      "trade_date": "2025-12-15"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "f686ad3c8de8f1989cffbfc514d36b8bf1179f6c47ce01faae797731e42a3843",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-16_f686ad3c8de8.json",
+      "source_fingerprint": "fc409b51f0aca193226eaf0ea78b0277ac146c9379c1d54d817bfe31ab4c9950",
+      "symbol_count": 2,
+      "trade_date": "2025-12-16"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "8187b88a6317d67db993ab89fc25adbdb847944e7768503e629db74bce5a4098",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-17_8187b88a6317.json",
+      "source_fingerprint": "bb2d1ad9dcb1ae806f408d618e596eb6d5f440872a0f2087e490f7ae12c72375",
+      "symbol_count": 2,
+      "trade_date": "2025-12-17"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "720b9504f55b99bdf30bb668acbaf9f01e391423c6b750669ee077a7e793a6bd",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-18_720b9504f55b.json",
+      "source_fingerprint": "703b7d91e0396dd8d2dc7adbecf504ee99fc2d59d965cb0189469179843e1427",
+      "symbol_count": 1,
+      "trade_date": "2025-12-18"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "03264e6485b724ec56a12fd6e84a7d7c8187257e609594037374b9249235ef92",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-22_03264e6485b7.json",
+      "source_fingerprint": "ae12e8750e49f7a24487db811b39b6560a836417827710f335be332b9126015a",
+      "symbol_count": 2,
+      "trade_date": "2025-12-22"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "75eca5b8dc4f4d5dda9f731f54bab082d699f45cdd71c5df6cdff8acab51ede2",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-23_75eca5b8dc4f.json",
+      "source_fingerprint": "e0561f37041cb7d6d6d9916ae93da8d094c7f1bd327b750e7bfb0a5eb64f35a3",
+      "symbol_count": 2,
+      "trade_date": "2025-12-23"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "3b45009644cc70e822e9f57c4c834a73a8b896aee0f7d356d378c6d2ad82aa3c",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-24_3b45009644cc.json",
+      "source_fingerprint": "7b50a7893af0e179e3abd8a775471e15db539a6b80463ccbfde196f50ffb65c9",
+      "symbol_count": 5,
+      "trade_date": "2025-12-24"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "7a5806f405b27feac94634a6a3d3dceeba9285edb2a8eafc3913da3879d6ed01",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-26_7a5806f405b2.json",
+      "source_fingerprint": "23ac616d10e974413dc823345cfccda1bda4b64fd73dd803c1ffd8c1a7051534",
+      "symbol_count": 4,
+      "trade_date": "2025-12-26"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "addd70b21d84c16b2f29ceee60c3270a7ac28c17f1452308e1728a73cb4fd70c",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-29_addd70b21d84.json",
+      "source_fingerprint": "33e9c337f5555c4ded905f7fd2af445841bcda438dded193044d7311aeaf20e4",
+      "symbol_count": 5,
+      "trade_date": "2025-12-29"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "46d88a900533c04368edd609f9c0b8c8dbd67540c17e7ec2941dab793bd33fcf",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2025-12-30_46d88a900533.json",
+      "source_fingerprint": "5e7a53ef57bd82cd194c6b553e24e6f95600a4f38bf3896cd7df51a7534d26be",
+      "symbol_count": 3,
+      "trade_date": "2025-12-30"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "17aa7403d5c4b9352cc0a6cfec10315e9e1e6bb94b4de34410455fd3070ebd95",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-05_17aa7403d5c4.json",
+      "source_fingerprint": "8c177a6c5ace2c901dae81c9e463922589e7991c9db7745d3f1ecb3182d86ea2",
+      "symbol_count": 4,
+      "trade_date": "2026-01-05"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "e04afd4eef0f81abc88e99a4c51e0d75185c75e25a750ed25ca167015c0d8fbd",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-06_e04afd4eef0f.json",
+      "source_fingerprint": "46d230f7722a2876e69170fa550a8658c2a1b8409bcd2ba03bb45b064e503baa",
+      "symbol_count": 1,
+      "trade_date": "2026-01-06"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "25898728f22f7832df7de03d27db09868f746d01ec0ecb422312897ae76a4f0b",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-07_25898728f22f.json",
+      "source_fingerprint": "1fae8ad7619443dff584655fd8a1ec16e787e5165af80c0e4fa4552389193e24",
+      "symbol_count": 3,
+      "trade_date": "2026-01-07"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "b8e3620d35355dc0b7ef39a83dd9b3a9394f452784f1b1f715948f0a538e3fec",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-08_b8e3620d3535.json",
+      "source_fingerprint": "b644de0e50d809c12cef09918654cf452eebaf8ed5dc3c88fc058bdb5604b1de",
+      "symbol_count": 1,
+      "trade_date": "2026-01-08"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "088c65eb8dc3d9abe4ff96f7f63f1b25889ce9576aea24a8d756da86326acb5e",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-09_088c65eb8dc3.json",
+      "source_fingerprint": "d5460d8332f9aede3f2a1fd99a722babc85c1404b4e73cc143e3b40a128f0014",
+      "symbol_count": 3,
+      "trade_date": "2026-01-09"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "4816442f154d55ffbb787306e7c4a57d7f7d727012eea835fb5c23c892adc0d2",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-12_4816442f154d.json",
+      "source_fingerprint": "fceee9080389a855a202bfa982b84e61159e3a43dce16981c943c61de66b33f6",
+      "symbol_count": 1,
+      "trade_date": "2026-01-12"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "cee97790f17ce0e1e686b04e213f497bdc73bea37c03fccd0261a1ff0e444079",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-13_cee97790f17c.json",
+      "source_fingerprint": "7ad5c75b5877eb950d040c2cd3b2803d796ae6b0e374b9c41c09250be389fd1b",
+      "symbol_count": 1,
+      "trade_date": "2026-01-13"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "1f8a02228a69c20b7ec2e6641471262450b9314e33c6492591994c49914f7142",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-14_1f8a02228a69.json",
+      "source_fingerprint": "596b987e19fefca3db9c2af7e89c3afd3cab1310913c267cc66e4b5ef25796cb",
+      "symbol_count": 2,
+      "trade_date": "2026-01-14"
+    },
+    {
+      "active_symbol_count": 5,
+      "artifact_hash": "a00bd95668040523c2879bc0a268c61583a54c45242e1fc4c841eee9e6bb4837",
+      "candidate_pool_count": 5,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-15_a00bd9566804.json",
+      "source_fingerprint": "c5a1d0bc83d933f1548451a0163e5df51dffb6f26b234b7ac1577b6166c7cb27",
+      "symbol_count": 5,
+      "trade_date": "2026-01-15"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "42d96b98f2a35f2fb53d404ac64c1eae390295335cc72aff494df1beac9d5585",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-16_42d96b98f2a3.json",
+      "source_fingerprint": "51574824a321281971e2d63b9ec6e765fddd77ab409120952cda5c5b9c9a97b2",
+      "symbol_count": 2,
+      "trade_date": "2026-01-16"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "7ce1335f627c5c2f5edd90852b88110b69a80b5db0d727407316e7352151fc3f",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-19_7ce1335f627c.json",
+      "source_fingerprint": "6d0a037dbb1e6e9814154622b9d845439656d35a12e7444131886f1dbe75c50a",
+      "symbol_count": 7,
+      "trade_date": "2026-01-19"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "8311c7108dcfc4e343de7bf0d77be56beb64cf43cbfcd9264de04386b3603a0a",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-20_8311c7108dcf.json",
+      "source_fingerprint": "72ce85d1fdddd91bf98906a0c326d853902861cd1df48c66aa799cff06b531fb",
+      "symbol_count": 2,
+      "trade_date": "2026-01-20"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "87930cfbb0fdeb12504691b755487ac3eee6b1a3b97692afdf8fb814b31daee1",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-21_87930cfbb0fd.json",
+      "source_fingerprint": "7f0c49797a2c9b4610d6a896543478d1ee16cfeb2f23893d714fd70e4c2b8838",
+      "symbol_count": 4,
+      "trade_date": "2026-01-21"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "8c1d991d85f9034b2f19b5fc773fbf929eb2442caed997d91f83ccb985ab74a3",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-22_8c1d991d85f9.json",
+      "source_fingerprint": "db2ef4180a84b8df31ba92b924e9f2d32e28b32187bbe9e2b72febe22292f0d4",
+      "symbol_count": 3,
+      "trade_date": "2026-01-22"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "3f564ca0a5062262759f521963d4e6a5fadf082557d0259036f7be9ecd0905ad",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-23_3f564ca0a506.json",
+      "source_fingerprint": "7697c8d7404c2be7ceda3f9936b49c957ca0982b0098d8c46adc5ec3afae3d61",
+      "symbol_count": 3,
+      "trade_date": "2026-01-23"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "d53a57585a18316b53a127855ba05e1ea63e0a003363372a823ffe220df89b21",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-26_d53a57585a18.json",
+      "source_fingerprint": "60f9ecba6367b89953dc5f5d59d338534783b5d3cfd8c8ab0e85372faa5567f3",
+      "symbol_count": 6,
+      "trade_date": "2026-01-26"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "ea595798b93bd444176bccb63d46e6e458db5570d6f30f11231acb43c13e8a49",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-27_ea595798b93b.json",
+      "source_fingerprint": "efcc9dec01df8d6cc246c4b1f2c49698e60e2b933272ef9c3098e244e5ecb7fe",
+      "symbol_count": 4,
+      "trade_date": "2026-01-27"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "446bf560338c3564438297ed1e96f9094ba7a2ce434e1b7c293ae212e5649ecd",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-28_446bf560338c.json",
+      "source_fingerprint": "328e35d2f0ac3c9e3e88795844eb657559f508c5a2665449b113e1036e13f385",
+      "symbol_count": 3,
+      "trade_date": "2026-01-28"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "6333dcca65b1105494bd75483e263bfd38ffa2d142010325ee4706a59b6e9b80",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-01-30_6333dcca65b1.json",
+      "source_fingerprint": "b6342036eb99a49b3f32e51ba7308cada26c2d09c3f23f75194693edc5a36f36",
+      "symbol_count": 2,
+      "trade_date": "2026-01-30"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "3de319986b868db566630191ccad092d2dc395f98b16e2b9b2157719bf4c53fa",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-02_3de319986b86.json",
+      "source_fingerprint": "ab103aa1dac853b962bba75375094fd346d6281636e3510402eecc995b21fe83",
+      "symbol_count": 6,
+      "trade_date": "2026-02-02"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "73de2bebdb4153858b091f99e688bf967f49a163df42fa487eeffacffdc82fb7",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-03_73de2bebdb41.json",
+      "source_fingerprint": "fb2354b56e88da3d3fdaa3f640fc99ad8cc62b236b03df37c7da42def4008b3f",
+      "symbol_count": 1,
+      "trade_date": "2026-02-03"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "d67f8184d681b4f2bf17eb61b23ea50009dc2450ffef2fc04a3cc7e49fdc109c",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-04_d67f8184d681.json",
+      "source_fingerprint": "d9ffb301fda4398a88dfa8c3ab5ca64c9a0011879ddcb1c583b30e0c6ee4f886",
+      "symbol_count": 3,
+      "trade_date": "2026-02-04"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "94b497f8e00114ad1bbd12deef4bca44a78fcf80271929d75fda7babd99c351e",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-05_94b497f8e001.json",
+      "source_fingerprint": "9926c474387cda3a1a26b6e3fbd2d6491aea23096a3ee0b48ae305ecec7958c6",
+      "symbol_count": 4,
+      "trade_date": "2026-02-05"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "be0afb1a1cd1f866bc80beb1d3afa7de3b5c941aed7e42dd6bf117855cb9612f",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-09_be0afb1a1cd1.json",
+      "source_fingerprint": "45acfadb41b653c478a6d785c2377356a0aa8fd76acdcdafac5735e07ab4e8c6",
+      "symbol_count": 4,
+      "trade_date": "2026-02-09"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "de44eb446120542b7e7ffcae95eb52b4e6457e674d22abede4e0eb5c276ad705",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-10_de44eb446120.json",
+      "source_fingerprint": "de524003dcd220f108d24a9e82c2d8fa99f10098c68c1dd6c5298f17c991f8b6",
+      "symbol_count": 3,
+      "trade_date": "2026-02-10"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "934a0cbf34fd670a61df74263646f33151fac1accfffc422d609da390ab39bfd",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-11_934a0cbf34fd.json",
+      "source_fingerprint": "990498f60191514f6722a7ab4d4b6e0a76a72e176a53045a83828c620b52787a",
+      "symbol_count": 2,
+      "trade_date": "2026-02-11"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "98d73e86eff8cd951a6479d7e76d7557829844894e656333bb90c81011c0d2ab",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-12_98d73e86eff8.json",
+      "source_fingerprint": "f627753969e908323ebc36109bb49785f2ce4480da805b086d3fa0abc2ef0125",
+      "symbol_count": 1,
+      "trade_date": "2026-02-12"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "6f3d9f4e09bd6812b70c4da64e519859052b4bb7bee170c5a5d0ef1de23ae78f",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-13_6f3d9f4e09bd.json",
+      "source_fingerprint": "848294f6d58bdd46e993fbfd1812293ed3473d0126cbe3849fc91ecc9e277099",
+      "symbol_count": 3,
+      "trade_date": "2026-02-13"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "0fc79b1d3d44e9e1ccd3ef6e0d554df426565c5b286ec772c72675a403821a6e",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-19_0fc79b1d3d44.json",
+      "source_fingerprint": "f9fb6ac7b6bbd969bd4a9872de31efdface2eff8be082625ed027aa6e1367853",
+      "symbol_count": 1,
+      "trade_date": "2026-02-19"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "e414a857caa107bd99606af5e75d4036f402227ebcafd72dfb250779bca438b4",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-20_e414a857caa1.json",
+      "source_fingerprint": "7e599631c6e4ae710fa93c46831451b700936e32303383f8f8c1dc2517fea535",
+      "symbol_count": 3,
+      "trade_date": "2026-02-20"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "36f0219f4c4767e17d620fe39ec233e4973207b8e9812f255325e09a44f2c474",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-24_36f0219f4c47.json",
+      "source_fingerprint": "f7df31941c6f8064d9acb755e3d736cf208593f4cb80d317a589f46c9d0948f8",
+      "symbol_count": 2,
+      "trade_date": "2026-02-24"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "9bc56a0842c9af6f07eccbf0bcfb9c761a78f55aa2926f50d9213c2aacbb9770",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-25_9bc56a0842c9.json",
+      "source_fingerprint": "95d5cae96111297a57d0807d7cc6defc65af9ce467ddc364ca202b98d1472309",
+      "symbol_count": 1,
+      "trade_date": "2026-02-25"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "28bdd5e4fba191121523329b7e3d00b64fa0949f0e0e8dd326e38dc0f1c54eea",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-26_28bdd5e4fba1.json",
+      "source_fingerprint": "81f6a4eab91c21b4bc6f9a15c21155d18f2a39773b618a104e184725d9ffdcea",
+      "symbol_count": 1,
+      "trade_date": "2026-02-26"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "194d7e38242ac99e74aba13abeb312dd58db047e251c78945de516266eeebe99",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-02-27_194d7e38242a.json",
+      "source_fingerprint": "586bebfe1a6497e784e3a7957a0c3d912ad46b0c5078f77d3bf367ff5a2fc884",
+      "symbol_count": 2,
+      "trade_date": "2026-02-27"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "d57b831e38935fdd2dd225686e2ffa6ac022dc7a11b446fe5c59045df0822727",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-04_d57b831e3893.json",
+      "source_fingerprint": "b41a73271d5693809d091501bb89d6ee02b11bebc78cd792227531f2a61a2295",
+      "symbol_count": 1,
+      "trade_date": "2026-03-04"
+    },
+    {
+      "active_symbol_count": 6,
+      "artifact_hash": "b9faa39eb269c3be242f27446df9425f2ff96abc3955718db2059bbee8367c24",
+      "candidate_pool_count": 6,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-05_b9faa39eb269.json",
+      "source_fingerprint": "cbab06d82679bffe44c16cbf9e2b303ccac1fbddc01ed4e6246aabf9f8f8fc23",
+      "symbol_count": 6,
+      "trade_date": "2026-03-05"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "b95b930ec2c661024c61413e2d799f411a25db8b59c667e501838c8293a4ff43",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-06_b95b930ec2c6.json",
+      "source_fingerprint": "b706f55ff4d0f23c421aa01e46af278dd00f54767d088562b709b71e4a151e1d",
+      "symbol_count": 7,
+      "trade_date": "2026-03-06"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "9e675b27c2930fbce3185c6854d9de5571d136b5fd294a3bfd99aa1962368fd8",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-11_9e675b27c293.json",
+      "source_fingerprint": "b8c0f9b9068f0d97e441e79fa20b0db4437fe2e9cc640f2deac54b32436040e2",
+      "symbol_count": 4,
+      "trade_date": "2026-03-11"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "88187da92fb6440aecd7028db7c3baaf1bccd47b8b679618d52859becd7078e3",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-13_88187da92fb6.json",
+      "source_fingerprint": "16d106fae05f238b033ab5c715e36e80e87fa6b59e1da32211cd0e33675043eb",
+      "symbol_count": 2,
+      "trade_date": "2026-03-13"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "f59a3ca167f2229684efefc642a48f7bfb888c185e6d37f29ad0661ea2f9e52c",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-16_f59a3ca167f2.json",
+      "source_fingerprint": "bfc1b63142ef57d86f1e5f62ca0b8fe40eba5f8e68bc55135c76913c3f7d242f",
+      "symbol_count": 2,
+      "trade_date": "2026-03-16"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "67ae75e0b9632e2e3aa1f274fb1a5c3fa2d0bdf13e09d3441584597d3d3df841",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-17_67ae75e0b963.json",
+      "source_fingerprint": "aced101c7ae9ae9bfb081e3b04d5a54926e4df55e6a2ea134905b4ca7f951cb6",
+      "symbol_count": 1,
+      "trade_date": "2026-03-17"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "09f2d9eba31d2e6c02e0e95fc39fb1d3cec11843af8eb1dcf42e09590fe9d91b",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-18_09f2d9eba31d.json",
+      "source_fingerprint": "1398d80c719201d0ce4f7210f7ad267d0fa3b92500de8792bb6f36494ed87030",
+      "symbol_count": 3,
+      "trade_date": "2026-03-18"
+    },
+    {
+      "active_symbol_count": 7,
+      "artifact_hash": "a86ea61ae83080835492c35dfccc31210c92d1037a861aeafab04655c4291f5b",
+      "candidate_pool_count": 7,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-19_a86ea61ae830.json",
+      "source_fingerprint": "9784482ae5032971087f5535b86c9bd645f662e8dab44fc9edb62ca53e37b9ca",
+      "symbol_count": 7,
+      "trade_date": "2026-03-19"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "0f3bdc8542fc947c6563b0db874f75351d49219761dd537bc57dce0129b28f3f",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-20_0f3bdc8542fc.json",
+      "source_fingerprint": "5925542e28c4a9b35c802e6e02b3341cf3c8e4563475826b195e276bfa160061",
+      "symbol_count": 1,
+      "trade_date": "2026-03-20"
+    },
+    {
+      "active_symbol_count": 2,
+      "artifact_hash": "fc9f7112500c0f0b11deaaa6106672112938a902d4175dc5f22ac70da15ffc11",
+      "candidate_pool_count": 2,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-23_fc9f7112500c.json",
+      "source_fingerprint": "ff428388ddaa49f2c16d2aac497d5e94a9e56ec142a0f800be55710b957e9abb",
+      "symbol_count": 2,
+      "trade_date": "2026-03-23"
+    },
+    {
+      "active_symbol_count": 3,
+      "artifact_hash": "4231ac4298bd12bcd1e2d688a1b8eb71f210025baea6a876d834dbc144de0731",
+      "candidate_pool_count": 3,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-25_4231ac4298bd.json",
+      "source_fingerprint": "8d5a63d37da1256c9f0919f24489f0c5fac62f241b526c5095f66cce811c589d",
+      "symbol_count": 3,
+      "trade_date": "2026-03-25"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "f05b02621a64eacf47adcb5e4867d17d299755bbb2db4795c2e0b7705f9ecd37",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-26_f05b02621a64.json",
+      "source_fingerprint": "b4d847dcfcbefba80d0215bb396c2ea231e048c0e42f6a151d4562c8cda6fae1",
+      "symbol_count": 1,
+      "trade_date": "2026-03-26"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "5582c001ed54fdaa6441b0e985db9920de4b9f416e26cab64a661c2246d3e32d",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-27_5582c001ed54.json",
+      "source_fingerprint": "ed30e36b364370bd12a433a6bdc1479dcf6489d417b104f4969378f964d9fd70",
+      "symbol_count": 1,
+      "trade_date": "2026-03-27"
+    },
+    {
+      "active_symbol_count": 4,
+      "artifact_hash": "cc95b4cc7ffcb1cd6723b49ed35429f4dbd24338e5d5cc200ae5e0d2c09ab951",
+      "candidate_pool_count": 4,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-30_cc95b4cc7ffc.json",
+      "source_fingerprint": "357aa6248483dccefbcfd975308e3657167de147146974e2f8bb7d2898989d19",
+      "symbol_count": 4,
+      "trade_date": "2026-03-30"
+    },
+    {
+      "active_symbol_count": 1,
+      "artifact_hash": "6bbbf9b46de11f2f3d872f15b59c6edd4e0c708cec3b39a594d773699fb06883",
+      "candidate_pool_count": 1,
+      "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\kalcb\\round_3\\paper_live_parity_inputs\\daily_snapshots\\2026-03-31_6bbbf9b46de1.json",
+      "source_fingerprint": "0b6bfd152bdd9eefd396a9c00f21fb6106707772838bd59e9f306d765dbd0cfd",
+      "symbol_count": 1,
+      "trade_date": "2026-03-31"
+    }
+  ]
+}

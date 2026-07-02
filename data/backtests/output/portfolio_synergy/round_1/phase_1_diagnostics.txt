@@ -1,0 +1,12 @@
+Phase 1: Latest KALCB/OLR artifact baseline and accounting integrity
+Score: 97.3455
+Return: 349.82%
+Trades/21 sessions: 42.29
+Block rate: 0.00%
+Positive-alpha block rate: 0.00%
+Accepted avg R: +1.378
+Blocked avg R: +1.278
+Max drawdown: 3.37%
+Profit factor: 4.53
+KALCB/OLR trades: 205/232
+Kept features: p1_light_agreement_boost, p1_kalcb_olr_55_45_risk

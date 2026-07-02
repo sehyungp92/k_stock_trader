@@ -1,0 +1,18 @@
+KALCB + OLR Portfolio Synergy Final Diagnostics
+==========================================================
+Score: 113.7233
+Return: 461.24%
+Trades/21 sessions: 45.77
+Accepted/block count: 473/63
+Block rate: 11.75%
+Positive-alpha block rate: 6.90%
+Accepted avg R vs blocked avg R: +1.245 vs +0.732
+Max drawdown: 4.13%
+Profit factor: 4.60
+KALCB/OLR trades: 231/242
+Live/backtest parity alignment: pass
+
+Full diagnostics: data\backtests\output\portfolio_synergy\round_1\round_final_full_diagnostics.json
+Parity report: data\backtests\output\portfolio_synergy\round_1\live_backtest_parity_alignment.json
+
+Research-only: full source replay, locked holdout, and paper/live OMS parity are still required before production promotion.

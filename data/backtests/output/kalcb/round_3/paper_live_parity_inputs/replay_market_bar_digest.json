@@ -1,0 +1,31 @@
+{
+  "artifact_type": "kalcb_replay_market_bar_digest",
+  "bar_count": 49494,
+  "compiled_replay_fingerprint": "c26a47fd1fae37f84d0f12b82558f6711b6d50a9bcd5e670a652bb8a24e8515d",
+  "completed_5m_bar_count": 49494,
+  "first_bar": {
+    "close": 194500.0,
+    "high": 195000.0,
+    "is_completed": true,
+    "low": 193500.0,
+    "metadata": {},
+    "open": 193600.0,
+    "symbol": "000660",
+    "timeframe": "5m",
+    "timestamp": "2025-05-12T09:00:00+09:00",
+    "volume": 169564.0
+  },
+  "last_bar": {
+    "close": 54100.0,
+    "high": 54100.0,
+    "is_completed": true,
+    "low": 54100.0,
+    "metadata": {},
+    "open": 54100.0,
+    "symbol": "161390",
+    "timeframe": "5m",
+    "timestamp": "2026-03-31T15:30:00+09:00",
+    "volume": 71618.0
+  },
+  "market_bar_hash": "7819f89845d69c5ebb2b61df7f340457c58ca51fcff8a9d9e737d904418537e5"
+}

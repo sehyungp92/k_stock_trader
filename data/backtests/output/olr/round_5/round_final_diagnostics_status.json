@@ -1,0 +1,11 @@
+{
+  "generated_at_utc": "2026-05-26T00:35:17Z",
+  "mode": "round5_looser_breakout_dynamic_overlay_full_train_oos_replay",
+  "round_evaluation_exists": true,
+  "round_evaluation_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_evaluation.txt",
+  "round_final_diagnostics_exists": true,
+  "round_final_diagnostics_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_final_diagnostics.txt",
+  "round_final_full_diagnostics_exists": true,
+  "round_final_full_diagnostics_path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\round_final_full_diagnostics.json",
+  "strategy": "olr"
+}

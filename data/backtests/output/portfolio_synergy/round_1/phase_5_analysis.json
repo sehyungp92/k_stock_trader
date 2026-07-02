@@ -1,0 +1,70 @@
+{
+  "phase": 5,
+  "goal_progress": {
+    "official_mtm_net_return_pct": {
+      "target": 4.4,
+      "actual": 3.8952832104656463,
+      "pct_of_target": 88.52916387421924
+    },
+    "trades_per_21_sessions": {
+      "target": 40.0,
+      "actual": 46.45161290322581,
+      "pct_of_target": 116.12903225806453
+    },
+    "profit_factor": {
+      "target": 2.2,
+      "actual": 4.545250387338879,
+      "pct_of_target": 200.0
+    },
+    "block_selectivity_edge_r": {
+      "target": 0.25,
+      "actual": 0.5127365945725266,
+      "pct_of_target": 200.0
+    },
+    "positive_alpha_block_rate": {
+      "target": 0.18,
+      "actual": 0.061567164179104475,
+      "pct_of_target": 34.20398009950249
+    },
+    "max_drawdown_pct": {
+      "target": 0.14,
+      "actual": 0.04293853832839609,
+      "pct_of_target": 200.0
+    },
+    "min_strategy_trade_capture": {
+      "target": 0.66,
+      "actual": 0.8706896551724138,
+      "pct_of_target": 131.9226750261233
+    }
+  },
+  "strengths": [
+    "official_mtm_net_return_pct: 3.8953 (89% of 4.4000)",
+    "trades_per_21_sessions: 46.4516 (116% of 40.0000)",
+    "profit_factor: 4.5453 (200% of 2.2000)",
+    "block_selectivity_edge_r: 0.5127 (200% of 0.2500)",
+    "max_drawdown_pct: 0.0429 (200% of 0.1400)",
+    "min_strategy_trade_capture: 0.8707 (132% of 0.6600)"
+  ],
+  "weaknesses": [
+    "positive_alpha_block_rate: 0.0616 (34% of 0.1800)"
+  ],
+  "scoring_assessment": "EFFECTIVE",
+  "diagnostic_gaps": [],
+  "suggested_experiments": [],
+  "recommendation": "advance",
+  "recommendation_reason": "Gate passed.",
+  "report": "======================================================================\nPHASE 5 ANALYSIS\n======================================================================\n\nRecommendation: advance\nReason: Gate passed.\nScoring assessment: EFFECTIVE\n\nStrengths:\n  + official_mtm_net_return_pct: 3.8953 (89% of 4.4000)\n  + trades_per_21_sessions: 46.4516 (116% of 40.0000)\n  + profit_factor: 4.5453 (200% of 2.2000)\n  + block_selectivity_edge_r: 0.5127 (200% of 0.2500)\n  + max_drawdown_pct: 0.0429 (200% of 0.1400)\n  + min_strategy_trade_capture: 0.8707 (132% of 0.6600)\n\nWeaknesses:\n  - positive_alpha_block_rate: 0.0616 (34% of 0.1800)\n\nExtra Analysis:\n  score components: 7\n  holdout excluded: True\n  best candidate: p5_combined_frequency_with_rank_gate\n  block reasons: {\"daily_gross_cap\": 56}\n\nGoal Progress:\n  official_mtm_net_return_pct: 3.8953 / 4.4000 (89%)\n  trades_per_21_sessions: 46.4516 / 40.0000 (116%)\n  profit_factor: 4.5453 / 2.2000 (200%)\n  block_selectivity_edge_r: 0.5127 / 0.2500 (200%)\n  positive_alpha_block_rate: 0.0616 / 0.1800 (34%)\n  max_drawdown_pct: 0.0429 / 0.1400 (200%)\n  min_strategy_trade_capture: 0.8707 / 0.6600 (132%)",
+  "scoring_weight_overrides": null,
+  "extra": {
+    "score_component_count": 7,
+    "block_reason_counts": {
+      "daily_gross_cap": 56
+    },
+    "source_rounds": {
+      "kalcb": 3,
+      "olr": 5
+    },
+    "holdout_excluded": true,
+    "best_candidate": "p5_combined_frequency_with_rank_gate"
+  }
+}

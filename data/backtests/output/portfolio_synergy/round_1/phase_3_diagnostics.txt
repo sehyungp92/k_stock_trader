@@ -1,0 +1,12 @@
+Phase 3: Selective blockers that should block weaker trades first
+Score: 101.9607
+Return: 340.97%
+Trades/21 sessions: 40.35
+Block rate: 4.58%
+Positive-alpha block rate: 2.97%
+Accepted avg R: +1.402
+Blocked avg R: +0.875
+Max drawdown: 3.38%
+Profit factor: 4.70
+KALCB/OLR trades: 195/222
+Kept features: p3_kalcb_rank6_10_confirmed_half_size

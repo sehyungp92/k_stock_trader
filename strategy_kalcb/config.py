@@ -78,7 +78,7 @@ class KALCBConfig:
     rest_egw00201_cooldown_s: float = 30.0
 
     frontier_enabled: bool = True
-    frontier_size: int = 104
+    frontier_size: int = 103
     frontier_selection_mode: str = "opportunity"
     frontier_active_selection_mode: str = "liquidity"
     frontier_rest_safety_fraction: float = 0.50

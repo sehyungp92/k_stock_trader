@@ -1,0 +1,25 @@
+{
+  "strategy": "portfolio_synergy",
+  "generated_at_utc": "2026-05-27T10:52:57.416912+00:00",
+  "mode": "plugin_full_diagnostics",
+  "round_final_diagnostics_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_final_diagnostics.txt",
+  "round_final_diagnostics_exists": true,
+  "round_final_diagnostics_bytes": 741,
+  "round_final_diagnostics_lines": 18,
+  "round_evaluation_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_evaluation.txt",
+  "round_evaluation_exists": true,
+  "plugin_full_diagnostics_callable": true,
+  "plugin_full_diagnostics_required": false,
+  "payload": {
+    "strategy": "portfolio_synergy",
+    "round": 1,
+    "round_name": "round",
+    "report_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_final_full_diagnostics.json",
+    "report_md_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_final_full_diagnostics.md",
+    "parity_report_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\live_backtest_parity_alignment.json",
+    "parity_report_md_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\live_backtest_parity_alignment.md",
+    "parity_status": "pass",
+    "selected_candidate": "phase_auto_round_1_final",
+    "source_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395"
+  }
+}

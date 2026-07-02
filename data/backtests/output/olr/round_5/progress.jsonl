@@ -1,0 +1,11 @@
+{"elapsed_seconds": 0.031, "stage": "prepare_dataset_start"}
+{"dataset_dates": 246, "elapsed_seconds": 74.062, "holdout_start": "2026-04-01", "oos_dates": 28, "stage": "prepare_dataset_done", "train_dates": 217}
+{"elapsed_seconds": 74.062, "stage": "research_cache_start"}
+{"elapsed_seconds": 316.578, "snapshots": 246, "stage": "research_cache_done"}
+{"elapsed_seconds": 316.578, "stage": "stage_snapshots_start"}
+{"elapsed_seconds": 481.656, "selected_days": 166, "selected_slots": 479, "snapshots": 246, "stage": "stage_snapshots_done"}
+{"elapsed_seconds": 481.656, "stage": "replay_train_start"}
+{"elapsed_seconds": 538.703, "net": 1.5894203114584489, "stage": "replay_train_done", "trades": 232.0}
+{"elapsed_seconds": 538.703, "stage": "replay_oos_start"}
+{"elapsed_seconds": 548.343, "net": 0.21296977915050008, "stage": "replay_oos_done", "trades": 32.0}
+{"elapsed_seconds": 548.39, "manifest": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\rounds_manifest.json", "oos_net": 0.21296977915050008, "optimized_config": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\data\\backtests\\output\\olr\\round_5\\optimized_config.json", "stage": "complete", "train_net": 1.5894203114584489}

@@ -1,0 +1,168 @@
+{
+  "mutations": {
+    "blockers.block_olr_after_kalcb_failed_followthrough": false,
+    "blockers.block_olr_after_kalcb_quick_exit_r_lt": 0.0,
+    "blockers.boost_olr_after_kalcb_strong_eod": 1.0,
+    "blockers.boost_olr_after_kalcb_strong_live_path": 1.15,
+    "blockers.haircut_olr_after_kalcb_negative_path": 1.0,
+    "blockers.kalcb_rank6_10_half_size_confirmed": true,
+    "blockers.kalcb_rank6_10_requires_olr_sector_confirm": false,
+    "blockers.sector_failure_haircut_mult": 1.0,
+    "kalcb.confirmed_size_mult": 1.25,
+    "kalcb.size_mult": 1.06,
+    "olr.confirmed_size_mult": 1.0,
+    "olr.size_mult": 0.94,
+    "portfolio.agreement_boost_mult": 1.18,
+    "portfolio.capacity_rank_mode": "chronological",
+    "portfolio.daily_loss_stop_r": 0.0,
+    "portfolio.disagreement_haircut_mult": 1.0,
+    "portfolio.dynamic_drawdown_tiers": [
+      [
+        0.06,
+        1.0
+      ],
+      [
+        0.09,
+        0.8
+      ],
+      [
+        0.12,
+        0.55
+      ],
+      [
+        0.15,
+        0.0
+      ]
+    ],
+    "portfolio.frequency.enable_kalcb_secondary": true,
+    "portfolio.frequency.enable_olr_shadow_slot6": true,
+    "portfolio.max_daily_gross": 2.1,
+    "portfolio.max_sector_gross": 9.99,
+    "portfolio.olr_close_reserve_gross": 0.0,
+    "portfolio.olr_close_reserve_priority_floor": 1.15,
+    "portfolio.reference_risk_pct": 0.0062,
+    "portfolio.risk_stance": "controlled_aggressive",
+    "portfolio.same_symbol_policy": "allow",
+    "portfolio.strategy_r_share_cap": 0.72,
+    "portfolio.use_dynamic_drawdown_tiers": false,
+    "portfolio.weekly_loss_stop_r": 0.0,
+    "source.holdout_excluded": true,
+    "source.kalcb.round": 3,
+    "source.olr.round": 5
+  },
+  "generated_at_utc": "2026-05-27T10:52:57.441918+00:00",
+  "promotion_status": "research_only",
+  "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
+  "capability_level": "source_artifact_portfolio_replay",
+  "source_data_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395",
+  "score_spec_hash": "29c477ad2b4d9388ceb8c3061a0199002c9f15b4deecd49bb9fd470f6e4f80aa",
+  "config_hash": "2b52e1169be0a88e157c8664625f6330ea19adffbbc2fc67e88315fcb681541b",
+  "strategy_code_hash": "f72975424789d2bdd9f2980ec73c478e59e10439291eb443bf361af7ed58bdf3",
+  "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+  "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
+  "metric_contract": {
+    "primary_promotion_metric": "official_mtm_net_return_pct",
+    "primary_promotion_value": 4.612391226849123,
+    "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+    "official_metrics": [
+      "official_mtm_net_return_pct",
+      "max_drawdown_pct",
+      "profit_factor",
+      "total_trades"
+    ],
+    "proxy_metrics": [
+      "entries_blocked_by_portfolio",
+      "positive_alpha_block_rate",
+      "blocked_avg_r"
+    ],
+    "same_bar_fill_count": 0.0,
+    "forced_replay_close_count": 0.0,
+    "rejected_order_count": 0.0,
+    "end_open_position_count": 0.0,
+    "source_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395",
+    "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+    "candidate_snapshot_hash": "80c0e9c39407fdab24399096b8960dffb1018ac1f463c12fb56dbeedc1af0f11",
+    "execution_contract": {
+      "strategy": "portfolio_synergy",
+      "source_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395",
+      "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+      "candidate_snapshot_hash": "80c0e9c39407fdab24399096b8960dffb1018ac1f463c12fb56dbeedc1af0f11",
+      "date_window": {
+        "start": "2025-05-12",
+        "end": "2026-03-10"
+      },
+      "initial_equity": 100000000.0,
+      "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+      "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+      "capability_level": "source_artifact_portfolio_replay",
+      "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+      "primary_promotion_metric": "official_mtm_net_return_pct",
+      "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+    },
+    "live_backtest_parity_alignment": {
+      "status": "pass",
+      "scope": "portfolio_arbitration_layer",
+      "source_strategy_full_replay_required_before_promotion": true
+    }
+  },
+  "execution_contract": {
+    "strategy": "portfolio_synergy",
+    "phase_framework_version": "shared-phase-auto-v2-official-mtm-contract",
+    "source_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395",
+    "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+    "candidate_snapshot_hash": "80c0e9c39407fdab24399096b8960dffb1018ac1f463c12fb56dbeedc1af0f11",
+    "date_window": {
+      "start": "2025-05-12",
+      "end": "2026-03-10"
+    },
+    "initial_equity": 100000000.0,
+    "cost_policy": {
+      "source_costs_preserved": true,
+      "portfolio_cost_stress_bps": 0.0
+    },
+    "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
+    "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+    "capability_level": "source_artifact_portfolio_replay",
+    "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+    "primary_promotion_metric": "official_mtm_net_return_pct",
+    "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only"
+  },
+  "primary_promotion_metric": "official_mtm_net_return_pct",
+  "primary_promotion_value": 4.612391226849123,
+  "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+  "official_replay_pass": false,
+  "audit_pass": false,
+  "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+  "source_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395",
+  "feature_manifest_hash": "024152d08794dbbf4f0a2d7ffc1690a6839a03e4276ff8fdf03fad770c4ce59a",
+  "candidate_snapshot_hash": "80c0e9c39407fdab24399096b8960dffb1018ac1f463c12fb56dbeedc1af0f11",
+  "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
+  "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+  "train_start": "2025-05-12",
+  "train_end": "2026-03-10",
+  "final_diagnostics": {
+    "strategy": "portfolio_synergy",
+    "generated_at_utc": "2026-05-27T10:52:57.416912+00:00",
+    "mode": "plugin_full_diagnostics",
+    "round_final_diagnostics_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_final_diagnostics.txt",
+    "round_final_diagnostics_exists": true,
+    "round_final_diagnostics_bytes": 741,
+    "round_final_diagnostics_lines": 18,
+    "round_evaluation_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_evaluation.txt",
+    "round_evaluation_exists": true,
+    "plugin_full_diagnostics_callable": true,
+    "plugin_full_diagnostics_required": false,
+    "payload": {
+      "strategy": "portfolio_synergy",
+      "round": 1,
+      "round_name": "round",
+      "report_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_final_full_diagnostics.json",
+      "report_md_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\round_final_full_diagnostics.md",
+      "parity_report_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\live_backtest_parity_alignment.json",
+      "parity_report_md_path": "data\\backtests\\output\\portfolio_synergy\\round_1\\live_backtest_parity_alignment.md",
+      "parity_status": "pass",
+      "selected_candidate": "phase_auto_round_1_final",
+      "source_fingerprint": "2552016603a13acab2d7f86314abd57a7079c36121ef89206ac47d3bded04395"
+    }
+  }
+}
