@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -135,6 +135,63 @@ def test_kalcb_explicit_universe_file_does_not_fall_back_to_all_parquet(tmp_path
 
     with pytest.raises(FileNotFoundError, match="explicit universe file"):
         _resolve_symbols({"universe": str(tmp_path / "missing.yaml")}, data_root, "5m")
+
+    with pytest.raises(ValueError, match="universe size mismatch"):
+        _resolve_symbols(
+            {"universe": str(universe_path), "expected_universe_size": 2},
+            data_root,
+            "5m",
+        )
+
+
+def test_kalcb_replay_pins_the_configured_intraday_snapshot(tmp_path):
+    data_root = tmp_path / "kis"
+    symbol_dir = data_root / "005930"
+    symbol_dir.mkdir(parents=True)
+    old = symbol_dir / "005930_5m_20250512_20260512.parquet"
+    newer = symbol_dir / "005930_5m_20250710_20260710.parquet"
+    old.write_text("", encoding="utf-8")
+    newer.write_text("", encoding="utf-8")
+
+    selected = kalcb_replay_cache._intraday_paths_for_symbol(
+        data_root,
+        "005930",
+        "5m",
+        data_snapshot_end=date(2026, 5, 12),
+    )
+
+    assert selected == [old]
+    assert kalcb_replay_cache._resolve_data_snapshot_end(
+        {"baseline": {"data_latest_available": "2026-05-12T15:30:00+09:00"}}
+    ) == date(2026, 5, 12)
+
+
+def test_kalcb_replay_rejects_missing_requested_start_coverage(tmp_path, monkeypatch):
+    data_root = tmp_path / "kis"
+    symbol_dir = data_root / "005930"
+    symbol_dir.mkdir(parents=True)
+    (symbol_dir / "005930_5m_20250710_20260710.parquet").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        kalcb_replay_cache.pd,
+        "read_parquet",
+        lambda *args, **kwargs: kalcb_replay_cache.pd.DataFrame(
+            {"timestamp": kalcb_replay_cache.pd.to_datetime(["2025-07-10", "2026-03-31"])}
+        ),
+    )
+    kalcb_replay_cache._WINDOW_CACHE.clear()
+
+    with pytest.raises(ValueError, match="after requested training start"):
+        kalcb_replay_cache._resolve_replay_window(
+            {
+                "start": "2025-05-12",
+                "end": "2026-03-31",
+                "require_requested_start_coverage": True,
+            },
+            data_root,
+            "5m",
+            ["005930"],
+            data_snapshot_end=date(2026, 7, 10),
+        )
 
 
 def test_kalcb_sector_map_resolves_config_relative_path():

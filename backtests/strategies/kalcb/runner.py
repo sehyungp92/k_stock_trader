@@ -683,10 +683,15 @@ def run_kalcb_backtest(
     metrics["candidate_pool_max"] = float(max(candidate_pool_counts))
     universe_size = float((replay_bundle.metadata or {}).get("universe_size") or 0.0)
     metrics["universe_size"] = universe_size
+    metrics["expected_universe_size"] = float(
+        (replay_bundle.metadata or {}).get("expected_universe_size") or universe_size
+    )
     data_available_symbol_count = float((replay_bundle.metadata or {}).get("data_available_symbol_count") or universe_size)
     metrics["data_available_symbol_count"] = data_available_symbol_count
     metrics["unavailable_symbol_count"] = float((replay_bundle.metadata or {}).get("unavailable_symbol_count") or 0.0)
     metrics["unavailable_symbols"] = list((replay_bundle.metadata or {}).get("unavailable_symbols") or [])
+    metrics["replay_scope_hash"] = str((replay_bundle.metadata or {}).get("replay_scope_hash") or "")
+    metrics["data_snapshot_end"] = str((replay_bundle.metadata or {}).get("data_snapshot_end") or "")
     metrics["selected_universe_fraction"] = (
         float(metrics["active_symbol_max"]) / universe_size if universe_size > 0 else 0.0
     )

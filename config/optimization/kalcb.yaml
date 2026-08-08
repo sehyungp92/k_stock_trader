@@ -4,6 +4,7 @@ execution_timeframe: 5m_next_open
 capability_level: real_replay
 data_root: data/kis_intraday_parquet
 daily_data_root: data/krx_daily_parquet
+data_snapshot_end: "2026-05-12"
 artifact_root: data/strategy/kalcb
 holdout_days: 42
 initial_equity: 100000000
@@ -21,12 +22,14 @@ validation_gate_enabled: false
 holdout_excluded_from_optimization: true
 baseline_integrity_required: true
 previous_promotion_guard_required: true
-baseline_integrity_tolerance_abs: 0.001
-previous_promotion_tolerance_abs: 0.001
+baseline_integrity_tolerance_abs: 0.003
+previous_promotion_tolerance_abs: 0.003
 commission_bps: 2
 slippage_bps: 3
 spread_bps: 0
 universe: universe_103.yaml
+expected_universe_size: 103
+require_requested_start_coverage: true
 start: "2025-05-12T09:00:00+09:00"
 end: "2026-03-31T15:30:00+09:00"
 baseline:

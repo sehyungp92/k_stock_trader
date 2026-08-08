@@ -57,11 +57,25 @@ def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutation
     timeframe = str(raw_config.get("timeframe", cfg.timeframe) or "5m")
     if timeframe != "5m":
         raise ValueError("KALCB real replay requires 5m parquet input")
-    symbols = _resolve_symbols(raw_config, data_root, timeframe)
+    data_snapshot_end = _resolve_data_snapshot_end(raw_config)
+    symbols = _resolve_symbols(raw_config, data_root, timeframe, data_snapshot_end=data_snapshot_end)
     if not symbols:
         raise FileNotFoundError(f"No KALCB 5m parquet symbols found under {data_root}")
-    window = _resolve_replay_window(raw_config, data_root, timeframe, symbols)
-    data_fingerprint = _real_source_fingerprint(data_root, symbols, timeframe, window.train_start, window.train_end)
+    window = _resolve_replay_window(
+        raw_config,
+        data_root,
+        timeframe,
+        symbols,
+        data_snapshot_end=data_snapshot_end,
+    )
+    data_fingerprint = _real_source_fingerprint(
+        data_root,
+        symbols,
+        timeframe,
+        window.train_start,
+        window.train_end,
+        data_snapshot_end=data_snapshot_end,
+    )
     sector_map = _resolve_sector_map(raw_config)
     candidate_config_hash = _candidate_config_hash(cfg, raw_mutations, sector_map)
     bundle_key = build_cache_key(
@@ -120,7 +134,16 @@ def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutation
     if cached is not None:
         return cached
 
-    frames = {symbol: _load_symbol_frame(data_root, symbol, timeframe, window.train_end) for symbol in symbols}
+    frames = {
+        symbol: _load_symbol_frame(
+            data_root,
+            symbol,
+            timeframe,
+            window.train_end,
+            data_snapshot_end=data_snapshot_end,
+        )
+        for symbol in symbols
+    }
     data_available_symbols = [symbol for symbol, frame in frames.items() if not frame.empty]
     unavailable_symbols = [symbol for symbol, frame in frames.items() if frame.empty]
     daily_by_symbol = {symbol: _daily_rows_from_frame(symbol, frame) for symbol, frame in frames.items() if not frame.empty}
@@ -144,7 +167,17 @@ def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutation
     )
 
     artifact_root = Path(raw_config.get("artifact_root", "data/strategy/kalcb"))
-    store_root = artifact_root / "candidate_snapshots" / candidate_config_hash[:16]
+    replay_scope_hash = stable_signature(
+        {
+            "candidate_config_hash": candidate_config_hash,
+            "source_fingerprint": data_fingerprint,
+            "symbols": symbols,
+            "train_start": window.train_start.isoformat(),
+            "train_end": window.train_end.isoformat(),
+            "data_snapshot_end": data_snapshot_end.isoformat() if data_snapshot_end else "",
+        }
+    )
+    store_root = artifact_root / "replay_candidate_snapshots" / candidate_config_hash[:16] / replay_scope_hash[:16]
     store = KALCBArtifactStore(store_root)
     snapshots: dict[date, KALCBDailySnapshot] = {}
     for trade_date in trading_dates:
@@ -186,6 +219,7 @@ def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutation
         "timeframe": timeframe,
         "timestamp_basis": str(raw_config.get("timestamp_basis", "kis_recorded_completed")),
         "source_fingerprint": data_fingerprint,
+        "replay_scope_hash": replay_scope_hash,
         "candidate_config_hash": candidate_config_hash,
         "candidate_artifact_root": str(store_root),
         "sector_map_size": len(sector_map),
@@ -201,6 +235,7 @@ def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutation
         "fallback_features": {"foreign_institutional_flow": "unavailable_in_v1", "program_flow": "unavailable_in_v1"},
         "universe": symbols,
         "universe_size": len(symbols),
+        "expected_universe_size": int(raw_config.get("expected_universe_size") or len(symbols)),
         "data_available_symbols": data_available_symbols,
         "data_available_symbol_count": len(data_available_symbols),
         "unavailable_symbols": unavailable_symbols,
@@ -216,6 +251,7 @@ def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutation
         "frontier_rest_budget_symbols_per_5m": _frontier_rest_budget_symbols_per_5m(cfg),
         "train_start": window.train_start.isoformat(),
         "train_end": window.train_end.isoformat(),
+        "data_snapshot_end": data_snapshot_end.isoformat() if data_snapshot_end else "",
         "holdout_start": window.holdout_start.isoformat(),
         "holdout_policy": "Dates >= holdout_start are excluded unless date_range.end/start overrides it.",
         "live_parity_fill_timing": cfg.live_parity_fill_timing,
@@ -240,7 +276,13 @@ def real_replay_metadata(config: dict[str, Any] | None = None, mutations: dict[s
     return dict(load_kalcb_real_replay_bundle(config, mutations).metadata)
 
 
-def _resolve_symbols(config: dict[str, Any], data_root: Path, timeframe: str) -> list[str]:
+def _resolve_symbols(
+    config: dict[str, Any],
+    data_root: Path,
+    timeframe: str,
+    *,
+    data_snapshot_end: date | None = None,
+) -> list[str]:
     raw = config.get("universe") or config.get("symbols")
     requested: list[str] = []
     explicit_universe = raw is not None
@@ -262,11 +304,22 @@ def _resolve_symbols(config: dict[str, Any], data_root: Path, timeframe: str) ->
     if not requested:
         if explicit_universe:
             raise ValueError(f"KALCB explicit universe resolved to no symbols: {raw!r}")
-        requested = sorted(path.parent.name for path in Path(data_root).glob(f"*/*_{timeframe}_*.parquet"))
+        available = sorted({path.parent.name for path in Path(data_root).glob(f"*/*_{timeframe}_*.parquet")})
+        requested = [
+            symbol
+            for symbol in available
+            if _intraday_paths_for_symbol(data_root, symbol, timeframe, data_snapshot_end=data_snapshot_end)
+        ]
+    requested = list(dict.fromkeys(requested))
+    expected_universe_size = int(config.get("expected_universe_size") or 0)
+    if expected_universe_size and len(requested) != expected_universe_size:
+        raise ValueError(
+            f"KALCB universe size mismatch: expected {expected_universe_size}, resolved {len(requested)} requested symbols"
+        )
     symbols = []
     missing: list[str] = []
     for symbol in requested:
-        if list(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet")):
+        if _intraday_paths_for_symbol(data_root, symbol, timeframe, data_snapshot_end=data_snapshot_end):
             symbols.append(symbol)
         else:
             missing.append(symbol)
@@ -277,13 +330,21 @@ def _resolve_symbols(config: dict[str, Any], data_root: Path, timeframe: str) ->
     return sorted(dict.fromkeys(symbols))
 
 
-def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: str, symbols: list[str]) -> KALCBReplayWindow:
+def _resolve_replay_window(
+    config: dict[str, Any],
+    data_root: Path,
+    timeframe: str,
+    symbols: list[str],
+    *,
+    data_snapshot_end: date | None = None,
+) -> KALCBReplayWindow:
     cache_key = stable_signature(
         {
             "data_root": str(data_root),
             "timeframe": timeframe,
             "symbols": symbols,
             "holdout_days": int(config.get("holdout_days", 21)),
+            "data_snapshot_end": data_snapshot_end.isoformat() if data_snapshot_end else "",
         }
     )
     cached = _WINDOW_CACHE.get(cache_key)
@@ -291,7 +352,12 @@ def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: s
         earliest: date | None = None
         latest: date | None = None
         for symbol in symbols:
-            for path in sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet")):
+            for path in _intraday_paths_for_symbol(
+                data_root,
+                symbol,
+                timeframe,
+                data_snapshot_end=data_snapshot_end,
+            ):
                 frame = pd.read_parquet(path, columns=["timestamp"])
                 if frame.empty:
                     continue
@@ -307,6 +373,10 @@ def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: s
 
     date_range = dict(config.get("date_range") or {})
     train_start = _parse_config_date(date_range.get("start") or config.get("start")) or cached.train_start
+    if bool(config.get("require_requested_start_coverage", False)) and train_start < cached.earliest:
+        raise ValueError(
+            f"KALCB replay data starts {cached.earliest}, after requested training start {train_start}"
+        )
     train_end = _parse_config_date(date_range.get("end") or config.get("end"))
     if train_end is None:
         if config.get("holdout_start"):
@@ -330,10 +400,25 @@ def _parse_config_date(value: Any) -> date | None:
     return date.fromisoformat(text)
 
 
-def _real_source_fingerprint(data_root: Path, symbols: list[str], timeframe: str, train_start: date, train_end: date) -> str:
+def _real_source_fingerprint(
+    data_root: Path,
+    symbols: list[str],
+    timeframe: str,
+    train_start: date,
+    train_end: date,
+    *,
+    data_snapshot_end: date | None = None,
+) -> str:
     paths = []
     for symbol in symbols:
-        paths.extend(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet"))
+        paths.extend(
+            _intraday_paths_for_symbol(
+                data_root,
+                symbol,
+                timeframe,
+                data_snapshot_end=data_snapshot_end,
+            )
+        )
     return stable_signature(
         {
             "mode": "kalcb_real_kis_krx_parquet",
@@ -342,8 +427,38 @@ def _real_source_fingerprint(data_root: Path, symbols: list[str], timeframe: str
             "train_start": train_start.isoformat(),
             "train_end": train_end.isoformat(),
             "symbols": symbols,
+            "data_snapshot_end": data_snapshot_end.isoformat() if data_snapshot_end else "",
         }
     )
+
+
+def _resolve_data_snapshot_end(config: dict[str, Any]) -> date | None:
+    baseline = config.get("baseline") if isinstance(config.get("baseline"), dict) else {}
+    value = config.get("data_snapshot_end") or baseline.get("data_latest_available")
+    return _parse_config_date(value)
+
+
+def _snapshot_end_from_path(path: Path) -> date | None:
+    token = path.stem.rsplit("_", 1)[-1]
+    if len(token) != 8 or not token.isdigit():
+        return None
+    try:
+        return datetime.strptime(token, "%Y%m%d").date()
+    except ValueError:
+        return None
+
+
+def _intraday_paths_for_symbol(
+    data_root: Path,
+    symbol: str,
+    timeframe: str,
+    *,
+    data_snapshot_end: date | None = None,
+) -> list[Path]:
+    paths = sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet"))
+    if data_snapshot_end is None:
+        return paths
+    return [path for path in paths if _snapshot_end_from_path(path) == data_snapshot_end]
 
 
 def _candidate_config_hash(config: KALCBConfig, mutations: dict[str, Any], sector_map: dict[str, str] | None = None) -> str:
@@ -379,13 +494,33 @@ def _load_sector_map_from_path(path: Path) -> dict[str, str]:
     return dict(raw or {}) if isinstance(raw, dict) else {}
 
 
-def _load_symbol_frame(data_root: Path, symbol: str, timeframe: str, end: date) -> pd.DataFrame:
-    key = stable_signature({"data_root": str(data_root), "symbol": symbol, "timeframe": timeframe, "end": end.isoformat()})
+def _load_symbol_frame(
+    data_root: Path,
+    symbol: str,
+    timeframe: str,
+    end: date,
+    *,
+    data_snapshot_end: date | None = None,
+) -> pd.DataFrame:
+    key = stable_signature(
+        {
+            "data_root": str(data_root),
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "end": end.isoformat(),
+            "data_snapshot_end": data_snapshot_end.isoformat() if data_snapshot_end else "",
+        }
+    )
     cached = _FRAME_CACHE.get(key)
     if cached is not None:
         return cached
     frames: list[pd.DataFrame] = []
-    for path in sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet")):
+    for path in _intraday_paths_for_symbol(
+        data_root,
+        symbol,
+        timeframe,
+        data_snapshot_end=data_snapshot_end,
+    ):
         frame = pd.read_parquet(path, columns=["timestamp", "open", "high", "low", "close", "volume"])
         frame = frame[frame["timestamp"].dt.date <= end]
         if not frame.empty:

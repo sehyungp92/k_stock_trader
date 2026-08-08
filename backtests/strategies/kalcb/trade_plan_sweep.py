@@ -30,6 +30,7 @@ from strategy_kalcb.config import KALCBConfig, KALCB_CORE_VERSION
 from strategy_kalcb.models import KALCBDailyCandidate, KALCBDailySnapshot
 
 from .runner import KALCBReplayAdapter, _collapse_exit_legs, _trade_net_r
+from .replay_cache import _intraday_paths_for_symbol, _resolve_data_snapshot_end, _resolve_symbols
 from .first30_signal_sweep import (
     FIRST30_END,
     First30Context,
@@ -549,10 +550,23 @@ def _preflight_context_fingerprint(
     data_root = Path(training_config.get("data_root", "data/kis_intraday_parquet"))
     daily_root = Path(training_config.get("daily_data_root", "data/krx_daily_parquet"))
     universe_path = Path(str(training_config.get("universe") or ""))
-    intraday_paths = [
+    timeframe = str(training_config.get("timeframe") or "5m")
+    data_snapshot_end = _resolve_data_snapshot_end(training_config)
+    symbols = _resolve_symbols(
+        training_config,
         data_root,
-        data_root / "conversion_manifest.json",
-        data_root / "manifest.json",
+        timeframe,
+        data_snapshot_end=data_snapshot_end,
+    )
+    intraday_paths = [
+        path
+        for symbol in symbols
+        for path in _intraday_paths_for_symbol(
+            data_root,
+            symbol,
+            timeframe,
+            data_snapshot_end=data_snapshot_end,
+        )
     ]
     daily_paths = [
         daily_root,
@@ -581,6 +595,8 @@ def _preflight_context_fingerprint(
                 "intraday": {
                     "path": str(data_root),
                     "fingerprint": fingerprint_paths(intraday_paths, root=data_root.parent if data_root.parent.exists() else None),
+                    "snapshot_end": data_snapshot_end.isoformat() if data_snapshot_end else "",
+                    "symbols": symbols,
                 },
                 "daily": {
                     "path": str(daily_root),

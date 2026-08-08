@@ -129,6 +129,10 @@ def build_execution_contract(
 
     strategy = pick("strategy", default=getattr(plugin, "name", "") if plugin is not None else "")
     initial_equity = pick("initial_equity", default=getattr(plugin, "initial_equity", ""))
+    configured_date_range = config.get("date_range") if isinstance(config.get("date_range"), dict) else {}
+    context_date_window = context.get("date_window") if isinstance(context.get("date_window"), dict) else {}
+    nested_date_window = nested_context.get("date_window") if isinstance(nested_context.get("date_window"), dict) else {}
+    baseline = config.get("baseline") if isinstance(config.get("baseline"), dict) else {}
     source_fingerprint = (
         metrics.get("source_fingerprint")
         or nested_context.get("source_fingerprint")
@@ -160,9 +164,31 @@ def build_execution_contract(
         "feature_manifest_hash": feature_hash,
         "candidate_snapshot_hash": candidate_hash,
         "date_window": {
-            "start": pick("start_date", "train_start", "holdout_start"),
-            "end": pick("end_date", "train_end"),
+            "start": pick(
+                "start_date",
+                "train_start",
+                "holdout_start",
+                default=nested_date_window.get("start")
+                or context_date_window.get("start")
+                or configured_date_range.get("start")
+                or config.get("start")
+                or "",
+            ),
+            "end": pick(
+                "end_date",
+                "train_end",
+                default=nested_date_window.get("end")
+                or context_date_window.get("end")
+                or configured_date_range.get("end")
+                or config.get("end")
+                or "",
+            ),
         },
+        "data_snapshot_end": pick(
+            "data_snapshot_end",
+            default=baseline.get("data_latest_available") or "",
+        ),
+        "expected_universe_size": pick("expected_universe_size"),
         "initial_equity": initial_equity,
         "cost_policy": pick("cost_policy", "cost_model", default={}),
         "fill_timing": pick("live_parity_fill_timing", "fill_timing"),

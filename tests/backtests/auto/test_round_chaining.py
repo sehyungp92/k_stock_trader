@@ -414,3 +414,21 @@ def test_execution_contract_prefers_latest_replay_identity_over_baseline_context
     assert contract["source_fingerprint"] == "latest-source"
     assert contract["feature_manifest_hash"] == "latest-features"
     assert contract["candidate_snapshot_hash"] == "latest-candidates"
+
+
+def test_execution_contract_keeps_nested_window_and_pinned_data_snapshot():
+    class WindowedPlugin:
+        name = "tiny"
+        execution_context = {
+            "date_window": {"start": "2025-05-12", "end": "2026-03-31", "sessions": 217},
+        }
+        config = {
+            "data_snapshot_end": "2026-05-12",
+            "expected_universe_size": 103,
+        }
+
+    contract = build_execution_contract(WindowedPlugin())
+
+    assert contract["date_window"] == {"start": "2025-05-12", "end": "2026-03-31"}
+    assert contract["data_snapshot_end"] == "2026-05-12"
+    assert contract["expected_universe_size"] == 103

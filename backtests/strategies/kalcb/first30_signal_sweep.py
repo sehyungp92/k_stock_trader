@@ -14,7 +14,7 @@ from typing import Any, Iterable
 
 import pandas as pd
 
-from backtests.auto.shared.cache_keys import fingerprint_paths, stable_signature
+from backtests.auto.shared.cache_keys import stable_signature
 from backtests.auto.shared.phase_state import _utc_now_iso
 from backtests.config import load_yaml_config, normalize_runtime_config
 from strategy_common.clock import KST
@@ -24,7 +24,6 @@ from strategy_common.daily_lrs_parquet import (
     load_daily_institutional_flow,
     load_daily_ohlcv,
     load_index_ohlcv,
-    load_manifest,
     load_sector_map,
 )
 from strategy_common.market import MarketBar
@@ -48,6 +47,7 @@ from strategy_kalcb.first30 import (
 from .replay_cache import (
     _load_symbol_frame,
     _real_source_fingerprint,
+    _resolve_data_snapshot_end,
     _resolve_replay_window,
     _resolve_sector_map,
     _resolve_symbols,
@@ -402,10 +402,33 @@ def prepare_first30_dataset(config: dict[str, Any]) -> KALCBFirst30Dataset:
     timeframe = str(raw_config.get("timeframe", cfg.timeframe) or "5m")
     if timeframe != "5m":
         raise ValueError("KALCB first30 sweeps require 5m parquet input")
-    symbols = _resolve_symbols(raw_config, data_root, timeframe)
-    window = _resolve_replay_window(raw_config, data_root, timeframe, symbols)
-    intraday_fingerprint = _real_source_fingerprint(data_root, symbols, timeframe, window.train_start, window.train_end)
-    frames = {symbol: _load_symbol_frame(data_root, symbol, timeframe, window.train_end) for symbol in symbols}
+    data_snapshot_end = _resolve_data_snapshot_end(raw_config)
+    symbols = _resolve_symbols(raw_config, data_root, timeframe, data_snapshot_end=data_snapshot_end)
+    window = _resolve_replay_window(
+        raw_config,
+        data_root,
+        timeframe,
+        symbols,
+        data_snapshot_end=data_snapshot_end,
+    )
+    intraday_fingerprint = _real_source_fingerprint(
+        data_root,
+        symbols,
+        timeframe,
+        window.train_start,
+        window.train_end,
+        data_snapshot_end=data_snapshot_end,
+    )
+    frames = {
+        symbol: _load_symbol_frame(
+            data_root,
+            symbol,
+            timeframe,
+            window.train_end,
+            data_snapshot_end=data_snapshot_end,
+        )
+        for symbol in symbols
+    }
     data_available = tuple(symbol for symbol, frame in frames.items() if not frame.empty)
     unavailable = tuple(symbol for symbol, frame in frames.items() if frame.empty)
     daily_by_symbol = _load_daily_rows(daily_root, data_available, window.train_end)
@@ -1481,33 +1504,21 @@ def _daily_source_fingerprint(
     index_by_code: dict[str, list[dict[str, Any]]],
     sector_map: dict[str, str],
 ) -> str:
-    manifest = load_manifest(root)
-    paths: list[Path] = [Path(root) / "manifest.json", Path(root) / "tables" / "sector_map.parquet"]
-    for symbol in daily_by_symbol:
-        paths.extend((Path(root) / "daily_ohlcv" / symbol).glob("*.parquet"))
-    for symbol in flow_by_symbol:
-        paths.extend((Path(root) / "daily_flow" / symbol).glob("*.parquet"))
-    for symbol in foreign_flow_by_symbol:
-        paths.extend((Path(root) / "daily_foreign_flow" / symbol).glob("*.parquet"))
-    for symbol in institutional_flow_by_symbol:
-        paths.extend((Path(root) / "daily_institutional_flow" / symbol).glob("*.parquet"))
-    for code in index_by_code:
-        paths.extend((Path(root) / "index_ohlcv" / code).glob("*.parquet"))
     return stable_signature(
         {
             "root": str(root.resolve()),
-            "manifest_source_fingerprint": manifest.get("source_fingerprint"),
-            "dataset_version": manifest.get("dataset_version"),
-            "manifest_tables": manifest.get("tables"),
-            "paths": fingerprint_paths([path for path in paths if path.exists()], root=root),
-            "daily_symbols": sorted(daily_by_symbol),
-            "flow_symbols": sorted(flow_by_symbol),
-            "foreign_flow_symbols": sorted(foreign_flow_by_symbol),
-            "institutional_flow_symbols": sorted(institutional_flow_by_symbol),
-            "index_codes": sorted(index_by_code),
+            "daily_rows": _row_map_fingerprint(daily_by_symbol),
+            "flow_rows": _row_map_fingerprint(flow_by_symbol),
+            "foreign_flow_rows": _row_map_fingerprint(foreign_flow_by_symbol),
+            "institutional_flow_rows": _row_map_fingerprint(institutional_flow_by_symbol),
+            "index_rows": _row_map_fingerprint(index_by_code),
             "sector_map_hash": stable_signature(sector_map),
         }
     )
+
+
+def _row_map_fingerprint(rows_by_key: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
+    return {str(key): stable_signature(rows) for key, rows in sorted(rows_by_key.items())}
 
 
 def _training_config(config: dict[str, Any], holdout_days: int) -> dict[str, Any]:
