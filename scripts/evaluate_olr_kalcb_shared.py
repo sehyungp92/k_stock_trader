@@ -17,6 +17,7 @@ from backtests.config import load_yaml_config
 from backtests.strategies.portfolio_synergy.source_replay import (
     PromotedReplayInputs,
     load_promoted_kalcb_replay,
+    load_promoted_olr_snapshots,
     overlap_attribution,
     require_parity,
     run_kalcb_standalone,
@@ -25,7 +26,6 @@ from backtests.strategies.portfolio_synergy.source_replay import (
     shared_vs_standalone_attribution,
     summarize_replay,
 )
-from backtests.strategies.olr.runner import _aggregate_snapshot_hash
 from strategy_common.clock import KST
 from strategy_common.market import MarketBar
 from strategy_olr.config import OLRConfig
@@ -69,18 +69,22 @@ def main() -> None:
     olr_optimized = _read_json(_repo_path(olr_spec["optimized_result"]))
     olr_mutations = dict(olr_optimized.get("mutations") or {})
     olr_config = OLRConfig.from_mapping(olr_raw, olr_mutations)
-    olr_snapshots = _load_olr_snapshots(_repo_path(olr_spec["candidate_snapshot_root"]))
+    olr_snapshots, olr_identity = load_promoted_olr_snapshots(
+        _repo_path(olr_spec["candidate_snapshot_root"]),
+        daily_data_root=_repo_path(olr_spec["daily_data_root"]),
+        training_end=str((olr_optimized.get("train_window") or {}).get("date_end") or ""),
+        expected_candidate_snapshot_hash=str(
+            (olr_optimized.get("execution_contract") or {}).get("candidate_snapshot_hash") or ""
+        ),
+        expected_candidate_config_hash=str(olr_spec["candidate_config_hash"]),
+        round_generated_at_utc=str(olr_spec["round_generated_at_utc"]),
+    )
     olr_pairs = _olr_replay_pairs(olr_snapshots, kalcb_replay.session_dates)
     olr_bars = tuple(_load_pinned_bars(olr_pairs))
     olr_lineage = {
         "round": int(olr_optimized.get("round") or 0),
-        "candidate_snapshot_root": str(_repo_path(olr_spec["candidate_snapshot_root"])),
-        "candidate_snapshot_hash": _aggregate_snapshot_hash(olr_snapshots),
-        "promoted_candidate_snapshot_hash": str(
-            (olr_optimized.get("execution_contract") or {}).get("candidate_snapshot_hash") or ""
-        ),
         "bars": len(olr_bars),
-        "snapshots": len(olr_snapshots),
+        **olr_identity,
     }
 
     kalcb_standalone = run_kalcb_standalone(kalcb_config, kalcb_replay)
@@ -109,7 +113,7 @@ def main() -> None:
     shared_summary = summarize_replay(shared, initial_equity=initial_equity)
     output = {
         "schema_version": spec["schema_version"],
-        "result_basis": "exact_promoted_source_replay_native_strategy_risk_one_shared_account",
+        "result_basis": "exact_promoted_consumed_content_native_strategy_risk_one_shared_account",
         "standalone_parity": {
             "status": "pass",
             "KALCB": asdict(kalcb_summary),
@@ -127,6 +131,12 @@ def main() -> None:
             "combined_gross_leverage": max(float(kalcb_config.intraday_leverage), 1.0),
             "additional_portfolio_symbol_or_sector_caps": False,
         },
+        "olr_comparison_resolution": {
+            "status": olr_identity["identity_status"],
+            "historical_profit_factor": float(olr_spec["expected"]["profit_factor"]),
+            "current_reproduced_profit_factor": olr_summary.profit_factor,
+            "strategy_decay_attribution_allowed": olr_identity["strategy_decay_attribution_allowed"],
+        },
         "lineage": inputs.lineage,
         "pinned_intraday_snapshot_end": PINNED_INTRADAY_END,
     }
@@ -134,16 +144,6 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(output, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(output, indent=2, sort_keys=True))
-
-
-def _load_olr_snapshots(root: Path) -> dict[date, OLRDailySnapshot]:
-    snapshots: dict[date, OLRDailySnapshot] = {}
-    for path in sorted(root.glob("candidate_snapshot_*.json")):
-        snapshot = OLRDailySnapshot.from_json_dict(_read_json(path))
-        snapshots[snapshot.trade_date] = snapshot
-    if not snapshots:
-        raise FileNotFoundError(f"No OLR candidate snapshots under {root}")
-    return snapshots
 
 
 def _olr_replay_pairs(

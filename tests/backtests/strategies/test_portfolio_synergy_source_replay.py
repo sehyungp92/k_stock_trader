@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -10,11 +11,13 @@ from backtests.strategies.portfolio_synergy.source_replay import (
     ReplaySummary,
     _merge_strategy_bars,
     _scrub_execution_ids,
+    load_promoted_olr_snapshots,
     require_parity,
     shared_vs_standalone_attribution,
 )
 from strategy_common.clock import KST
 from strategy_common.market import MarketBar
+from strategy_olr.models import OLRDailySnapshot
 
 
 def _order(strategy_id: str, qty: int, *, symbol: str = "005930") -> SimOrder:
@@ -43,6 +46,7 @@ def _summary(
         net_return_pct=net_return_pct,
         max_drawdown_pct=0.0,
         win_rate=0.5,
+        profit_factor=2.0,
         trades=trades,
         rejected_orders=0,
         open_positions=0,
@@ -98,6 +102,49 @@ def test_trade_identity_ignores_execution_local_order_ids_recursively() -> None:
     right = {"symbol": "005930", "route_metadata": {"entry_order_id": "random-b", "rank": 1}}
 
     assert _scrub_execution_ids(left) == _scrub_execution_ids(right)
+
+
+def test_promoted_olr_loader_requires_retained_config_and_consumed_hash(tmp_path) -> None:
+    config_hash = "c" * 64
+    generated_at = datetime(2026, 5, 27, 10, 30, tzinfo=KST)
+    snapshot = OLRDailySnapshot(
+        trade_date=date(2026, 3, 31),
+        candidates=(),
+        source_fingerprint="source",
+        generated_at=generated_at,
+        metadata={
+            "candidate_config_hash": config_hash,
+            "final_candidate_config_hash": config_hash,
+        },
+    )
+    root = tmp_path / "snapshots"
+    root.mkdir()
+    (root / "candidate_snapshot_2026-03-31.json").write_text(
+        json.dumps(snapshot.to_json_dict()),
+        encoding="utf-8",
+    )
+
+    loaded, identity = load_promoted_olr_snapshots(
+        root,
+        daily_data_root=tmp_path / "daily",
+        training_end="2026-03-31",
+        expected_candidate_snapshot_hash=snapshot.artifact_hash,
+        expected_candidate_config_hash=config_hash,
+        round_generated_at_utc=(generated_at + timedelta(minutes=1)).astimezone().isoformat(),
+    )
+
+    assert loaded[date(2026, 3, 31)].artifact_hash == snapshot.artifact_hash
+    assert identity["identity_status"] == "exact_promoted_consumed_content_match"
+    assert identity["stored_snapshot_count"] == 1
+    with pytest.raises(ValueError, match="consumed-content identity mismatch"):
+        load_promoted_olr_snapshots(
+            root,
+            daily_data_root=tmp_path / "daily",
+            training_end="2026-03-31",
+            expected_candidate_snapshot_hash="wrong",
+            expected_candidate_config_hash=config_hash,
+            round_generated_at_utc=(generated_at + timedelta(minutes=1)).astimezone().isoformat(),
+        )
 
 
 def test_shared_return_attribution_reconciles_each_strategy_to_the_total() -> None:

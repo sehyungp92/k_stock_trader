@@ -84,6 +84,62 @@ def test_portfolio_policy_equity_scaled_caps_preserve_cap_ratios_for_shared_capi
     }
     assert scaled.decide_one(item).final_notional == 100_000_000.0
     assert absolute.decide_one(item).final_notional == 10_000_000.0
+    olr_native_target = PortfolioArbitrationInput(
+        "olr-native-target",
+        "OLR",
+        "000660",
+        "BUY",
+        650,
+        65_000_000.0,
+        ts,
+        sector="SEMIS",
+        candidate_rank=1,
+        cash=100_000_000.0,
+        equity=100_000_000.0,
+    )
+    assert scaled.decide_one(olr_native_target).decision == "accepted"
+    assert scaled.decide_one(olr_native_target).final_notional == 65_000_000.0
+
+
+def test_portfolio_policy_preserves_olr_candidate_rank_under_capacity():
+    ts = datetime(2026, 2, 2, 14, 30, tzinfo=KST)
+    policy = PortfolioArbitrationPolicy(
+        PortfolioPolicyConfig(max_gross_notional=1_000.0, max_symbol_notional=1_000.0, max_sector_notional=1_000.0)
+    )
+    decisions = policy.decide_many(
+        [
+            PortfolioArbitrationInput(
+                "rank-2",
+                "OLR",
+                "000660",
+                "BUY",
+                6,
+                600.0,
+                ts,
+                sector="SEMIS",
+                candidate_rank=2,
+                cash=1_000.0,
+                equity=1_000.0,
+            ),
+            PortfolioArbitrationInput(
+                "rank-1",
+                "OLR",
+                "005930",
+                "BUY",
+                6,
+                600.0,
+                ts,
+                sector="SEMIS",
+                candidate_rank=1,
+                cash=1_000.0,
+                equity=1_000.0,
+            ),
+        ]
+    )
+
+    assert [decision.action_ref for decision in decisions] == ["rank-1", "rank-2"]
+    assert decisions[0].final_notional == 600.0
+    assert decisions[1].final_notional == 400.0
 
 
 def test_portfolio_context_carries_realized_pnl_into_replay_equity():
@@ -813,6 +869,53 @@ def test_router_applies_portfolio_priority_before_batch_arrival_order(tmp_path):
     assert results[0].accepted is True
     assert results[1].blocked is True
     assert results[1].portfolio_reason_code == "duplicate_symbol_conflict"
+
+
+def test_router_preserves_olr_candidate_rank_before_symbol_order(tmp_path):
+    recorder = PaperSessionRecorder(tmp_path / "session", date(2026, 2, 2))
+    oms = RecordingOMSClient(recorder)
+    policy = PortfolioArbitrationPolicy(
+        PortfolioPolicyConfig(max_gross_notional=1_000.0, max_symbol_notional=1_000.0, max_sector_notional=1_000.0)
+    )
+    router = RuntimeActionRouter(recorder, oms, policy, portfolio_enabled=True, dry_run=True)
+    context = PortfolioContextProvider(oms)
+    context.account_state = AccountState(equity=1_000.0, buyable_cash=1_000.0)
+    timestamp = datetime(2026, 2, 2, 14, 30, tzinfo=KST)
+
+    results = asyncio.run(
+        router.route_actions(
+            (
+                SubmitEntry(
+                    "OLR",
+                    "000660",
+                    6,
+                    "LIMIT",
+                    100.0,
+                    None,
+                    "rank_2_arrived_first",
+                    metadata={"candidate_rank": 2, "target_notional": 600.0},
+                ),
+                SubmitEntry(
+                    "OLR",
+                    "005930",
+                    6,
+                    "LIMIT",
+                    100.0,
+                    None,
+                    "rank_1",
+                    metadata={"candidate_rank": 1, "target_notional": 600.0},
+                ),
+            ),
+            portfolio_context=context,
+            event_ref="event-olr-rank",
+            event_timestamp=timestamp,
+        )
+    )
+
+    assert [result.routed_action.symbol for result in results] == ["005930", "000660"]
+    assert results[0].routed_action.qty == 6
+    assert results[1].routed_action.qty == 4
+    assert results[1].resized is True
 
 
 def test_router_partial_fill_releases_only_filled_reservation(tmp_path):

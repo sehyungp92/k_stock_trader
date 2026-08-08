@@ -16,8 +16,14 @@ from backtests.engine.sim_broker import BrokerCosts, SimBroker, SimOrder
 from backtests.strategies.kalcb.fixed_trade_plan_phase import _normalize_mutations
 from backtests.strategies.kalcb.runner import KALCBReplayAdapter, _collapse_exit_legs
 from backtests.strategies.kalcb.trade_plan_sweep import CompiledCoreReplay, _clone_snapshots_for_replay
-from backtests.strategies.olr.runner import OLRReplayAdapter
+from backtests.strategies.olr.research_sweep import _frame_rows, _overnight_label_cache
+from backtests.strategies.olr.runner import (
+    OLRReplayAdapter,
+    _aggregate_snapshot_hash,
+    attach_overnight_labels_to_snapshots,
+)
 from strategy_common.market import MarketBar
+from strategy_common.daily_lrs_parquet import load_daily_ohlcv
 from strategy_kalcb.config import KALCBConfig
 from strategy_kalcb.models import KALCBDailySnapshot
 from strategy_olr.config import OLRConfig
@@ -41,12 +47,105 @@ class ReplaySummary:
     net_return_pct: float
     max_drawdown_pct: float
     win_rate: float
+    profit_factor: float
     trades: int
     rejected_orders: int
     open_positions: int
     trade_hash: str
     strategy_trade_counts: dict[str, int]
     strategy_net_pnl: dict[str, float]
+
+
+def load_promoted_olr_snapshots(
+    snapshot_root: Path,
+    *,
+    daily_data_root: Path,
+    training_end: str,
+    expected_candidate_snapshot_hash: str,
+    expected_candidate_config_hash: str,
+    round_generated_at_utc: str,
+) -> tuple[dict[date, OLRDailySnapshot], dict[str, Any]]:
+    """Recover the exact round-consumed OLR snapshots, including attached labels."""
+
+    paths = sorted(snapshot_root.glob("candidate_snapshot_*.json"))
+    if not paths:
+        raise FileNotFoundError(f"No OLR candidate snapshots under {snapshot_root}")
+    snapshots: dict[date, OLRDailySnapshot] = {}
+    raw_artifact_hashes: dict[str, str] = {}
+    file_hashes: dict[str, str] = {}
+    config_hashes: set[str] = set()
+    final_config_hashes: set[str] = set()
+    generated_after_round: list[str] = []
+    round_generated_at = _parse_datetime(round_generated_at_utc)
+    for path in paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        snapshot = OLRDailySnapshot.from_json_dict(payload)
+        snapshots[snapshot.trade_date] = snapshot
+        raw_artifact_hashes[snapshot.trade_date.isoformat()] = str(payload.get("artifact_hash") or snapshot.artifact_hash)
+        file_hashes[path.name] = _file_hash(path)
+        config_hashes.add(str(snapshot.metadata.get("candidate_config_hash") or ""))
+        final_config_hashes.add(str(snapshot.metadata.get("final_candidate_config_hash") or ""))
+        if round_generated_at is not None:
+            snapshot_generated_at = snapshot.generated_at
+            if snapshot_generated_at.tzinfo is None:
+                snapshot_generated_at = snapshot_generated_at.replace(tzinfo=round_generated_at.tzinfo)
+            if snapshot_generated_at.astimezone(round_generated_at.tzinfo) > round_generated_at:
+                generated_after_round.append(snapshot.trade_date.isoformat())
+
+    retained_final_config_hashes = {value for value in final_config_hashes if value}
+    if config_hashes != {expected_candidate_config_hash} or (
+        retained_final_config_hashes
+        and retained_final_config_hashes != {expected_candidate_config_hash}
+    ):
+        raise ValueError(
+            "OLR retained snapshot config identity mismatch: "
+            f"candidate={sorted(config_hashes)}, final={sorted(final_config_hashes)}, "
+            f"expected={expected_candidate_config_hash}"
+        )
+    if generated_after_round:
+        raise ValueError(
+            "OLR retained snapshots post-date the promoted round artifact: "
+            f"{len(generated_after_round)} snapshots, first={generated_after_round[0]}"
+        )
+    for day, snapshot in snapshots.items():
+        ranks = [int(candidate.rank) for candidate in snapshot.candidates]
+        if ranks != sorted(ranks) or len(ranks) != len(set(ranks)) or any(rank <= 0 for rank in ranks):
+            raise ValueError(f"OLR retained candidate ordering is invalid on {day}: {ranks}")
+
+    symbols = tuple(sorted({candidate.symbol for snapshot in snapshots.values() for candidate in snapshot.candidates}))
+    training_end_date = date.fromisoformat(str(training_end)[:10])
+    daily_by_symbol = {
+        symbol: _frame_rows(load_daily_ohlcv(daily_data_root, symbol, end=training_end_date))
+        for symbol in symbols
+    }
+    labels = _overnight_label_cache(daily_by_symbol, symbols, tuple(sorted(snapshots)))
+    consumed = attach_overnight_labels_to_snapshots(snapshots, labels)
+    consumed_hash = _aggregate_snapshot_hash(consumed)
+    if consumed_hash != expected_candidate_snapshot_hash:
+        raise ValueError(
+            "OLR promoted consumed-content identity mismatch: "
+            f"expected {expected_candidate_snapshot_hash}, reconstructed {consumed_hash}"
+        )
+    nonempty_count = sum(bool(snapshot.candidates) for snapshot in consumed.values())
+    return consumed, {
+        "candidate_snapshot_root": str(snapshot_root),
+        "stored_snapshot_count": len(snapshots),
+        "nonempty_snapshot_count": nonempty_count,
+        "empty_snapshot_count": len(snapshots) - nonempty_count,
+        "candidate_count": sum(len(snapshot.candidates) for snapshot in consumed.values()),
+        "candidate_symbol_count": len(symbols),
+        "candidate_config_hash": expected_candidate_config_hash,
+        "raw_candidate_snapshot_hash": stable_signature(raw_artifact_hashes),
+        "consumed_candidate_snapshot_hash": consumed_hash,
+        "expected_candidate_snapshot_hash": expected_candidate_snapshot_hash,
+        "snapshot_file_manifest_hash": stable_signature(file_hashes),
+        "overnight_label_count": len(labels),
+        "round_generated_at_utc": round_generated_at_utc,
+        "snapshots_generated_after_round": 0,
+        "candidate_ordering": "strict_ascending_unique_rank",
+        "identity_status": "exact_promoted_consumed_content_match",
+        "strategy_decay_attribution_allowed": True,
+    }
 
 
 class NativeRiskSharedBroker(SimBroker):
@@ -396,6 +495,7 @@ def summarize_replay(result: ReplayResult, *, initial_equity: float) -> ReplaySu
         net_return_pct=final_equity / float(initial_equity) - 1.0,
         max_drawdown_pct=float(metrics.get("max_drawdown_pct", 0.0)),
         win_rate=float(metrics.get("win_rate", 0.0)),
+        profit_factor=float(metrics.get("profit_factor", 0.0)),
         trades=len(result.trades),
         rejected_orders=len(result.broker.rejected_orders),
         open_positions=len(result.broker.positions),
@@ -424,6 +524,13 @@ def require_parity(
         raise ValueError(
             f"{strategy} standalone trade hash mismatch: expected {expected_trade_hash}, got {actual.trade_hash}"
         )
+    if "profit_factor" in expected:
+        expected_profit_factor = float(expected["profit_factor"])
+        if abs(actual.profit_factor - expected_profit_factor) > return_tolerance:
+            raise ValueError(
+                f"{strategy} standalone profit factor mismatch: "
+                f"expected {expected_profit_factor:.12f}, got {actual.profit_factor:.12f}"
+            )
 
 
 def overlap_attribution(result: ReplayResult) -> dict[str, Any]:
@@ -666,6 +773,13 @@ def _repo_path(repo_root: Path, raw: Any) -> Path:
 
 def _config_date(value: Any) -> str:
     return str(value or "")[:10]
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
 
 def _read_pickle(path: Path) -> Any | None:

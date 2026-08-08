@@ -246,7 +246,22 @@ class RuntimeActionRouter:
                 priority = self.portfolio_policy.config.strategy_priority.index(prepared.action.strategy_id.upper().strip())
             except ValueError:
                 priority = len(self.portfolio_policy.config.strategy_priority)
-            return (priority, _action_timestamp(prepared.metadata), str(prepared.action.symbol).zfill(6), collected.batch_index, prepared.action_ref)
+            candidate_rank = _int_or_zero(prepared.metadata.get("candidate_rank"))
+            rank_priority = (
+                candidate_rank
+                if prepared.action.strategy_id.upper().strip() == "OLR"
+                and _action_side(prepared.action) == "BUY"
+                and candidate_rank > 0
+                else 1_000_000
+            )
+            return (
+                priority,
+                _action_timestamp(prepared.metadata),
+                rank_priority,
+                str(prepared.action.symbol).zfill(6),
+                collected.batch_index,
+                prepared.action_ref,
+            )
         return (collected.batch_index, prepared.action_ref)
 
     async def _route_prepared_action(
@@ -393,7 +408,9 @@ class RuntimeActionRouter:
             portfolio_decision_ref=portfolio_record["portfolio_decision_ref"],
         )
         if result.accepted and portfolio_item is not None:
-            self._remember_pending_reservation(result, portfolio_item, decision)
+            reservation_id = self._remember_pending_reservation(result, portfolio_item, decision)
+            if reservation_id is not None:
+                reservations.pending_reservation_ids.add(reservation_id)
         return result
 
     def _export_missed_action(
@@ -461,9 +478,12 @@ class RuntimeActionRouter:
         item: PortfolioArbitrationInput,
         *,
         portfolio_context: PortfolioContextProvider | None = None,
+        excluded_reservation_ids: set[str] | None = None,
     ) -> "_ReservationTotals":
         totals = _ReservationTotals()
-        for reservation in self.pending_reservations.values():
+        for reservation_id, reservation in self.pending_reservations.items():
+            if excluded_reservation_ids is not None and reservation_id in excluded_reservation_ids:
+                continue
             if reservation.side == "BUY":
                 if (
                     reservation.provenance.startswith("rehydrated:")
@@ -511,12 +531,12 @@ class RuntimeActionRouter:
         result: "RoutedActionResult",
         item: PortfolioArbitrationInput,
         decision: PortfolioArbitrationDecision,
-    ) -> None:
+    ) -> str | None:
         if item.side not in {"BUY", "SELL"} or result.final_order_ref is None or decision.final_qty <= 0:
-            return
+            return None
         reservation_id = str(result.provisional_order_ref or result.action_ref or result.final_order_ref)
         if not reservation_id:
-            return
+            return None
         refs = tuple(
             dict.fromkeys(
                 str(raw)
@@ -545,6 +565,7 @@ class RuntimeActionRouter:
         self.pending_reservations[reservation_id] = reservation
         for ref in refs:
             self._reservation_aliases[ref] = reservation_id
+        return reservation_id
 
     def _portfolio_decision(
         self,
@@ -575,7 +596,11 @@ class RuntimeActionRouter:
                 source_artifact_hashes=item.source_artifact_hashes,
                 timestamp=item.timestamp,
             ), item
-        pending = self.pending_reservations_for(item, portfolio_context=portfolio_context)
+        pending = self.pending_reservations_for(
+            item,
+            portfolio_context=portfolio_context,
+            excluded_reservation_ids=reservations.pending_reservation_ids,
+        )
         decision = self.portfolio_policy.decide_one(
             item,
             admitted_gross=reservations.admitted_gross + pending.admitted_gross,
@@ -648,6 +673,7 @@ class _ReservationTotals:
 
 @dataclass(slots=True)
 class _BatchReservations:
+    pending_reservation_ids: set[str] = field(default_factory=set)
     admitted_gross: float = 0.0
     admitted_buy_symbol: dict[str, float] = field(default_factory=dict)
     admitted_sector: dict[str, float] = field(default_factory=dict)

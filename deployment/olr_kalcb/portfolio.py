@@ -250,7 +250,12 @@ class PortfolioArbitrationPolicy:
             priority = self.config.strategy_priority.index(item.strategy_id)
         except ValueError:
             priority = len(self.config.strategy_priority)
-        return (item.timestamp, priority, item.symbol, item.action_ref)
+        candidate_rank = (
+            int(item.candidate_rank)
+            if item.strategy_id == "OLR" and item.side == "BUY" and int(item.candidate_rank) > 0
+            else 1_000_000
+        )
+        return (item.timestamp, priority, candidate_rank, item.symbol, item.action_ref)
 
     def _decision(self, item: PortfolioArbitrationInput, decision: str, qty: int, notional: float, reason: str) -> PortfolioArbitrationDecision:
         return PortfolioArbitrationDecision(

@@ -16,10 +16,14 @@
     "optimization_config": "config/optimization/olr.yaml",
     "optimized_result": "data/backtests/output/olr/round_5/optimized_config.json",
     "candidate_snapshot_root": "data/strategy/olr/candidate_snapshots/b072faa32122f142",
+    "candidate_config_hash": "b072faa32122f142269b0a3c5c20808913f6309728e121f3dd83741c37e7324e",
+    "daily_data_root": "data/krx_daily_parquet",
+    "round_generated_at_utc": "2026-05-27T10:50:38Z",
     "expected": {
       "net_return_pct": 1.5894203114584489,
       "trades": 232,
-      "trade_hash": "b9433abb02151a8f5484aabe7d002876702d7d28ddddc60840983bc973fa364e"
+      "profit_factor": 3.0213689546817073,
+      "trade_hash": "96e53f9372068a287c410dcf70bed468e7184ee9390af66c9fa2659adf055d49"
     }
   },
   "cache_dir": "data/backtests/cache/shared_replay",
