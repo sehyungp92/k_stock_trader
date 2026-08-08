@@ -563,6 +563,18 @@ def _portfolio_validation(field_name: str) -> dict[str, Any]:
             "allowed_values": ["KALCB", "OLR"],
             "rule": "priority order controls same-timestamp cross-strategy arbitration",
         }
+    if field_name == "notional_cap_mode":
+        return {
+            "accepted_value_shape": "string",
+            "allowed_values": ["absolute", "equity_scaled"],
+            "rule": "equity_scaled preserves the configured cap ratios as account equity changes",
+        }
+    if field_name == "notional_cap_reference_equity":
+        return {
+            "accepted_value_shape": "number",
+            "exclusive_minimum": 0.0,
+            "unit": "KRW equity",
+        }
     return {
         "accepted_value_shape": "number",
         "minimum": 0.0,

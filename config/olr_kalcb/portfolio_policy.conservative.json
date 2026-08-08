@@ -1,7 +1,9 @@
 {
-  "max_gross_notional": 10000000.0,
-  "max_symbol_notional": 2000000.0,
-  "max_sector_notional": 4000000.0,
+  "max_gross_notional": 20000000.0,
+  "max_symbol_notional": 10000000.0,
+  "max_sector_notional": 20000000.0,
+  "notional_cap_mode": "equity_scaled",
+  "notional_cap_reference_equity": 10000000.0,
   "strategy_priority": [
     "KALCB",
     "OLR"

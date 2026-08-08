@@ -51,6 +51,11 @@ def test_strategy_plugin_contract_covers_olr_kalcb_bridge_surface():
     assert resources["deployment_universe"]["symbol_count"] == 103
     assert resources["deployment_universe"]["symbols_sha256"] == resources["deployment_universe"]["computed_symbols_sha256"]
     assert resources["portfolio_policy"]["effective_policy"]["strategy_priority"] == ["KALCB", "OLR"]
+    assert resources["portfolio_policy"]["effective_policy"]["notional_cap_mode"] == "equity_scaled"
+    assert resources["portfolio_policy"]["effective_policy"]["notional_cap_reference_equity"] == 10_000_000.0
+    assert resources["portfolio_policy"]["effective_policy"]["max_gross_notional"] == 20_000_000.0
+    assert resources["portfolio_policy"]["effective_policy"]["max_symbol_notional"] == 10_000_000.0
+    assert resources["portfolio_policy"]["effective_policy"]["max_sector_notional"] == 20_000_000.0
     assert "risk.max_gross_exposure_pct" in resources["oms_risk_policy"]["editable_paths"]
     assert resources["oms_risk_policy"]["effective_risk_config"] == effective_risk_config_payload(
         load_oms_config()

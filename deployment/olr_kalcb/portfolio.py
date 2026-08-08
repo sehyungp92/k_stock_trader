@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Iterable
@@ -7,6 +8,7 @@ from typing import Any, Iterable
 from .hashing import canonical_json_hash
 
 SUPPORTED_SIDES = {"BUY", "SELL"}
+SUPPORTED_NOTIONAL_CAP_MODES = {"absolute", "equity_scaled"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,7 +16,32 @@ class PortfolioPolicyConfig:
     max_gross_notional: float = 10_000_000.0
     max_symbol_notional: float = 2_000_000.0
     max_sector_notional: float = 4_000_000.0
+    notional_cap_mode: str = "absolute"
+    notional_cap_reference_equity: float = 10_000_000.0
     strategy_priority: tuple[str, ...] = ("KALCB", "OLR")
+
+    def __post_init__(self) -> None:
+        mode = str(self.notional_cap_mode or "absolute").lower().strip()
+        if mode not in SUPPORTED_NOTIONAL_CAP_MODES:
+            raise ValueError(
+                f"unsupported notional_cap_mode {self.notional_cap_mode!r}; "
+                f"expected one of {sorted(SUPPORTED_NOTIONAL_CAP_MODES)}"
+            )
+        object.__setattr__(self, "notional_cap_mode", mode)
+        object.__setattr__(
+            self,
+            "strategy_priority",
+            tuple(str(item).upper().strip() for item in self.strategy_priority if str(item).strip()),
+        )
+        for field_name in ("max_gross_notional", "max_symbol_notional", "max_sector_notional"):
+            value = float(getattr(self, field_name))
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{field_name} must be a finite non-negative number")
+            object.__setattr__(self, field_name, value)
+        reference_equity = float(self.notional_cap_reference_equity)
+        if not math.isfinite(reference_equity) or reference_equity <= 0.0:
+            raise ValueError("notional_cap_reference_equity must be a finite positive number")
+        object.__setattr__(self, "notional_cap_reference_equity", reference_equity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +114,23 @@ class PortfolioArbitrationPolicy:
         self.config = config or PortfolioPolicyConfig()
         self.policy_hash = canonical_json_hash(asdict(self.config))
 
+    def effective_notional_caps(self, equity: float) -> dict[str, float]:
+        """Return the policy caps at the supplied account equity.
+
+        Absolute mode preserves literal KRW limits.  Equity-scaled mode treats
+        those limits as the values calibrated at ``reference_equity`` so a
+        replay or account-size change does not silently alter capital usage.
+        """
+
+        scale = 1.0
+        if self.config.notional_cap_mode == "equity_scaled":
+            scale = max(float(equity), 0.0) / self.config.notional_cap_reference_equity
+        return {
+            "max_gross_notional": self.config.max_gross_notional * scale,
+            "max_symbol_notional": self.config.max_symbol_notional * scale,
+            "max_sector_notional": self.config.max_sector_notional * scale,
+        }
+
     def decide_many(self, inputs: Iterable[PortfolioArbitrationInput]) -> list[PortfolioArbitrationDecision]:
         admitted_gross = 0.0
         admitted_buy_symbol: dict[str, float] = {}
@@ -134,11 +178,12 @@ class PortfolioArbitrationPolicy:
             return self._decision(item, "blocked", 0, 0.0, "missing_or_zero_account_state")
         if item.current_symbol_exposure + admitted_symbol > 0:
             return self._decision(item, "blocked", 0, 0.0, "duplicate_symbol_conflict")
+        caps = self.effective_notional_caps(item.equity)
         cash_capacity = item.cash - admitted_gross
         capacity = min(
-            self.config.max_gross_notional - item.current_portfolio_exposure - admitted_gross,
-            self.config.max_symbol_notional - item.current_symbol_exposure - admitted_symbol,
-            self.config.max_sector_notional - item.current_sector_exposure - admitted_sector,
+            caps["max_gross_notional"] - item.current_portfolio_exposure - admitted_gross,
+            caps["max_symbol_notional"] - item.current_symbol_exposure - admitted_symbol,
+            caps["max_sector_notional"] - item.current_sector_exposure - admitted_sector,
             cash_capacity,
         )
         if capacity <= 0:

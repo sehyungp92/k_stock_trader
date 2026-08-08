@@ -1,0 +1,27 @@
+{
+  "schema_version": "olr_kalcb_source_shared_replay_v1",
+  "initial_equity": 100000000.0,
+  "kalcb": {
+    "optimization_config": "config/optimization/kalcb.yaml",
+    "optimized_result": "data/backtests/output/kalcb/round_3/optimized_config.json",
+    "candidate_snapshot_root": "data/backtests/output/kalcb/round_3/paper_live_parity_inputs/daily_snapshots",
+    "market_bar_digest": "data/backtests/output/kalcb/round_3/paper_live_parity_inputs/replay_market_bar_digest.json",
+    "expected": {
+      "net_return_pct": 2.5812635258674423,
+      "trades": 204,
+      "trade_hash": "1da79a7d36b34c4e204f237c67d71e7bc259426c5db2e47135b7da0078ac587c"
+    }
+  },
+  "olr": {
+    "optimization_config": "config/optimization/olr.yaml",
+    "optimized_result": "data/backtests/output/olr/round_5/optimized_config.json",
+    "candidate_snapshot_root": "data/strategy/olr/candidate_snapshots/b072faa32122f142",
+    "expected": {
+      "net_return_pct": 1.5894203114584489,
+      "trades": 232,
+      "trade_hash": "b9433abb02151a8f5484aabe7d002876702d7d28ddddc60840983bc973fa364e"
+    }
+  },
+  "cache_dir": "data/backtests/cache/shared_replay",
+  "output": "data/backtests/output/olr_kalcb/shared_capital_replay.json"
+}

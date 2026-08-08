@@ -34,6 +34,7 @@ class PortfolioContextProvider:
     account_state: AccountState = field(default_factory=AccountState)
     positions: dict[str, PositionInfo] = field(default_factory=dict)
     sector_map: dict[str, str] = field(default_factory=dict)
+    replay_equity_accounting: bool = False
     last_refresh_ts: float = 0.0
     last_refresh_ok: bool = False
     last_refresh_error: str = ""
@@ -193,14 +194,24 @@ class PortfolioContextProvider:
         if allocation is None:
             allocation = AllocationInfo(strategy_id=sid, qty=0, cost_basis=fill_price)
             position.allocations[sid] = allocation
+        equity_before = float(self.account_state.equity or self.account_state.buyable_cash or 0.0)
+        realized_pnl = 0.0
         if str(side or "").upper().strip() == "SELL":
             reducible_qty = min(fill_qty, max(int(allocation.qty or 0), 0))
             delta = -reducible_qty
             cash_delta = reducible_qty * fill_price
+            realized_pnl = reducible_qty * (fill_price - max(float(allocation.cost_basis or 0.0), 0.0))
         else:
             delta = fill_qty
             cash_delta = -(fill_qty * fill_price)
         self.account_state.buyable_cash = float(self.account_state.buyable_cash or 0.0) + cash_delta
+        if self.replay_equity_accounting:
+            self.account_state.equity = equity_before + realized_pnl
+        if self.replay_equity_accounting and realized_pnl:
+            self.account_state.daily_pnl = float(self.account_state.daily_pnl or 0.0) + realized_pnl
+            session_start_equity = self.account_state.equity - self.account_state.daily_pnl
+            if session_start_equity > 0.0:
+                self.account_state.daily_pnl_pct = self.account_state.daily_pnl / session_start_equity
         if self.oms_client is not None and hasattr(self.oms_client, "account_state"):
             self.oms_client.account_state = self.account_state
         if delta > 0:

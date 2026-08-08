@@ -46,6 +46,67 @@ def test_portfolio_policy_accepts_blocks_and_resizes_deterministically():
     assert policy.metrics(decisions)["accepted_count"] >= 1
 
 
+def test_portfolio_policy_equity_scaled_caps_preserve_cap_ratios_for_shared_capital():
+    ts = datetime(2026, 2, 2, 9, 30, tzinfo=KST)
+    scaled = PortfolioArbitrationPolicy(
+        PortfolioPolicyConfig(
+            max_gross_notional=20_000_000.0,
+            max_symbol_notional=10_000_000.0,
+            max_sector_notional=20_000_000.0,
+            notional_cap_mode="equity_scaled",
+            notional_cap_reference_equity=10_000_000.0,
+        )
+    )
+    absolute = PortfolioArbitrationPolicy(
+        PortfolioPolicyConfig(
+            max_gross_notional=20_000_000.0,
+            max_symbol_notional=10_000_000.0,
+            max_sector_notional=20_000_000.0,
+        )
+    )
+    item = PortfolioArbitrationInput(
+        "shared-capital-entry",
+        "KALCB",
+        "005930",
+        "BUY",
+        1_500,
+        150_000_000.0,
+        ts,
+        sector="SEMIS",
+        cash=100_000_000.0,
+        equity=100_000_000.0,
+    )
+
+    assert scaled.effective_notional_caps(item.equity) == {
+        "max_gross_notional": 200_000_000.0,
+        "max_symbol_notional": 100_000_000.0,
+        "max_sector_notional": 200_000_000.0,
+    }
+    assert scaled.decide_one(item).final_notional == 100_000_000.0
+    assert absolute.decide_one(item).final_notional == 10_000_000.0
+
+
+def test_portfolio_context_carries_realized_pnl_into_replay_equity():
+    context = PortfolioContextProvider(replay_equity_accounting=True)
+    context.account_state = AccountState(equity=100_000_000.0, buyable_cash=100_000_000.0)
+
+    context.apply_fill("KALCB", "005930", "BUY", 100, 100_000.0)
+    assert context.account_state.buyable_cash == 90_000_000.0
+    assert context.account_state.equity == 100_000_000.0
+
+    context.apply_fill("KALCB", "005930", "SELL", 100, 110_000.0)
+    assert context.account_state.buyable_cash == 101_000_000.0
+    assert context.account_state.equity == 101_000_000.0
+    assert context.account_state.daily_pnl == 1_000_000.0
+    assert context.account_state.daily_pnl_pct == pytest.approx(0.01)
+
+    live_context = PortfolioContextProvider()
+    live_context.account_state = AccountState(equity=100_000_000.0, buyable_cash=100_000_000.0)
+    live_context.apply_fill("KALCB", "005930", "BUY", 100, 100_000.0)
+    live_context.apply_fill("KALCB", "005930", "SELL", 100, 110_000.0)
+    assert live_context.account_state.equity == 100_000_000.0
+
+
 def test_portfolio_policy_validates_side_and_exit_exposure():
     ts = datetime(2026, 2, 2, 9, 30, tzinfo=KST)
     policy = PortfolioArbitrationPolicy(PortfolioPolicyConfig(max_gross_notional=1_500_000))

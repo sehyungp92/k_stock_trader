@@ -88,6 +88,10 @@ class RuntimeSessionDriver:
     order_identity: dict[str, str] = field(default_factory=dict)
     order_metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        replay_mode = str(self.mode or "").lower().strip() in {"dry_run", "replay", "offline_replay"}
+        self.portfolio_context.replay_equity_accounting = replay_mode
+
     async def handle_bar(self, bar: MarketBar) -> RuntimeEventResult:
         pending = await self.collect_bar(bar)
         route_results = await self.action_router.route_actions(
