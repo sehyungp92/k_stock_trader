@@ -63,7 +63,7 @@ case "$STACK_SCOPE" in
         services+=(dashboard)
         ;;
     all)
-        services+=(pcim runtime dashboard)
+        services+=(runtime dashboard)
         ;;
     *)
         echo "[WARN] Unknown scope '$STACK_SCOPE'; checking base services only"

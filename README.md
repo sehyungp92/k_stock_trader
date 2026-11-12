@@ -51,7 +51,7 @@ k_stock_trader/
 |-- strategy_kalcb/          # KALCB research, signals, models, artifact store
 |-- strategy_olr/            # OLR research, models, artifact store
 |-- strategy_common/         # Shared clock, sector maps, daily/intraday panels, parquet loaders
-|-- strategy_pcim/           # PCIM (research mode, not part of the deployed portfolio)
+|-- strategy_pcim/           # PCIM (local-only, gitignored; not part of the deployed portfolio)
 |-- deployment/olr_kalcb/    # Unified runtime: coordinator, readiness, replay, session driver
 |-- config/                  # YAML/JSON configs (see below)
 |-- scripts/                 # Artifact generation, preflight, optimization, promotion, parity

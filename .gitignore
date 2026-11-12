@@ -170,3 +170,7 @@ docs/optimisation/*
 
 # Claude
 .claudeignore
+
+# PCIM strategy: retired from the repo, kept local-only
+strategy_pcim/
+tests/strategy_pcim/

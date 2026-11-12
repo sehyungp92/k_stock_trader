@@ -78,7 +78,7 @@ def refresh(study_path, output, register_current_policies=False, calendar_manife
                 files[name] = digest(target)
                 if files[name] != expected:
                     raise ValueError("Changed parent dependency")
-    for folder in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "strategy_pcim", "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts"):
+    for folder in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts"):
         for current in (repo / folder).rglob("*.py"):
             name = current.relative_to(repo).as_posix()
             if name not in files:

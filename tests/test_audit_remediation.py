@@ -472,6 +472,8 @@ class TestSoftStopPxPersistence:
 # Change 5: PCIM Partial/Dust Exit Handling
 # =====================================================================
 
+@pytest.mark.skipif(__import__("importlib.util").util.find_spec("strategy_pcim") is None,
+                    reason="strategy_pcim is local-only (gitignored)")
 class TestPCIMPartialFillBranch:
     """Test PCIM handles partial STOP/DAY15_EXIT fills."""
 

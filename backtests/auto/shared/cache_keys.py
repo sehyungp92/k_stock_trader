@@ -97,7 +97,7 @@ def file_content_hash(path: Path) -> str:
 
 def source_generation_hash(*, root: Path | None = None) -> str:
     root = Path(root).resolve() if root is not None else Path(__file__).resolve().parents[3]
-    paths = [path for directory in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "strategy_pcim", "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts")
+    paths = [path for directory in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts")
         for path in (root / directory).rglob("*.py")]
     paths.extend((root / "kis_core/data").glob("*.yaml"))
     # Code identity must describe the executing checkout even inside a frozen

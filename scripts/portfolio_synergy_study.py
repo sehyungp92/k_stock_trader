@@ -116,7 +116,7 @@ def prepare(args):
         replacement = code.is_file() and name.endswith(".py")
         bind(code if replacement else args.kalcb_manifest.parent / "files" / name,
              name, None if replacement else expected_hash, mutable=replacement)
-    for directory in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "strategy_pcim", "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts"):
+    for directory in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts"):
         for path in (REPO / directory).rglob("*.py"):
             name = path.relative_to(REPO).as_posix()
             if name not in files:

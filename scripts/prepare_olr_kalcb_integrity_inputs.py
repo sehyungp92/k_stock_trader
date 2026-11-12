@@ -141,7 +141,7 @@ def main():
     contract, market_paths = shared_market_contract(ROOT, spec)
     qualification, qualification_paths = prepare_qualification_sources(ROOT, contract, args.qualification_evidence, research_spec=spec)
     paths = {spec_path, ROOT / "requirements.txt"}
-    for directory in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr", "strategy_pcim",
+    for directory in ("backtests", "strategy_common", "strategy_kalcb", "strategy_olr",
                       "deployment", "instrumentation", "oms", "oms_client", "kis_core", "scripts", "tests"):
         paths.update((ROOT / directory).rglob("*.py"))
     paths.update((ROOT / "kis_core/data").glob("*.yaml"))
