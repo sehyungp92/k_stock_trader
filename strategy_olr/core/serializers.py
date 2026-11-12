@@ -4,7 +4,9 @@ from dataclasses import fields, is_dataclass
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
+from collections.abc import Mapping
 
+from strategy_common.market import MarketBar
 from strategy_olr.models import OLRDailyCandidate
 
 from .state import OLRPositionState, OLRState, OLRSymbolStage, OLRSymbolState
@@ -30,7 +32,11 @@ def restore_state(payload: dict[str, Any]) -> OLRState:
             position["entry_time"] = _coerce_datetime(position["entry_time"])
             data["position"] = OLRPositionState(**position)
         data["stage"] = OLRSymbolStage(data.get("stage", OLRSymbolStage.WATCHING))
+        data["entry_history"] = {key: OLRPositionState(**{**value, "entry_time": _coerce_datetime(value["entry_time"])})
+                                 for key, value in data.get("entry_history", {}).items()}
         data["session_date"] = _coerce_date(data["session_date"]) if data.get("session_date") else None
+        data["session_bars"] = [MarketBar(**{**bar, "timestamp": _coerce_datetime(bar["timestamp"])})
+                                for bar in data.get("session_bars", []) or []]
         data["exit_attempted_dates"] = {_coerce_date(item) for item in data.get("exit_attempted_dates", []) or []}
         symbols[str(symbol).zfill(6)] = OLRSymbolState(**data)
     return OLRState(
@@ -39,6 +45,7 @@ def restore_state(payload: dict[str, Any]) -> OLRState:
         source_fingerprint=str(payload.get("source_fingerprint", "")),
         session_date=_coerce_date(payload["session_date"]) if payload.get("session_date") else None,
         order_roles=dict(payload.get("order_roles", {}) or {}),
+        order_history=dict(payload.get("order_history", {}) or {}),
         meta=dict(payload.get("meta", {}) or {}),
     )
 
@@ -56,9 +63,11 @@ def _json_value(value: Any) -> Any:
             for field in fields(value)
             if not field.name.startswith("_")
         }
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return {str(key): _json_value(item) for key, item in value.items()}
-    if isinstance(value, set):
+    if isinstance(value, (set, frozenset)):
+        # Account evidence includes immutable occupied-position membership.
+        # Preserve its values without depending on hash-table/pickle order.
         return sorted(_json_value(item) for item in value)
     if isinstance(value, (list, tuple)):
         return [_json_value(item) for item in value]

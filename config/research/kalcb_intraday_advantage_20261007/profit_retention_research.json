@@ -1,0 +1,101 @@
+{
+  "status": "qualified_research_only",
+  "live_enabled": false,
+  "profile": "profit_retention_overlay_2p5_atr",
+  "date_range": {
+    "start": "2025-08-07",
+    "end": "2026-03-31",
+    "sessions": 156
+  },
+  "initial_equity_krw": 100000000,
+  "training_coverage": {
+    "start": "2025-05-12",
+    "end": "2026-03-31"
+  },
+  "june_july_2026_used": false,
+  "drawdown_preferences": {
+    "baseline": 8,
+    "combined": 10,
+    "hard_rejection_thresholds": false
+  },
+  "changes": {
+    "exit_profit_retention_recent_overlay_atr": 2.5,
+    "recent_window_bars": 6,
+    "retained_peak_fraction": 0.6,
+    "confirmation_closes": 2,
+    "original_session_vwap_rule_preserved": true,
+    "leverage_and_opening_selection_changed": false
+  },
+  "metrics": {
+    "baseline": {
+      "return_pct": 69.8419225806975,
+      "drawdown_pct": 7.555355809089629,
+      "trades": 348,
+      "active_days": 99,
+      "audit_status": "passed"
+    },
+    "participation": {
+      "return_pct": 64.52772281709281,
+      "drawdown_pct": 7.360217603455585,
+      "trades": 346,
+      "active_days": 99,
+      "audit_status": "passed"
+    },
+    "cost": {
+      "return_pct": 49.02854787986022,
+      "drawdown_pct": 8.198175352392104,
+      "trades": 349,
+      "active_days": 99,
+      "audit_status": "passed"
+    },
+    "combined": {
+      "return_pct": 44.54768748312414,
+      "drawdown_pct": 8.07537754654873,
+      "trades": 350,
+      "active_days": 99,
+      "audit_status": "passed"
+    }
+  },
+  "comparison_to_selected_full": {
+    "baseline": {
+      "return_change_pp": 3.1615781034047643,
+      "drawdown_change_pp": -0.12254303327465355,
+      "trade_change": 0
+    },
+    "participation": {
+      "return_change_pp": 5.775043401503126,
+      "drawdown_change_pp": -0.40041866130000336,
+      "trade_change": -1
+    },
+    "cost": {
+      "return_change_pp": 3.3972747140524504,
+      "drawdown_change_pp": -0.5721546682561769,
+      "trade_change": 0
+    },
+    "combined": {
+      "return_change_pp": 4.237210027750685,
+      "drawdown_change_pp": -0.8287164291983107,
+      "trade_change": 1
+    }
+  },
+  "result_paths": {
+    "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_overlay25\\baseline\\result.json",
+    "participation": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_overlay25\\participation\\result.json",
+    "cost": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_overlay25\\cost\\result.json",
+    "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_overlay25\\combined\\result.json"
+  },
+  "configuration": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\config\\research\\kalcb_intraday_advantage_20261007\\profit_retention_config.json",
+  "configuration_sha256": "7ad1449e833601c423bd90da83d8d0ca78174ad02e6004c4b1d41e3b4d79983a",
+  "plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\management_overlay\\cases\\overlay25__control__1p0\\plan.json",
+  "policy": {
+    "name": "cv_interaction_calibrated_quantity_locked_quantity_locked",
+    "directory": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\release_policies_support_capped"
+  },
+  "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\audit_overlay25\\manifest.json",
+  "source_generation_hash": "fa48ed1aa31bad7444c35b519644b2feea6e735486da3b8c44a30516880b2da0",
+  "limits": [
+    "Reused chronological development; no independent forward-return guarantee.",
+    "Trading frequency is essentially unchanged; later-entry research is evaluated separately.",
+    "Changes in ten entries drive most of the improvement; sensitivity and concentration matter."
+  ]
+}

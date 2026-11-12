@@ -13,6 +13,18 @@ from backtests.strategies.registry import create_plugin
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run phased auto-optimisation.")
     sub = parser.add_subparsers(dest="command", required=True)
+    corrective = sub.add_parser("corrective-selection", help="Register or execute a bounded retained-recipe comparison.")
+    corrective.add_argument("--study", required=True, type=Path)
+    corrective.add_argument("--register", action="store_true")
+    corrective.add_argument("--strategy", choices=["olr", "kalcb"])
+    corrective.add_argument("--input-manifest", type=Path)
+    corrective.add_argument("--output-root", type=Path, default=Path("data/backtests/output/corrective_selection"))
+    case = sub.add_parser("corrective-case", help=argparse.SUPPRESS)
+    case.add_argument("--request", required=True, type=Path)
+    native = sub.add_parser("native-policy", help="Run a declared native policy study with frozen finalist qualification.")
+    native.add_argument("--study", required=True, type=Path)
+    native.add_argument("--output-dir", required=True, type=Path)
+    native.set_defaults(strategy="portfolio_native")
     optimize = sub.add_parser("optimize", help="Run phased greedy optimisation.")
     optimize.add_argument("--strategy", required=True, choices=["kalcb", "olr", "portfolio_synergy"])
     optimize.add_argument("--config", default=None)
@@ -70,6 +82,37 @@ def main(argv: list[str] | None = None) -> int:
     oos.add_argument("--max-targeted", type=int, default=80)
     oos.add_argument("--candidate-manifest", default=None)
     args = parser.parse_args(argv)
+
+    if args.command == "corrective-case":
+        from backtests.strategies.common.corrective_selection import evaluate_case
+        evaluate_case(args.request)
+        return 0
+
+    if args.command == "corrective-selection":
+        from backtests.strategies.common.corrective_selection import register_study, run_study
+        if args.register:
+            study = register_study(Path.cwd(), args.study)
+            print(json.dumps({"study_hash": study["study_hash"], "recipes": {s: len(v["recipes"]) for s, v in study["strategies"].items()}}))
+        else:
+            if not args.strategy or not args.input_manifest:
+                parser.error("corrective-selection requires --strategy and --input-manifest")
+            print(json.dumps(run_study(args.study, args.input_manifest, args.strategy, args.output_root), indent=2))
+        return 0
+
+    if args.command == "native-policy":
+        from backtests.strategies.portfolio_synergy.native_workflow import run_native_study
+        study = json.loads(args.study.read_text(encoding="utf-8"))
+        result = run_native_study(study, args.output_dir)
+        print(json.dumps({"status": result["status"], "historical_qualification": result["historical_qualification"],
+                          "output": str(args.output_dir)}, indent=2))
+        return 0 if result["historical_qualification"] else 2
+
+    if args.strategy == "portfolio_synergy":
+        parser.error(
+            "The legacy portfolio_synergy optimizer is a synthetic fixture and cannot supply "
+            "optimization or OOS evidence. For registered current-strategy native research, use "
+            "scripts/run_portfolio_synergy_study.py --study <frozen-study.json>."
+        )
 
     config = normalize_runtime_config(args.strategy, load_yaml_config(args.config))
     if args.command == "oos-ablation":

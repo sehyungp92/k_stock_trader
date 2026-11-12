@@ -100,6 +100,8 @@ class Sidecar:
         self.data_dir = Path(config["data_dir"])
 
         sidecar_config = config.get("sidecar", {})
+        self.accepts_unknown_costs = bool(sidecar_config.get("accepts_unknown_execution_costs", False))
+        self.accepts_execution_accounting = bool(sidecar_config.get("accepts_execution_accounting_v2", False))
         raw_url = os.environ.get("RELAY_URL", "") or sidecar_config.get("relay_url", "")
         self.relay_url = (
             raw_url.rstrip("/") + "/events"
@@ -163,7 +165,8 @@ class Sidecar:
                     files.append((f, event_type))
                 # Legacy daily snapshots are single JSON files.
                 for f in sorted(dir_path.glob("daily_*.json")):
-                    files.append((f, event_type))
+                    if not f.with_suffix(".jsonl").exists():
+                        files.append((f, event_type))
             else:
                 for f in sorted(dir_path.glob("*.jsonl")):
                     files.append((f, event_type))
@@ -186,6 +189,7 @@ class Sidecar:
                     for i, line in enumerate(handle):
                         if i < last_sent:
                             continue
+                        complete_line = line.endswith("\n")
                         line = line.strip()
                         if not line:
                             continue
@@ -194,6 +198,18 @@ class Sidecar:
                             # Skip entry-stage trade records — assistant only wants completed trades
                             if event_type == "trade" and raw.get("stage") == "entry":
                                 continue
+                            if raw.get("schema_version") in {"trade_execution_v3", "daily_execution_accounting_v2"}:
+                                if not complete_line:
+                                    break
+                                if not self.accepts_execution_accounting:
+                                    logger.error("Execution accounting export pending consumer capability (%s:%d)", filepath, i)
+                                    break
+                            if (event_type == "trade" and raw.get("pnl_basis") == "gross_costs_unknown"
+                                    and not (self.accepts_unknown_costs or self.accepts_execution_accounting)):
+                                # Keep this record and subsequent lines pending until
+                                # the consumer supports nullable execution costs.
+                                logger.error("Trade export pending: consumer does not support unknown costs (%s:%d)", filepath, i)
+                                break
                             wrapped = self._wrap_event(raw, event_type)
                             wrapped["_source_file"] = key
                             wrapped["_line_number"] = i
@@ -203,6 +219,8 @@ class Sidecar:
             elif filepath.suffix == ".json":
                 if last_sent == 0:  # not yet sent
                     raw = json.loads(filepath.read_text())
+                    if raw.get("schema_version") in {"trade_execution_v3", "daily_execution_accounting_v2"} and not self.accepts_execution_accounting:
+                        return []
                     wrapped = self._wrap_event(raw, event_type)
                     wrapped["_source_file"] = key
                     wrapped["_line_number"] = 1

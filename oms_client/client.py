@@ -26,6 +26,10 @@ _MAX_STOP_WATCHER_AGE_SEC = 60.0
 
 
 def _health_payload_ready(payload: Dict[str, Any]) -> bool:
+    if payload.get("broker_reconciliation_ready") is not True:
+        return False
+    if payload.get("execution_recovery_required") is True:
+        return False
     status = str(payload.get("status") or "").lower().strip()
     if not status:
         return False
@@ -359,6 +363,18 @@ class OMSClient:
         if data is None:
             return None
         return self._parse_position(symbol, data)
+
+    async def get_execution_feedback(self, strategy_id: str, after: int = 0):
+        data = await self._get_with_retry(f"{self.base_url}/api/v1/execution-feedback/{strategy_id}?after={int(after)}")
+        if not data or data.get("durable") is not True:
+            raise RuntimeError("Durable OMS execution feedback is unavailable")
+        return data["events"]
+
+    async def get_execution_snapshot(self, strategy_id: str, after: int = 0):
+        data = await self._get_with_retry(f"{self.base_url}/api/v1/execution-snapshot/{strategy_id}?after={int(after)}")
+        if not data or data.get("durable") is not True:
+            raise RuntimeError("Canonical OMS execution snapshot is unavailable")
+        return data
 
     async def get_working_orders(self) -> Optional[List[WorkingOrderInfo]]:
         """Get all OMS working orders."""

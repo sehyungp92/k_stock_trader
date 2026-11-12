@@ -138,3 +138,13 @@ def action_to_json_dict(action: StrategyAction) -> dict[str, Any]:
     if "metadata" in payload:
         payload["metadata"] = dict(payload["metadata"])
     return payload
+
+
+def action_from_json_dict(payload: Mapping[str, Any]) -> StrategyAction:
+    data = dict(payload)
+    kind = data.pop("action_type")
+    classes = {cls.__name__: cls for cls in (SubmitEntry, SubmitExit, SubmitPartialExit,
+        SubmitProtectiveStop, ReplaceProtectiveStop, CancelOrders, FlattenPosition)}
+    if kind not in classes:
+        raise ValueError(f"Unsupported persisted action: {kind}")
+    return classes[kind](**data)

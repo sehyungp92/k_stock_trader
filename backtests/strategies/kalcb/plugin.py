@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from backtests.engine.contracts import execution_valid
+from backtests.engine.integrity import audit_broker
+
 from pathlib import Path
 from typing import Any
 
@@ -132,6 +135,8 @@ class KALCBOptimizationPlugin(SharedStrategyPluginMixin):
 
         base_result = self._remember_backtest_result(cumulative_mutations, run_kalcb_backtest(self.config, cumulative_mutations))
         reject = kalcb_reject_reason(phase, base_result.metrics, hard_rejects)
+        if not execution_valid(base_result.metrics):
+            reject = "execution_audit_unverified_or_failed"
         baseline = ScoredCandidate("__baseline__", 0.0 if reject else score_kalcb_phase(phase, base_result.metrics, scoring_weights), bool(reject), reject, base_result.metrics)
         return self._wrap_cached_evaluator(
             phase=phase,
@@ -153,15 +158,12 @@ class KALCBOptimizationPlugin(SharedStrategyPluginMixin):
         result = self._last_result_for_mutations(mutations)
         if result is None:
             result = self._remember_backtest_result(mutations, run_kalcb_backtest(self.config, mutations))
+        result.metrics.update(audit_broker(result.replay_result.broker))
         return attach_official_metric_contract(
             dict(result.metrics),
             requires_audit_pass=True,
-            audit_pass=bool(
-                result.metrics.get("same_bar_fill_count", 0.0) == 0.0
-                and result.metrics.get("forced_replay_close_count", 0.0) == 0.0
-                and result.metrics.get("rejected_order_count", 0.0) == 0.0
-            ),
-            audit_status="direct_official_replay",
+            audit_pass=execution_valid(result.metrics),
+            audit_status=result.metrics.get("audit_status", "unverified"),
             official_replay_pass=True,
             execution_contract=build_execution_contract(self, result.metrics),
         )

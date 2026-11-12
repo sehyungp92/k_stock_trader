@@ -11,13 +11,16 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 import sys
+import os
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-assistant_root = PROJECT_ROOT / "_references" / "trading_assistant"
+assistant_root = Path(os.environ.get("TRADING_ASSISTANT_ROOT", PROJECT_ROOT / "_references" / "trading_assistant"))
+if not assistant_root.exists():
+    assistant_root = PROJECT_ROOT.parent / "trading_assistant"
 if assistant_root.exists() and str(assistant_root) not in sys.path:
     sys.path.insert(0, str(assistant_root))
 
@@ -348,6 +351,8 @@ def mock_now_kst():
 def mock_trading_calendar_for_adapter():
     """Ensure adapter sees an in-session trading timestamp by default."""
     from zoneinfo import ZoneInfo
+    from kis_core.trading_calendar import get_trading_calendar
+    calendar = get_trading_calendar()
 
     with (
         patch('oms.adapter.get_trading_calendar') as mock_cal,
@@ -357,6 +362,7 @@ def mock_trading_calendar_for_adapter():
         ),
     ):
         mock_cal.return_value.is_trading_day.return_value = True
+        mock_cal.return_value.session_hours.side_effect = calendar.session_hours
         yield mock_cal
 
 

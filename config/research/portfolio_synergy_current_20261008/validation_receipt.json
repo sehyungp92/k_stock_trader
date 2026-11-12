@@ -1,0 +1,20 @@
+{
+  "targeted_test_runs": [
+    {
+      "command": "python -B -m pytest -q tests/backtests/test_current_portfolio_qualification.py tests/backtests/test_current_portfolio_phase.py tests/backtests/test_current_portfolio_synergy.py tests/backtests/test_native_portfolio_policy.py tests/backtests/strategies/test_portfolio_synergy_source_replay.py tests/deployment/olr_kalcb/test_portfolio_and_replay.py",
+      "passed": 71,
+      "seconds": 7.26
+    },
+    {
+      "command": "python -B -m pytest -q tests/backtests/test_qualification_scope.py tests/backtests/test_qualification_evidence.py tests/backtests/test_material_qualification_contracts.py tests/backtests/strategies/test_olr_kalcb_live_replay_artifact_parity.py",
+      "passed": 30,
+      "seconds": 147.62
+    }
+  ],
+  "total_distinct_collected_tests": 101,
+  "full_native_qualification": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\qualification.json",
+  "cash_control_full_audits": [
+    "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\runtime_v7\\qualified\\cash_control_baseline\\execution_audit.json",
+    "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\runtime_v7\\qualified\\cash_control_combined\\execution_audit.json"
+  ]
+}

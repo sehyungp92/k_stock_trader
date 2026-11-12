@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
+from backtests.engine.contracts import execution_valid
+from backtests.engine.evaluation_identity import request_identity
 
 from backtests.auto.shared.types import ScoredCandidate
 from backtests.core.replay_bundle import EventReplayBundle
@@ -53,6 +55,8 @@ def score_candidate(args) -> ScoredCandidate:
     replay_bundle = _resolve_replay_bundle(candidate_mutations or {}, mutations, capability_level)
     result = run_olr_backtest(_worker_config, mutations, replay_bundle=replay_bundle)
     metrics = dict(result.metrics)
+    if not execution_valid(metrics, expected_request=request_identity(_worker_config, mutations)):
+        return ScoredCandidate(name=name, score=0.0, rejected=True, reject_reason="execution_audit_unverified_or_failed", metrics=metrics)
     _augment_snapshot_label_metrics(metrics, snapshots_from_bundle(replay_bundle) if replay_bundle is not None else {})
     _augment_trade_alpha_metrics(metrics, result.trades)
     metrics["phase_candidate_metric_basis"] = "direct_official_training_replay_holdout_excluded"

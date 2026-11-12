@@ -1,4 +1,5 @@
 from __future__ import annotations
+from kis_core.trading_calendar import get_trading_calendar
 
 import asyncio
 import inspect
@@ -51,6 +52,7 @@ def _paper_health_checks(**overrides):
         "portfolio_context_fresh": True,
         "paper_trading_approved": True,
         "oms_health_payload": {
+            "broker_reconciliation_ready": True,
             "status": "ok",
             "stop_protection_status": "ok",
             "unprotected_positions_count": 0,
@@ -1231,6 +1233,7 @@ def _kalcb_snapshot(
                 expected_5m_volume=100.0,
                 average_30m_volume=600.0,
                 source_fingerprint="unit-source",
+                metadata={"prior_day_date": get_trading_calendar().previous_trading_day(trade_date).isoformat()},
             ),
         ),
         metadata=base_metadata,
@@ -1277,6 +1280,7 @@ def _olr_snapshot(
                 expected_5m_volume=100.0,
                 average_30m_volume=600.0,
                 source_fingerprint="unit-source",
+                metadata={"prior_day_date": get_trading_calendar().previous_trading_day(trade_date).isoformat()},
             ),
         ),
         metadata=base_metadata,

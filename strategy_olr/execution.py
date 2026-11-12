@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from strategy_common.execution_session import session_cutoff
+
 import json
 from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, time as dtime
@@ -338,7 +340,7 @@ def initial_olr_stop_price(
     fill_bar = ordered[max(0, min(signal.fill_index, len(ordered) - 1))]
     atr = max(float(candidate.daily_atr), entry_price * 0.006, 1.0)
     if plan.stop_mode == "decision_low":
-        decision_lows = [float(bar.low) for bar in ordered if bar.timestamp.astimezone(KST).time() < DECISION_CUTOFF]
+        decision_lows = [float(bar.low) for bar in ordered if bar.timestamp.astimezone(KST).time() < session_cutoff(bar.timestamp.date(), DECISION_CUTOFF)]
         return min(min(decision_lows), entry_price - entry_price * 0.003) if decision_lows else entry_price - plan.stop_atr_mult * atr
     if plan.stop_mode == "signal_low":
         return min(float(signal_bar.low), entry_price - entry_price * 0.003)
@@ -842,7 +844,7 @@ def _ordered_completed_bars(bars: Sequence[MarketBar], trade_date: date | None =
             continue
         if not bar.is_completed:
             continue
-        if ts.time() > DEFAULT_FLATTEN_TIME:
+        if ts.time() > session_cutoff(ts.date(), DEFAULT_FLATTEN_TIME):
             continue
         out.append(bar)
     return tuple(sorted(out, key=lambda item: item.timestamp))
@@ -850,7 +852,7 @@ def _ordered_completed_bars(bars: Sequence[MarketBar], trade_date: date | None =
 
 def _first_index_at_or_after(bars: Sequence[MarketBar], cutoff: dtime) -> int | None:
     for index, bar in enumerate(bars):
-        if bar.timestamp.astimezone(KST).time() >= cutoff:
+        if bar.timestamp.astimezone(KST).time() >= session_cutoff(bar.timestamp.date(), cutoff):
             return index
     return None
 
@@ -858,7 +860,7 @@ def _first_index_at_or_after(bars: Sequence[MarketBar], cutoff: dtime) -> int | 
 def _last_index_before(bars: Sequence[MarketBar], cutoff: dtime) -> int | None:
     out = None
     for index, bar in enumerate(bars):
-        if bar.timestamp.astimezone(KST).time() < cutoff:
+        if bar.timestamp.astimezone(KST).time() < session_cutoff(bar.timestamp.date(), cutoff):
             out = index
     return out
 
@@ -867,14 +869,14 @@ def _last_continuous_index(bars: Sequence[MarketBar]) -> int | None:
     out = None
     for index, bar in enumerate(bars):
         t = bar.timestamp.astimezone(KST).time()
-        if DECISION_CUTOFF <= t <= DEFAULT_LAST_CONTINUOUS_TIME:
+        if session_cutoff(bar.timestamp.date(), DECISION_CUTOFF) <= t <= session_cutoff(bar.timestamp.date(), DEFAULT_LAST_CONTINUOUS_TIME):
             out = index
     return out
 
 
 def _close_auction_index(bars: Sequence[MarketBar]) -> int | None:
     for index, bar in enumerate(bars):
-        if bar.timestamp.astimezone(KST).time() == DEFAULT_CLOSE_AUCTION_TIME:
+        if bar.timestamp.astimezone(KST).time() == session_cutoff(bar.timestamp.date(), DEFAULT_CLOSE_AUCTION_TIME):
             return index
     return None
 
@@ -884,10 +886,10 @@ def _next_fill(signal_index: int, reason: str, bars: Sequence[MarketBar], *, req
     if fill_index >= len(bars):
         if require_fill_bar:
             return None
-        if bars[signal_index].timestamp.astimezone(KST).time() >= DEFAULT_LAST_CONTINUOUS_TIME:
+        if bars[signal_index].timestamp.astimezone(KST).time() >= session_cutoff(bars[signal_index].timestamp.date(), DEFAULT_LAST_CONTINUOUS_TIME):
             return None
         return OLREntrySignal(fill_index=fill_index, signal_index=signal_index, reason=reason)
-    if bars[fill_index].timestamp.astimezone(KST).time() > DEFAULT_LAST_CONTINUOUS_TIME:
+    if bars[fill_index].timestamp.astimezone(KST).time() > session_cutoff(bars[fill_index].timestamp.date(), DEFAULT_LAST_CONTINUOUS_TIME):
         return None
     return OLREntrySignal(fill_index=fill_index, signal_index=signal_index, reason=reason)
 

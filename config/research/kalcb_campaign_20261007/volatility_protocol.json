@@ -1,0 +1,14 @@
+{
+  "version": "kalcb-volatility-sizing-v1",
+  "hypothesis": "Observed risk changes across regimes; a fixed risk budget may retain more return than reacting only after account drawdown has accumulated",
+  "policy": "Original cv_interaction selector and execution",
+  "daily_volatility_target": 0.008,
+  "lookback_completed_sessions": 20,
+  "warmup_multiplier": 0.65,
+  "minimum_multiplier": 0.25,
+  "maximum_multiplier": 1,
+  "estimator": "Population standard deviation of prior completed-session realised account return divided by that session's volatility multiplier; a risk proxy, not a counterfactual trading return",
+  "decision_clock": "Calculate once at the first observed bar of each session, using only cached prior-session equity; hold multiplier constant for that session",
+  "variants": 1,
+  "evaluation": "Actual broker replay, unchanged costs/capacity/flattening, same reused development data; both 8%/10% drawdown targets remain mandatory"
+}

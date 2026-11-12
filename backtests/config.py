@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from backtests.core.input_manifest import read_input_bytes
 
 
 def load_yaml_config(path: str | Path | None) -> dict[str, Any]:
@@ -13,7 +14,7 @@ def load_yaml_config(path: str | Path | None) -> dict[str, Any]:
     resolved = Path(path)
     if not resolved.exists():
         raise FileNotFoundError(resolved)
-    data = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
+    data = yaml.safe_load(read_input_bytes(resolved).decode("utf-8")) or {}
     if not isinstance(data, dict):
         raise ValueError(f"Config must be a mapping: {resolved}")
     validate_backtest_config(data)

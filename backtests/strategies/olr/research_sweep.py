@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from backtests.core.input_manifest import frozen_input_loader, parquet_input, read_input_bytes
+from backtests.core.shared_market_inputs import selected_intraday_paths, market_input_contract
+
 import argparse
 import json
 import math
@@ -61,10 +64,16 @@ class OLRReplayWindow:
     holdout_start: date
 
 
+def _intraday_paths(data_root, symbol, timeframe):
+    selected = selected_intraday_paths(data_root, symbol, timeframe)
+    return selected if selected is not None else sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet"))
+
+
 def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: str, symbols: list[str]) -> OLRReplayWindow:
     cache_key = stable_signature(
         {
             "data_root": str(data_root),
+            "content": fingerprint_paths(path for symbol in symbols for path in _intraday_paths(data_root, symbol, timeframe)),
             "timeframe": timeframe,
             "symbols": symbols,
             "holdout_days": int(config.get("holdout_days", DEFAULT_HOLDOUT_DAYS)),
@@ -75,8 +84,8 @@ def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: s
         earliest: date | None = None
         latest: date | None = None
         for symbol in symbols:
-            for path in sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet")):
-                frame = pd.read_parquet(path, columns=["timestamp"])
+            for path in _intraday_paths(data_root, symbol, timeframe):
+                frame = pd.read_parquet(parquet_input(path), columns=["timestamp"])
                 if frame.empty:
                     continue
                 min_date = frame["timestamp"].min().date()
@@ -85,6 +94,9 @@ def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: s
                 latest = max_date if latest is None or max_date > latest else latest
         if earliest is None or latest is None:
             raise FileNotFoundError(f"No {timeframe} parquet data found under {data_root}")
+        contract = market_input_contract()
+        if contract:
+            latest = min(latest, date.fromisoformat(contract["data_end"]))
         holdout_start = latest - timedelta(days=int(config.get("holdout_days", DEFAULT_HOLDOUT_DAYS)))
         cached = OLRReplayWindow(earliest, latest, earliest, holdout_start - timedelta(days=1), holdout_start)
         _WINDOW_CACHE[cache_key] = cached
@@ -102,17 +114,26 @@ def _resolve_replay_window(config: dict[str, Any], data_root: Path, timeframe: s
     train_end = min(train_end, cached.latest)
     if train_end < train_start:
         raise ValueError(f"OLR replay train window is empty: {train_start} > {train_end}")
-    return OLRReplayWindow(cached.earliest, cached.latest, train_start, train_end, cached.holdout_start)
+    holdout_start = (date.fromisoformat(str(config["holdout_start"]))
+                     if config.get("holdout_start") else cached.holdout_start)
+    if not config.get("use_full_available_window"):
+        train_end = min(train_end, holdout_start - timedelta(days=1))
+    if train_end < train_start:
+        raise ValueError("OLR declared training window overlaps the holdout")
+    return OLRReplayWindow(cached.earliest, cached.latest, train_start, train_end, holdout_start)
 
 
 def _load_symbol_frame(data_root: Path, symbol: str, timeframe: str, end: date) -> pd.DataFrame:
-    key = stable_signature({"data_root": str(data_root), "symbol": symbol, "timeframe": timeframe, "end": end.isoformat()})
+    paths = _intraday_paths(data_root, symbol, timeframe)
+    manifest = fingerprint_paths(paths)
+    key = stable_signature({"data_root": str(data_root), "symbol": symbol,
+        "timeframe": timeframe, "end": end.isoformat(), "content": manifest})
     cached = _FRAME_CACHE.get(key)
     if cached is not None:
         return cached
     frames: list[pd.DataFrame] = []
-    for path in sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet")):
-        frame = pd.read_parquet(path, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    for path in paths:
+        frame = pd.read_parquet(parquet_input(path), columns=["timestamp", "open", "high", "low", "close", "volume"])
         frame = frame[frame["timestamp"].dt.date <= end]
         if not frame.empty:
             frames.append(frame)
@@ -122,6 +143,8 @@ def _load_symbol_frame(data_root: Path, symbol: str, timeframe: str, end: date) 
         out = pd.concat(frames, ignore_index=True)
         out = out.drop_duplicates(subset=["timestamp"], keep="last")
         out = out.sort_values("timestamp").reset_index(drop=True)
+    if fingerprint_paths(paths) != manifest:
+        raise ValueError("OLR source changed while loading")
     _FRAME_CACHE[key] = out
     return out
 
@@ -847,6 +870,7 @@ def _stage2_experiments_for_stage1(stage1_seed: ResearchSweepResult, experiments
     return [Experiment(f"{prefix}__{experiment.name}", dict(experiment.mutations)) for experiment in experiments]
 
 
+@frozen_input_loader
 def prepare_research_sweep_dataset(
     config: dict[str, Any],
     *,
@@ -893,8 +917,12 @@ def prepare_research_sweep_dataset(
     overnight_labels = _overnight_label_cache(daily_by_symbol, symbols, trading_dates)
     daily_source = _daily_source_fingerprint(daily_root, symbols, window.train_end)
     intraday_source = _intraday_source_fingerprint(data_root, intraday_available, timeframe, window.train_start, window.train_end)
+    feature_bars = bars_by_key
+    if OLRConfig.from_mapping(raw_config, {}).require_complete_feature_prefix:
+        from strategy_common.source_quality import complete_feature_bars
+        feature_bars, _ = complete_feature_bars(bars_by_key, AFTERNOON_CUTOFF)
     sector_intraday_panel_1430 = build_sector_intraday_panel(
-        bars_by_key,
+        feature_bars,
         sector_map,
         trade_dates=trading_dates,
         cutoff=AFTERNOON_CUTOFF,
@@ -903,7 +931,8 @@ def prepare_research_sweep_dataset(
     coverage = _coverage_report(symbols, excluded, daily_by_symbol, flow_by_symbol, foreign_flow_by_symbol, institutional_flow_by_symbol, sector_map, bars_by_key, trading_dates)
     return OLRResearchSweepDataset(
         config=raw_config,
-        source_fingerprint=stable_signature([daily_source, intraday_source]),
+        source_fingerprint=stable_signature([daily_source, intraday_source,
+            {"require_complete_feature_prefix": bool(raw_config.get("require_complete_feature_prefix"))}]),
         daily_source_fingerprint=daily_source,
         intraday_source_fingerprint=intraday_source,
         data_root=data_root,
@@ -1732,14 +1761,15 @@ def _training_config(config: dict[str, Any], holdout_days: int) -> dict[str, Any
     out = dict(config)
     out["holdout_days"] = int(holdout_days)
     out["use_full_available_window"] = False
-    out.pop("end", None)
-    out.pop("holdout_start", None)
-    date_range = dict(out.get("date_range") or {})
-    date_range.pop("end", None)
-    if date_range:
-        out["date_range"] = date_range
-    else:
-        out.pop("date_range", None)
+    if out.get("corrective_study_hash"):
+        window = out.get("date_range") or {}
+        if set(window) != {"start", "end"} or not all(window.values()):
+            raise ValueError("Corrective study requires an explicit frozen training window")
+        return out
+    # Explicit caller boundaries are part of the experiment, not hints to be
+    # silently replaced by a moving split inferred from the newest market file.
+    if out.get("end") and not (out.get("date_range") or {}).get("end"):
+        out["date_range"] = {**dict(out.get("date_range") or {}), "end": out["end"]}
     return out
 
 
@@ -1788,7 +1818,7 @@ def _requested_symbols(config: dict[str, Any], data_root: Path, timeframe: str) 
             path = Path("config") / str(raw)
         if not path.exists():
             raise FileNotFoundError(f"OLR universe file not found: {raw}")
-        payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        payload = yaml.safe_load(read_input_bytes(path).decode("utf-8")) or {}
         values = (payload.get("symbols") or payload.get("universe")) if isinstance(payload, dict) else payload
         return sorted(str(symbol).zfill(6) for symbol in values)
     return sorted(path.parent.name for path in Path(data_root).glob(f"*/*_{timeframe}_*.parquet"))
@@ -2063,7 +2093,7 @@ def _load_stage1_resume_bundle(path: str | Path, *, stage1_stage2_seed_count: in
     source_path = Path(path).expanduser()
     if not source_path.exists():
         raise FileNotFoundError(f"OLR Stage 1 resume artifact not found: {source_path}")
-    payload = json.loads(source_path.read_text(encoding="utf-8"))
+    payload = json.loads(read_input_bytes(source_path).decode("utf-8"))
     if str(payload.get("strategy", "olr")).lower() != "olr":
         raise ValueError(f"Stage 1 resume artifact must be for OLR: {source_path}")
 

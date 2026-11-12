@@ -30,9 +30,35 @@ class OLREngine:
     candidate_snapshot: OLRDailySnapshot | None = None
     decisions: list[DecisionEvent] = field(default_factory=list)
 
+    def seed_capacity_history(self, bars, available_at) -> None:
+        from .core.capacity import seed_history
+        seed_history(self.state, bars, self.config, available_at)
+
+    def _require_capacity_context(self, bar) -> None:
+        if self.config.capacity_broad_auction_history:
+            receipt=self.state.meta.get('capacity_seed_receipt',{})
+            if str(receipt.get('available_at',''))[:10]!=bar.timestamp.date().isoformat():
+                raise ValueError('OLR broad capacity history requires a sourced prior-auction refresh for this session')
+
     def on_bar(self, bar: MarketBar, portfolio: OLRPortfolioView, submit: SubmitFn) -> list[DecisionEvent]:
+        if self.config.capacity_joint_allocation:
+            raise ValueError('OLR joint allocation requires an explicit completed cohort via on_bars')
         require_completed_bar(bar)
+        self._require_capacity_context(bar)
         result = step_olr_core(self.state, bar, self.config, self.candidate_snapshot, portfolio)
+        self._submit_actions(result.actions, submit)
+        self.decisions.extend(result.decisions)
+        return list(result.decisions)
+
+    def on_bars(self, bars, portfolio: OLRPortfolioView, submit: SubmitFn) -> list[DecisionEvent]:
+        from .core.allocation import step_olr_batch
+        bars = tuple(bars)
+        for bar in bars:
+            require_completed_bar(bar)
+            self._require_capacity_context(bar)
+        if not self.config.capacity_joint_allocation:
+            return [event for bar in bars for event in self.on_bar(bar, portfolio, submit)]
+        result = step_olr_batch(self.state, bars, self.config, self.candidate_snapshot, portfolio)
         self._submit_actions(result.actions, submit)
         self.decisions.extend(result.decisions)
         return list(result.decisions)
@@ -100,8 +126,10 @@ class OLROMSLiveAdapter:
         positions = await self.oms.get_all_positions()
         if account is not None:
             self.last_account_state = account
-        equity = float((account.equity if account is not None else None) or (self.last_account_state.equity if self.last_account_state else 0.0))
-        cash = float((account.buyable_cash if account is not None else None) or (self.last_account_state.buyable_cash if self.last_account_state else 0.0))
+        # A failed current account read must not authorize orders from stale
+        # buying power. A valid zero is also authoritative, not a cache miss.
+        equity = float(account.equity or 0.0) if account is not None else 0.0
+        cash = float(account.buyable_cash or 0.0) if account is not None else 0.0
         position_qty: dict[str, int] = {}
         open_notional = 0.0
         if positions:

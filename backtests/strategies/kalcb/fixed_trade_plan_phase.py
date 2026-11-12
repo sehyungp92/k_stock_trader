@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from backtests.engine.contracts import CONTRACT_VERSIONS, execution_valid
+from backtests.engine.integrity import audit_broker, receipt_matches
+from backtests.engine.evaluation_identity import request_identity
+from backtests.core.input_manifest import InputManifest, active_manifest, input_stream, read_input_bytes, manifest_method
+
 import json
 import math
 import re
@@ -114,6 +119,8 @@ class FixedCandidateBatchEvaluator:
         mutations.update(candidate.mutations or {})
         baseline_metrics = self.plugin.evaluate_mutations(current_mutations)
         metrics = self.plugin.evaluate_mutations(mutations)
+        if not self.plugin._valid_evaluation(metrics, mutations) or not self.plugin._valid_evaluation(baseline_metrics, current_mutations):
+            return ScoredCandidate(candidate.name, 0.0, rejected=True, reject_reason="execution_audit_unverified_or_failed", metrics=metrics)
         reject = reject_reason(metrics, {**HARD_REJECTS, **self.hard_rejects})
         if reject:
             return ScoredCandidate(candidate.name, 0.0, rejected=True, reject_reason=reject, metrics=metrics)
@@ -152,6 +159,12 @@ class KALCBFixedTradePlanOptimizationPlugin:
     }
 
     def __init__(self, config: dict[str, Any] | None = None, *, output_dir: Path | None = None, max_workers: int | None = 1, capability_level: str = "real_replay"):
+        path = (config or {}).get("input_manifest_path")
+        self._input_generation = InputManifest(path) if path else active_manifest()
+        self._initialize(config, output_dir=output_dir, max_workers=max_workers, capability_level=capability_level)
+
+    @manifest_method
+    def _initialize(self, config=None, *, output_dir=None, max_workers=1, capability_level="real_replay"):
         self.config = dict(config or {})
         self.config.setdefault("capability_level", capability_level)
         self.config.setdefault("allow_incompatible_baseline", True)
@@ -166,6 +179,8 @@ class KALCBFixedTradePlanOptimizationPlugin:
         self.initial_mutations = _initial_mutations_for_output(self.config, self.output_dir)
         self.initial_mutations_override = dict(self.initial_mutations)
         context_config = _replay_context_config(self.config)
+        if self._input_generation:
+            context_config = self._input_generation.remap(context_config)
         self.context = load_or_build_prepared_context(
             context_config,
             optimized_source=self.source_ref.path,
@@ -272,6 +287,8 @@ class KALCBFixedTradePlanOptimizationPlugin:
     def create_evaluate_batch(self, phase: int, cumulative_mutations: dict[str, Any], *, scoring_weights: dict[str, float] | None = None, hard_rejects: dict[str, float] | None = None):
         baseline_metrics = self.evaluate_mutations(cumulative_mutations)
         baseline_reject = reject_reason(baseline_metrics, {**HARD_REJECTS, **dict(hard_rejects or {})})
+        if not execution_valid(baseline_metrics):
+            baseline_reject = "execution_audit_unverified_or_failed"
         baseline = ScoredCandidate(
             "__baseline__",
             0.0 if baseline_reject else score_fixed(baseline_metrics, scoring_weights),
@@ -290,7 +307,8 @@ class KALCBFixedTradePlanOptimizationPlugin:
             for candidate in candidates:
                 key = _cache_key(phase, _mutation_key({**dict(current_mutations or {}), **dict(candidate.mutations or {})}), candidate.name)
                 cached = self._evaluation_cache.get(key)
-                if cached is not None:
+                requested = {**dict(current_mutations or {}), **dict(candidate.mutations or {})}
+                if cached is not None and self._valid_evaluation(cached.metrics, requested):
                     results.append(cached)
                 else:
                     missing.append(candidate)
@@ -308,10 +326,11 @@ class KALCBFixedTradePlanOptimizationPlugin:
         setattr(wrapped, "close", evaluator.close)
         return wrapped
 
+    @manifest_method
     def evaluate_mutations(self, mutations: dict[str, Any]) -> dict[str, Any]:
         key = _mutation_key(mutations)
         cached = self._metrics_cache.get(key)
-        if cached is not None:
+        if cached is not None and self._valid_evaluation(cached, mutations):
             self._last_metrics = dict(cached)
             self._last_mutation_key = key
             return dict(cached)
@@ -323,12 +342,17 @@ class KALCBFixedTradePlanOptimizationPlugin:
         self._last_mutation_key = key
         return dict(metrics)
 
+    def _valid_evaluation(self, metrics, mutations):
+        return execution_valid(metrics, expected_request=request_identity(self.config, mutations),
+            expected_mutations=stable_signature(dict(mutations or {})))
+
     def evaluate_validation_mutations(self, mutations: dict[str, Any]) -> dict[str, Any]:
         plugin = self._validation_plugin()
         metrics = plugin.evaluate_mutations(mutations)
         metrics["validation_window"] = "holdout"
         return dict(metrics)
 
+    @manifest_method
     def _validation_plugin(self) -> "KALCBFixedTradePlanOptimizationPlugin":
         with self._validation_plugin_lock:
             cached = self._validation_plugin_cache
@@ -355,13 +379,14 @@ class KALCBFixedTradePlanOptimizationPlugin:
         metrics = self.evaluate_mutations(mutations)
         audit = self._audit_fast_replay_parity(mutations, metrics)
         metrics["fast_suppression_audit"] = audit
+        metrics["parity_required"] = True
         metrics["fast_full_audit_passed"] = bool(audit.get("pass", False))
         return attach_official_metric_contract(
             metrics,
             primary_metric=OFFICIAL_PROMOTION_METRIC,
             requires_audit_pass=True,
-            audit_pass=bool(metrics.get("same_bar_fill_count", 0.0) == 0.0 and metrics.get("fast_full_audit_passed", False)),
-            audit_status="direct_shared_core_replay_train_only",
+            audit_pass=self._valid_evaluation(metrics, mutations),
+            audit_status=metrics.get("audit_status", "unverified"),
             official_replay_pass=True,
             execution_contract=build_execution_contract(self, metrics, extra={"phase_auto_version": FIXED_PHASE_AUTO_VERSION}),
         )
@@ -394,9 +419,10 @@ class KALCBFixedTradePlanOptimizationPlugin:
                 "trade_management": "Phases 4 and 5 test conditional tail capture and low-relvol MFE-floor containment, not recycled global giveback exits.",
                 "exit_mechanism": "Static target sweeps are replaced by cohort-conditional targets and route-mode-scoped MFE floors.",
                 "risk": "Phase 2 tests drawdown-contained notional activation for high gap-relvol trades; phase 6 validates only near-miss stacks.",
-                "promotion": "Optimization excludes holdout for training but validation-gates accepted mutations on the configured holdout window before promotion.",
+                "promotion": ("Configured validation gates apply to accepted mutations." if self.validation_gate_enabled
+                              else "Selection uses training only; any previously consumed holdout is a regression diagnostic."),
             },
-            overall_verdict="KALCB source/frontier phase-auto completed on the training window only; validate finalists on untouched holdout before live use.",
+            overall_verdict="KALCB source/frontier phase-auto completed on the training window; independent forward evidence and paper/live qualification remain separate.",
         )
 
     def write_full_diagnostics(
@@ -597,6 +623,7 @@ class KALCBFixedTradePlanOptimizationPlugin:
             return [Experiment(name, mutations) for name, mutations in _tail_capture_rescue_candidates()]
         return []
 
+    @manifest_method
     def _context_for_mutations(self, mutations: dict[str, Any]):
         source_ref = _source_ref_for_mutations(mutations, self.source_ref)
         source_context = self._source_context_for_ref(source_ref)
@@ -770,7 +797,9 @@ class KALCBFixedTradePlanOptimizationPlugin:
         except Exception:
             return
 
+    @manifest_method
     def _evaluate(self, mutations: dict[str, Any]) -> FixedEvaluation:
+        from backtests.engine.capacity import capacity_from_config
         started = time.monotonic()
         context = self._context_for_mutations(mutations)
         initial_equity = float(context.compiled_replay.initial_equity)
@@ -785,14 +814,19 @@ class KALCBFixedTradePlanOptimizationPlugin:
             close_open_positions=False,
             bars_are_ordered=True,
             buying_power_leverage=max(float(plan_cfg.intraday_leverage), 1.0),
+            capacity_policy=capacity_from_config(self.config),
+            candidate_scoped=True,
         )
         replay.decisions.extend(adapter._sync_new_fills(replay.broker))
+        replay.broker.qualification_day_dispositions = {"KALCB": {
+            day.isoformat(): "builder_verified_empty" for day in context.train_dates
+            if day not in context.compiled_replay.snapshots and context.selection_counts.get(day, 0) == 0}}
         adapter.finalize_frontier_shadow(context.compiled_replay.bars[-1] if context.compiled_replay.bars else None)
         trades = _collapse_exit_legs(replay.trades)
         outcomes = _broker_trades_to_slot_outcomes(trades, plan_cfg)
         metrics = summarize_outcomes(outcomes, session_dates=context.train_dates, selection_counts=context.selection_counts)
         _add_compiled_candidate_pool_metrics(metrics, context.compiled_replay, context.train_dates, len(outcomes))
-        broker_metrics = compute_trade_metrics(trades, replay.equity_curve, initial_equity=initial_equity)
+        broker_metrics = compute_trade_metrics(trades, replay.equity_curve, timestamps=replay.timestamps, mark_coverage=replay.broker.mark_coverage or None, initial_equity=initial_equity)
         final_equity = float(replay.equity_curve[-1]) if replay.equity_curve else initial_equity
         official_mtm_net = final_equity / max(initial_equity, 1.0) - 1.0
         metrics.update(
@@ -808,8 +842,8 @@ class KALCBFixedTradePlanOptimizationPlugin:
                 "broker_mfe_capture": float(broker_metrics.get("mfe_capture", 0.0)),
                 "broker_trade_count": float(broker_metrics.get("total_trades", 0.0)),
                 "same_bar_fill_count": float(replay.broker.same_bar_fill_violations),
-                "forced_replay_close_count": 0.0,
-                "rejected_order_count": 0.0,
+                "forced_replay_close_count": float(replay.broker.same_day_forced_exit_count),
+                "rejected_order_count": float(len(replay.broker.rejected_orders)),
                 "mark_to_market_equity_points": float(len(replay.equity_curve)),
                 "broker_net_return_pct_basis": "closed_trade_net_pnl_over_initial_equity",
                 "net_return_pct_basis": "closed_trade_net_pnl_over_initial_equity",
@@ -833,8 +867,16 @@ class KALCBFixedTradePlanOptimizationPlugin:
         _add_return_divergence_metrics(metrics)
         fold_rows = _fold_metrics_from_outcomes_for_dates(outcomes, context.train_dates, context.folds, context.selection_counts, initial_equity=initial_equity)
         _add_fold_metrics(metrics, fold_rows)
+        metrics["evaluation_request"] = request_identity(self.config, mutations)
+        metrics["evaluation_mutations"] = stable_signature(dict(mutations or {}))
+        metrics.update(audit_broker(replay.broker, identity={"request": metrics["evaluation_request"],
+            "configuration": dict(self.config),
+            "input_manifest": self._input_generation.receipt() if self._input_generation else None,
+            "mutations": metrics["evaluation_mutations"], "config": repr(plan_cfg),
+            "source_fingerprint": context.compiled_replay.source_fingerprint,
+            "candidate_snapshot_hash": context.compiled_replay.candidate_artifact_hash}))
         metrics["score_components"] = {name: _scaled_component(name, metrics) for name in SCORE_COMPONENTS}
-        metrics["immutable_score"] = score_fixed(metrics)
+        metrics["immutable_score"] = score_fixed(metrics) if execution_valid(metrics) else None
         metrics["holdout_excluded"] = True
         metrics["training_window_start"] = context.train_dates[0].isoformat() if context.train_dates else ""
         metrics["training_window_end"] = context.train_dates[-1].isoformat() if context.train_dates else ""
@@ -935,7 +977,7 @@ def should_use_fixed_trade_plan_phase(config: dict[str, Any] | None = None, outp
     if not optimized.exists():
         return False
     try:
-        data = json.loads(optimized.read_text(encoding="utf-8"))
+        data = json.loads(read_input_bytes(optimized))
     except json.JSONDecodeError:
         return False
     contract = data.get("execution_contract") if isinstance(data, dict) else {}
@@ -2022,6 +2064,7 @@ def _replay_context_config(config: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "validation_gate_enabled",
         "skip_initial_baseline_eval",
+        "initial_mutations",
     ):
         out.pop(key, None)
     return out
@@ -2220,7 +2263,7 @@ def _resolve_fixed_candidate_source(config: dict[str, Any], output_dir: Path) ->
     if previous is not None:
         extract = previous / "source_artifacts" / "train_rank1_extract.json"
         if extract.exists():
-            data = json.loads(extract.read_text(encoding="utf-8"))
+            data = json.loads(read_input_bytes(extract))
             source = dict((data.get("artifact_summary") or {}).get("fixed_candidate_source") or {})
             if source.get("source_path"):
                 return FixedCandidateSourceRef(
@@ -2261,7 +2304,7 @@ def _read_json_object(path: Path) -> dict[str, Any]:
     if not Path(path).exists():
         return {}
     try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        data = json.loads(read_input_bytes(path))
     except json.JSONDecodeError:
         return {}
     return data if isinstance(data, dict) else {}
@@ -2269,9 +2312,9 @@ def _read_json_object(path: Path) -> dict[str, Any]:
 
 def _read_jsonl_objects(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    with Path(path).open("r", encoding="utf-8") as handle:
+    with input_stream(path) as handle:
         for line in handle:
-            text = line.strip()
+            text = line.decode("utf-8").strip()
             if not text:
                 continue
             try:
@@ -2294,6 +2337,10 @@ def _nested_mapping(payload: dict[str, Any], keys: tuple[str, ...]) -> dict[str,
 
 def _resolve_existing_source_path(source_path: str) -> str:
     path = Path(source_path)
+    if active_manifest():
+        path = active_manifest().resolve(path)
+        if not active_manifest().digest(path):
+            raise ValueError(f"Unmanifested candidate source: {source_path}")
     if path.exists():
         return str(path)
     archive_root = Path("data/backtests/output/kalcb/_archive")
@@ -2317,7 +2364,7 @@ def _load_previous_mutations(output_dir: Path) -> dict[str, Any]:
     path = previous / "optimized_config.json"
     if not path.exists():
         return {}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(read_input_bytes(path))
     return dict(data.get("mutations") or {})
 
 
@@ -2382,7 +2429,7 @@ def _cache_key(phase: int, mutation_key: str, name: str) -> str:
 
 
 def _mutation_key(mutations: dict[str, Any]) -> str:
-    return json.dumps(_normalize_mutations(mutations), sort_keys=True, separators=(",", ":"), default=str)
+    return json.dumps([CONTRACT_VERSIONS, _normalize_mutations(mutations)], sort_keys=True, separators=(",", ":"), default=str)
 
 
 def _clip(value: float, low: float = 0.0, high: float = 1.0) -> float:
@@ -2473,7 +2520,7 @@ def _full_round_diagnostics_text(
         "Official path: KALCBReplayAdapter -> strategy_kalcb.core.step_kalcb_core() -> SimBroker.",
         "Research candidate generation remains upstream; trading decisions, fills, costs, sizing, exits, and metrics are shared-core/broker-owned.",
         "",
-        f"Baseline: broker_net={_pct(baseline.get('broker_net_return_pct'))}, MTM={_pct(baseline.get('official_mtm_net_return_pct'))}, DD={_pct(baseline.get('broker_max_drawdown_pct'))}, trades={_num(baseline.get('trade_count'), 0)}, audit_pass=True",
+        f"Baseline: broker_net={_pct(baseline.get('broker_net_return_pct'))}, MTM={_pct(baseline.get('official_mtm_net_return_pct'))}, DD={_pct(baseline.get('broker_max_drawdown_pct'))}, trades={_num(baseline.get('trade_count'), 0)}, audit_pass={execution_valid(baseline)}",
         f"Final:    broker_net={_pct(final.get('broker_net_return_pct'))}, MTM={_pct(final.get('official_mtm_net_return_pct'))}, DD={_pct(final.get('broker_max_drawdown_pct'))}, trades={_num(final.get('trade_count'), 0)}, audit_pass={bool(final.get('audit_pass'))}",
         f"Score:    immutable={_num(final.get('immutable_score'), 3)}; components={len(final.get('score_components') or {})}/7; fast/full audit={audit.get('status', 'not_run')}",
         "",
@@ -3378,7 +3425,7 @@ def _paper_live_parity_requirements(
         "status": "pending_paper_live_evidence",
         "required_before_promotion": True,
         "validation_scope": "end_of_round_backtest_contract_plus_required_paper_live_hash_match",
-        "training_replay_audit_pass": bool((final.get("fast_suppression_audit") or {}).get("pass", False)),
+        "training_replay_audit_pass": execution_valid(final) and bool((final.get("fast_suppression_audit") or {}).get("pass", False)),
         "expected_contract": expected_contract,
         "required_strategy_action_fields": strategy_action_fields,
         "backtest_hash_baselines": {

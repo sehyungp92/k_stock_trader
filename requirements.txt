@@ -10,6 +10,7 @@ loguru>=0.7.0
 pyyaml>=6.0
 websockets>=11.0
 aiohttp>=3.9.0
+filelock>=3.13.0
 
 # OMS Server
 fastapi>=0.100.0

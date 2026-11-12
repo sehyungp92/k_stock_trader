@@ -11,6 +11,10 @@ import asyncio
 import inspect
 import time
 import uuid
+import copy
+import hashlib
+import math
+from .execution_commit import canonical, execution_signature, intent_signature
 from zoneinfo import ZoneInfo
 from loguru import logger
 
@@ -125,7 +129,10 @@ def _incremental_fill_price(
         return float(broker_avg_price)
     new_total = max(int(new_filled_qty or 0), previous_qty + fill_delta)
     incremental_notional = float(broker_avg_price) * new_total - previous_avg * previous_qty
-    return max(incremental_notional / max(fill_delta, 1), 0.0)
+    price = incremental_notional / fill_delta
+    if not math.isfinite(price) or price <= 0:
+        raise ValueError("Cumulative execution notional does not establish a positive incremental fill price")
+    return price
 
 
 def _working_order_stop_metadata(wo: WorkingOrder, intent: Optional[Intent] = None) -> tuple[Optional[float], Optional[float]]:
@@ -312,6 +319,8 @@ class OMSCore:
         event_emitter: Optional[object] = None,
         sector_map: Optional[Mapping[str, str]] = None,
         require_persistence: bool = False,
+        execution_feedback=None,
+        require_reconciliation: bool = False,
     ):
         self.state = StateStore()
         self.risk = RiskGateway(
@@ -325,7 +334,18 @@ class OMSCore:
         self.adapter = KISExecutionAdapter(kis_api)
         self.persistence = persistence
         self.event_emitter = event_emitter
+        self.execution_feedback = execution_feedback
+        self._pending_execution_events = {}
+        self.execution_recovery_required = False
+        self._intent_effects = {}
         self.require_persistence = require_persistence
+        # start() enables this for every running OMS. The explicit flag also
+        # protects service construction before startup has completed.
+        self.require_reconciliation = require_reconciliation
+        self._reconciliation_success_at: Optional[float] = None
+        self._reconciliation_error = "startup_reconciliation_required"
+        self._reconciliation_running = False
+        self._cash_observed_at: Optional[float] = None
 
         self._idem = idempotency_store or InMemoryIdempotencyStore()
         self._reconcile_task: Optional[asyncio.Task] = None
@@ -361,6 +381,22 @@ class OMSCore:
     async def submit_intent(self, intent: Intent) -> IntentResult:
         """Submit intent for processing. Main entry point for strategies."""
         oms_received_at = time.time()
+        if str(intent.idempotency_key).startswith("ACTION:"):
+            signature = intent_signature(intent)
+            prior = self._intent_effects.get(intent.idempotency_key)
+            if prior is not None and prior != signature:
+                return IntentResult(intent.intent_id, IntentStatus.REJECTED, "Action identity conflict")
+            verifier = self._persistence_callable("verify_action_identity")
+            try:
+                if callable(verifier):
+                    await verifier(intent)
+                elif self.require_persistence:
+                    raise RuntimeError("Durable action identity verification unavailable")
+            except ValueError as exc:
+                return IntentResult(intent.intent_id, IntentStatus.REJECTED, str(exc))
+            except Exception as exc:
+                return IntentResult(intent.intent_id, IntentStatus.DEFERRED, str(exc))
+            self._intent_effects[intent.idempotency_key] = signature
 
         # 1. Idempotency check (outside lock — read-only)
         cached = self._idem.get(intent.idempotency_key)
@@ -381,6 +417,11 @@ class OMSCore:
                 logger.debug(f"Duplicate intent after lock: {intent.idempotency_key}")
                 self._emit_intent(intent, cached, phase="duplicate")
                 return cached
+            reason = self._entry_readiness_failure(intent)
+            if reason:
+                # Do not consume the action identity: the same intent may retry
+                # after recovery, without creating another broker submission.
+                return IntentResult(intent.intent_id, IntentStatus.DEFERRED, reason)
             reserved_result = await self._reserve_idempotency(intent)
             if reserved_result is not None:
                 if reserved_result.status in {IntentStatus.EXECUTED, IntentStatus.ACCEPTED}:
@@ -407,6 +448,13 @@ class OMSCore:
 
     async def _process_intent(self, intent: Intent, oms_received_at: float = 0.0) -> IntentResult:
         """Process intent under per-symbol lock."""
+
+        revision = intent.metadata.get("execution_feedback_sequence")
+        latest = self._persistence_callable("latest_execution_sequence")
+        if revision is not None and callable(latest):
+            if await latest(intent.strategy_id, intent.symbol) > int(revision):
+                return await self._finalize(intent, IntentStatus.REJECTED,
+                    "Action superseded by a newer canonical execution; consume feedback before replanning")
 
         # 1. Dispatch operational intents
         if intent.intent_type == IntentType.CANCEL_ORDERS:
@@ -716,6 +764,16 @@ class OMSCore:
                 if inspect.isawaitable(maybe):
                     await maybe
 
+        # Recheck after price lookup and persistence awaits. Reconciliation may
+        # have failed while this intent was being planned.
+        reason = self._entry_readiness_failure(intent)
+        if plan.side == "BUY" and reason:
+            if sector_reserved:
+                self.risk.unreserve_sector(plan.symbol, plan.qty, order_price)
+            self.state.release_entry_lock(intent.symbol, intent.strategy_id)
+            return await self._finalize(intent, IntentStatus.DEFERRED, reason,
+                                        oms_received_at=oms_received_at)
+
         # Execute
         try:
             exec_result = await self.adapter.submit_order(
@@ -817,7 +875,93 @@ class OMSCore:
     # Fill handling
     # ------------------------------------------------------------------
 
-    async def _apply_fill(
+    async def _apply_fill(self, wo, fill_qty, intent=None, *, inferred=False, fill_price=None,
+                          cumulative_qty=None, execution_id=None, execution_timestamp=None,
+                          commission=None, tax=None):
+        """Commit execution effects before exposing them to consumers or memory."""
+        commit = self._persistence_callable("commit_execution")
+        if not callable(commit):
+            if self.require_persistence:
+                raise RuntimeError("Atomic execution persistence is required")
+            # In-memory/test adapters retain the existing contract. Roll back local
+            # projections if a test persistence adapter raises before publication.
+            positions = copy.deepcopy(self.state._positions)
+            pnl = self.state.daily_realized_pnl
+            strategy_pnl = dict(self.state.strategy_realized_pnl)
+            sector = copy.deepcopy(self.risk._sector_exposure)
+            old_price = wo.price
+            before = wo.filled_qty
+            try:
+                await self._apply_fill_legacy(wo, fill_qty, intent, inferred=inferred, fill_price=fill_price)
+            except Exception:
+                self.state._positions = positions
+                self.state.daily_realized_pnl = pnl
+                self.state.strategy_realized_pnl = strategy_pnl
+                self.risk._sector_exposure = sector
+                wo.price = old_price
+                raise
+            wo.filled_qty = before + fill_qty
+            return
+        after = int(cumulative_qty if cumulative_qty is not None else wo.filled_qty + fill_qty)
+        before = after - int(fill_qty)
+        account = str(getattr(self.persistence, "oms_id", "primary"))
+        order_date = wo.created_at.date().isoformat()
+        identity = hashlib.sha256(canonical([account, wo.strategy_id, order_date, wo.order_id,
+            execution_id or f"cumulative:{before}:{after}"]).encode()).hexdigest()
+        price = float(fill_price if fill_price is not None and fill_price > 0 else wo.price or 0)
+        timestamp = execution_timestamp or datetime.now(_KST)
+        detail = {"execution_id": identity, "kis_exec_id": execution_id or identity,
+            "execution_identity_basis": "broker" if execution_id else "cumulative_delta",
+            "account_id": account, "order_date": order_date, "filled_qty_before": before,
+            "filled_qty_after": after, "order_qty": wo.qty, "commission": commission, "tax": tax,
+            "fill_ts": timestamp.isoformat(), "fill_price": price,
+            "timestamp_provenance": "broker_execution" if execution_timestamp is not None else "oms_observation",
+            "fill_price_observed": bool(fill_price is not None and fill_price > 0 and not inferred),
+            "price_provenance": "broker_cumulative_vwap_delta" if fill_price is not None and not inferred else "inferred",
+            "intent_id": wo.intent_id, "provisional_order_ref": wo.submit_ref or ""}
+        event = {"kind": "fill", "order_id": wo.order_id, "symbol": wo.symbol, "side": wo.side,
+            "qty": int(fill_qty), "price": price, "timestamp": timestamp.isoformat(), "reason": "oms_execution",
+            "metadata": {**(dict(intent.metadata) if intent else {}), **detail}}
+        previous = self._pending_execution_events.get(identity)
+        if previous and execution_signature(previous) != execution_signature(event):
+            raise ValueError("Pending execution identity collision")
+        event = self._pending_execution_events.setdefault(identity, event)
+        soft, hard = _working_order_stop_metadata(wo, intent)
+        try:
+            result = await commit(wo, event, stop_price=(hard or soft) if wo.side == "BUY" else None,
+                                  stop_mode=self._default_stop_mode(wo.symbol))
+        except Exception:
+            self.execution_recovery_required = True
+            self.risk.halt_new_entries = True
+            raise
+        committed = result["event"]
+        meta = committed["metadata"]
+        if wo.filled_qty < int(meta["filled_qty_after"]):
+            allocation = meta["new_allocation"]
+            pos = self.state.get_position(wo.symbol)
+            pos.allocations[wo.strategy_id] = StrategyAllocation(
+                strategy_id=wo.strategy_id, qty=int(allocation["qty"]), cost_basis=float(allocation["cost_basis"]),
+                entry_ts=datetime.fromisoformat(allocation["entry_ts"]) if allocation.get("entry_ts") else None,
+                soft_stop_px=allocation.get("soft_stop_px"))
+            if wo.side == "BUY":
+                self.risk.on_sector_fill(wo.symbol, committed["qty"], committed["price"])
+                if hard is not None:
+                    pos.hard_stop_px = hard
+            else:
+                self.risk.on_sector_close(wo.symbol, committed["qty"], committed["price"])
+                self.state.record_realized_pnl(float(meta["realized_pnl"]), strategy_id=wo.strategy_id)
+            old_qty = wo.filled_qty
+            wo.price = (wo.price * old_qty + committed["price"] * committed["qty"]) / int(meta["filled_qty_after"])
+            wo.filled_qty = int(meta["filled_qty_after"])
+            self._emit_fill(wo, committed["qty"], intent=intent, inferred=inferred,
+                            payload={**meta, "canonical_committed": True})
+        self._pending_execution_events.pop(identity, None)
+        self.execution_recovery_required = bool(self._pending_execution_events)
+        if wo.side == "BUY" and self._durable_stop_required() and (not (hard or soft) or self._default_stop_mode(wo.symbol) == "SYNTHETIC_ONLY"):
+            self.risk.halt_new_entries = True
+            self._set_stop_protection_status("error", last_error="Committed fill requires protection reconciliation", source="durable_stop")
+
+    async def _apply_fill_legacy(
         self,
         wo: WorkingOrder,
         fill_qty: int,
@@ -831,7 +975,7 @@ class OMSCore:
         if applied_price > 0:
             wo.price = applied_price
         qty_delta = fill_qty if wo.side == "BUY" else -fill_qty
-        fill_ts = datetime.now()
+        fill_ts = datetime.now(_KST)
         exec_id = f"{wo.order_id}:{wo.filled_qty + fill_qty}"
         resolved_intent_id = intent.intent_id if intent else wo.intent_id
         before_pos = self.state.get_position(wo.symbol)
@@ -908,32 +1052,6 @@ class OMSCore:
             self.risk.on_sector_close(wo.symbol, fill_qty, applied_price)
         after_pos = self.state.get_position(wo.symbol)
         after_alloc = _allocation_payload(wo.symbol, after_pos.allocations.get(wo.strategy_id))
-        self._emit_fill(
-            wo,
-            fill_qty,
-            intent=intent,
-            inferred=inferred,
-            payload={
-                "kis_exec_id": exec_id,
-                "fill_ts": fill_ts.isoformat(),
-                "filled_qty_before": wo.filled_qty,
-                "filled_qty_after": wo.filled_qty + fill_qty,
-                "order_qty": wo.qty,
-                "commission": None,
-                "tax": None,
-                "fill_price": applied_price,
-                "previous_allocation": before_alloc,
-                "new_allocation": after_alloc,
-                "realized_pnl": fill_realized_pnl,
-            },
-        )
-        self._emit_position_snapshot("fill_applied")
-        self._emit_allocation_snapshot("fill_applied")
-        self._emit_portfolio_snapshot("fill_applied")
-
-        # Note: real_qty updated from broker position sync in _reconcile to avoid double-credit
-        logger.info(f"Fill applied: {wo.symbol} {wo.side} {fill_qty} for {wo.strategy_id}")
-
         # Persist fill and allocation
         if self.persistence:
             await self.persistence.record_fill(
@@ -979,6 +1097,34 @@ class OMSCore:
                         realized_pnl=fill_realized_pnl,
                     )
 
+        self._emit_fill(
+            wo,
+            fill_qty,
+            intent=intent,
+            inferred=inferred,
+            payload={
+                "kis_exec_id": exec_id,
+                "fill_ts": fill_ts.isoformat(),
+                "filled_qty_before": wo.filled_qty,
+                "filled_qty_after": wo.filled_qty + fill_qty,
+                "order_qty": wo.qty,
+                "commission": None,
+                "tax": None,
+                "fill_price": applied_price,
+                "fill_price_observed": bool(fill_price is not None and fill_price > 0),
+                "previous_allocation": before_alloc,
+                "new_allocation": after_alloc,
+                "realized_pnl": fill_realized_pnl,
+            },
+        )
+        self._emit_position_snapshot("fill_applied")
+        self._emit_allocation_snapshot("fill_applied")
+        self._emit_portfolio_snapshot("fill_applied")
+
+        # Note: real_qty updated from broker position sync in _reconcile to avoid double-credit
+        logger.info(f"Fill applied: {wo.symbol} {wo.side} {fill_qty} for {wo.strategy_id}")
+
+
     def _remaining_qty(self, wo: WorkingOrder) -> int:
         """Get remaining unfilled quantity for a working order."""
         return max(wo.qty - wo.filled_qty, 0)
@@ -1001,6 +1147,14 @@ class OMSCore:
         payload: Optional[Dict] = None,
     ) -> None:
         """Finalize a working order and persist its terminal state."""
+        atomic_transition = self._persistence_callable("commit_order_transition")
+        if callable(atomic_transition):
+            try:
+                await atomic_transition(wo, final_status, event_type, payload)
+            except Exception:
+                self.execution_recovery_required = True
+                self.risk.halt_new_entries = True
+                raise
         wo.status = final_status
         wo.updated_at = datetime.now()
         if final_status in (OrderStatus.CANCELLED, OrderStatus.REJECTED, OrderStatus.EXPIRED):
@@ -1045,7 +1199,7 @@ class OMSCore:
                 "reason": dict(payload or {}).get("reason", event_type),
             },
         )
-        if self.persistence:
+        if self.persistence and not callable(atomic_transition):
             await self.persistence.record_order_event(
                 event_type,
                 order_id=wo.order_id,
@@ -1684,16 +1838,55 @@ class OMSCore:
             Empty dict if broker query failed (sync skipped).
         """
         orders_result = await self.adapter.get_orders()
-        if not orders_result.ok:
+        history_reader = getattr(self.adapter, "get_execution_orders", None)
+        if self.require_reconciliation and not orders_result.ok:
+            raise RuntimeError("broker_working_orders_query_failed")
+        has_history = getattr(self.adapter, "supports_execution_history", False) is True and inspect.iscoroutinefunction(history_reader)
+        if not orders_result.ok and not has_history:
             logger.warning(f"Skipping order sync: broker query failed ({orders_result.error_message})")
             return {}
 
         broker_by_id = {bo.order_id: bo for bo in orders_result.data}
+        if self.require_reconciliation:
+            tracked_ids = {wo.order_id for wo in self.state.get_working_orders()}
+            if any(bo.order_id not in tracked_ids and bo.qty > bo.filled_qty
+                   for bo in orders_result.data):
+                raise RuntimeError("unowned_broker_working_order_requires_reconciliation")
+
+        execution_orders = None
+        pending_orders = [wo for pos in self.state.get_all_positions().values() for wo in pos.working_orders]
+        if pending_orders and has_history:
+            start = min(wo.created_at.date() for wo in pending_orders)
+            packet = await history_reader(start.strftime("%Y%m%d"), datetime.now(_KST).strftime("%Y%m%d"))
+            if not packet.ok:
+                self.execution_recovery_required = True
+                self.risk.halt_new_entries = True
+                raise RuntimeError("Broker execution history is required before reconciliation")
+            execution_orders = {(bo.order_date, bo.order_id): bo for bo in packet.data}
 
         for symbol, pos in self.state.get_all_positions().items():
             async with self._symbol_locks[symbol]:
                 for wo in list(pos.working_orders):
+                    for event in list(self._pending_execution_events.values()):
+                        detail = event["metadata"]
+                        if event["order_id"] != wo.order_id or detail["order_date"] != wo.created_at.date().isoformat():
+                            continue
+                        await self._apply_fill(wo, int(event["qty"]), fill_price=float(event["price"]),
+                            cumulative_qty=int(detail["filled_qty_after"]),
+                            execution_id=detail["kis_exec_id"] if detail["execution_identity_basis"] == "broker" else None,
+                            execution_timestamp=datetime.fromisoformat(event["timestamp"]),
+                            inferred=detail["price_provenance"] == "inferred",
+                            commission=detail.get("commission"), tax=detail.get("tax"))
                     broker = broker_by_id.get(wo.order_id)
+                    if execution_orders is not None:
+                        observed = execution_orders.get((wo.created_at.strftime("%Y%m%d"), wo.order_id))
+                        if observed is None:
+                            self.execution_recovery_required = True
+                            self.risk.halt_new_entries = True
+                            raise RuntimeError("Working order is absent from complete execution history")
+                        if (observed.symbol, observed.side, observed.qty) != (wo.symbol, wo.side, wo.qty):
+                            raise ValueError("Broker execution history conflicts with persisted order")
+                        broker = observed
                     prev_status = wo.status
 
                     if broker:
@@ -1703,10 +1896,17 @@ class OMSCore:
                         wo.missing_from_broker_count = 0
                         # Still working — detect partial fills via filled_qty delta
                         new_filled = broker.filled_qty
+                        if new_filled < wo.filled_qty:
+                            raise ValueError("Broker cumulative execution quantity moved backwards")
                         fill_delta = new_filled - wo.filled_qty
                         if fill_delta > 0:
                             fill_price = _incremental_fill_price(wo, new_filled, fill_delta, broker.price)
-                            await self._apply_fill(wo, fill_delta, fill_price=fill_price)
+                            observed_price = getattr(broker, "execution_price_observed", False) is True
+                            if self.require_persistence and not observed_price:
+                                self.execution_recovery_required = True
+                                self.risk.halt_new_entries = True
+                                raise RuntimeError("Observed execution price is required; submitted order price is insufficient")
+                            await self._apply_fill(wo, fill_delta, fill_price=fill_price, inferred=not observed_price)
                             if broker.price and broker.price > 0:
                                 wo.price = broker.price
                             # Record partial fill event
@@ -1723,6 +1923,10 @@ class OMSCore:
                                     status_before=prev_status.name, status_after="PARTIAL",
                                 )
                         wo.filled_qty = new_filled
+                        if getattr(broker, "status", "") == "CANCELLED" and new_filled < wo.qty:
+                            await self._finalize_working_order(wo, OrderStatus.CANCELLED, prev_status, "CANCELLED",
+                                payload={"filled_qty": new_filled, "order_qty": wo.qty, "source": "broker_execution_history"})
+                            continue
                         if new_filled >= wo.qty:
                             await self._finalize_working_order(
                                 wo,
@@ -1773,6 +1977,13 @@ class OMSCore:
 
     async def _reconcile_missing_working_orders(self, position_deltas: Dict[str, int]) -> None:
         """Infer missing-order terminal states from broker position deltas."""
+        if self._pending_execution_events:
+            raise RuntimeError("Pending observed executions must commit before allocation inference")
+        if self.require_persistence and any(wo.missing_from_broker_count > 0
+                for pos in self.state.get_all_positions().values() for wo in pos.working_orders):
+            self.execution_recovery_required = True
+            self.risk.halt_new_entries = True
+            raise RuntimeError("Missing broker orders require execution history, not allocation inference")
         for symbol, pos in self.state.get_all_positions().items():
             missing_orders = [wo for wo in list(pos.working_orders) if wo.missing_from_broker_count > 0]
             if not missing_orders:
@@ -1793,7 +2004,6 @@ class OMSCore:
                             f"{wo.symbol} {wo.side} +{inferred_fill}"
                         )
                         await self._apply_fill(wo, inferred_fill, inferred=True)
-                        wo.filled_qty += inferred_fill
                         self._emit_reconciliation(
                             "INFERRED_FILL",
                             symbol=wo.symbol,
@@ -1959,7 +2169,64 @@ class OMSCore:
                             },
                         )
 
+    def reconciliation_health_payload(self) -> dict:
+        age = (time.monotonic() - self._reconciliation_success_at
+               if self._reconciliation_success_at is not None else None)
+        reason = self._reconciliation_error
+        if not reason and (age is None or age > 60):
+            reason = "broker_reconciliation_stale"
+        if self._reconciliation_running:
+            reason = "broker_reconciliation_in_progress"
+        if self.execution_recovery_required:
+            reason = "execution_recovery_required"
+        if self.risk.safe_mode or self.risk.halt_new_entries:
+            reason = "risk_halt_requires_recovery"
+        if any(p.frozen or p.get_allocation(UNKNOWN_STRATEGY) > 0
+               for p in self.state.get_all_positions().values()):
+            reason = "broker_allocation_reconciliation_required"
+        for pos in self.state.get_all_positions().values():
+            if pos.total_allocated() != pos.real_qty:
+                reason = "broker_allocation_quantity_mismatch"
+            elif pos.real_qty > 0:
+                costs = [(a.qty, float(a.cost_basis)) for a in pos.allocations.values() if a.qty > 0]
+                if (not math.isfinite(float(pos.avg_price)) or pos.avg_price <= 0
+                        or any(not math.isfinite(cost) or cost <= 0 for _, cost in costs)
+                        or abs(sum(qty * cost for qty, cost in costs) / pos.real_qty - pos.avg_price) > 1):
+                    reason = "broker_allocation_cost_basis_mismatch"
+        return {"broker_reconciliation_ready": not bool(reason),
+                "broker_reconciliation_age_sec": age,
+                "broker_reconciliation_reason": reason}
+
+    def _entry_readiness_failure(self, intent: Intent) -> str:
+        if not self.require_reconciliation:
+            return ""
+        increases = intent.intent_type == IntentType.ENTER
+        if intent.intent_type == IntentType.SET_TARGET:
+            increases = (intent.target_qty or 0) > self.state.get_position(
+                intent.symbol).get_allocation(intent.strategy_id)
+        if not increases:
+            return ""
+        health = self.reconciliation_health_payload()
+        return ("New entries deferred: " + health["broker_reconciliation_reason"]
+                if not health["broker_reconciliation_ready"] else "")
+
     async def _reconcile(self, cycle_count: int = 0):
+        observed_at = time.monotonic()
+        self._reconciliation_running = True
+        try:
+            await self._reconcile_once(cycle_count)
+        except BaseException as exc:
+            self._reconciliation_error = "broker_reconciliation_failed:" + type(exc).__name__
+            raise
+        else:
+            # Conservatively age the observations from the start of the cycle;
+            # slow persistence must not make old broker data appear fresh.
+            self._reconciliation_success_at = observed_at
+            self._reconciliation_error = ""
+        finally:
+            self._reconciliation_running = False
+
+    async def _reconcile_once(self, cycle_count: int = 0):
         """Full reconciliation cycle: orders → timeouts → positions → drift → account.
 
         Args:
@@ -1975,6 +2242,10 @@ class OMSCore:
         # 3. Get positions + equity from a single API call (eliminates duplicate)
         positions_result, equity = await self.adapter.get_balance_snapshot()
         positions_ok = positions_result.ok
+        if self.require_reconciliation and (
+            not positions_ok or equity is None or not math.isfinite(float(equity)) or equity < 0
+        ):
+            raise RuntimeError("broker_balance_query_failed_or_invalid")
         broker_positions = positions_result.data if positions_ok else []
 
         if not positions_ok:
@@ -2039,10 +2310,18 @@ class OMSCore:
             self._emit_portfolio_snapshot("reconcile")
 
         # 5. Update buyable cash (only every 6th cycle — ~30s at 5s interval)
-        if cycle_count % 6 == 0:
+        cash_due = (self._cash_observed_at is None
+                    or time.monotonic() - self._cash_observed_at >= 30)
+        if (cash_due if self.require_reconciliation else cycle_count % 6 == 0):
             buyable = await self.adapter.get_buyable_cash()
+            if self.require_reconciliation and (
+                buyable is None or not math.isfinite(float(buyable)) or buyable < 0
+            ):
+                self._cash_observed_at = None
+                raise RuntimeError("broker_buying_power_query_failed_or_invalid")
             if buyable is not None:
                 self.state.buyable_cash = buyable
+                self._cash_observed_at = time.monotonic()
 
         # 6. Update daily PnL from broker positions
         prices = {bp.symbol: bp.current_price for bp in broker_positions}
@@ -2142,6 +2421,15 @@ class OMSCore:
         for symbol, pos in self.state.get_all_positions().items():
             drift = pos.allocation_drift()
             unknown_qty = pos.get_allocation(UNKNOWN_STRATEGY)
+
+            if self.require_persistence and abs(drift) > DRIFT_TOLERANCE and not pos.has_working_orders():
+                # Canonical accounting cannot be repaired by silently clearing
+                # or resizing an allocation without a matching execution.
+                pos.frozen = True
+                self.execution_recovery_required = True
+                self.risk.halt_new_entries = True
+                logger.error(f"Canonical broker/allocation drift requires reconciliation: {symbol}")
+                continue
 
             if abs(drift) <= DRIFT_TOLERANCE:
                 # No drift — unfreeze if previously frozen and UNKNOWN cleared
@@ -2414,6 +2702,15 @@ class OMSCore:
             pass
 
     def _emit_order_event(self, wo: WorkingOrder, event_type: str, *, payload: Optional[Dict] = None, intent: Optional[Intent] = None) -> None:
+        if self.execution_feedback is not None and not isinstance(self.persistence, OMSPersistence):
+            detail = dict(payload or {})
+            status = str(detail.get("status_after") or getattr(wo.status, "name", wo.status))
+            timestamp = datetime.now().astimezone().isoformat()
+            event = {"kind": "order", "order_id": wo.order_id, "symbol": wo.symbol,
+                "side": wo.side, "status": status, "order_type": wo.order_type,
+                "qty": wo.qty, "timestamp": timestamp, "reason": event_type,
+                "metadata": {**detail, "intent_id": wo.intent_id, "order_date": wo.created_at.date().isoformat()}}
+            self.execution_feedback.append(f"order:{wo.strategy_id}:{wo.order_id}:{event_type}:{timestamp}", wo.strategy_id, event)
         emitter = self.event_emitter
         if emitter is None:
             return
@@ -2431,6 +2728,20 @@ class OMSCore:
         inferred: bool = False,
         payload: Optional[Dict] = None,
     ) -> None:
+        if self.execution_feedback is not None and not (payload or {}).get("canonical_committed"):
+            detail = dict(payload or {})
+            execution_id = detail.get("kis_exec_id")
+            if not execution_id:
+                raise ValueError("OMS fill feedback requires kis_exec_id")
+            order_date = wo.created_at.date().isoformat()
+            event = {"kind": "fill", "order_id": wo.order_id, "symbol": wo.symbol,
+                "side": wo.side, "qty": fill_qty, "price": detail["fill_price"],
+                "timestamp": detail["fill_ts"], "reason": "oms_execution",
+                "metadata": {**(dict(intent.metadata) if intent else {}), **detail,
+                    "intent_id": wo.intent_id, "provisional_order_ref": wo.submit_ref or "",
+                    "order_date": order_date,
+                    "price_provenance": "execution" if not inferred and detail.get("fill_price_observed") else "inferred"}}
+            self.execution_feedback.append(f"fill:{wo.strategy_id}:{order_date}:{wo.order_id}:{execution_id}", wo.strategy_id, event)
         emitter = self.event_emitter
         if emitter is None:
             return
@@ -2733,12 +3044,18 @@ class OMSCore:
 
     async def start(self) -> None:
         """Initialize OMS: connect persistence, load state, start reconciliation."""
+        self.require_reconciliation = True
+        self._reconciliation_success_at = None
+        self._cash_observed_at = None
+        self._reconciliation_error = "startup_reconciliation_required"
         self._emit_deployment("starting")
         # Connect to database
         if self.persistence:
             await self.persistence.connect()
             if self.require_persistence and not self.persistence._is_connected():
                 raise RuntimeError("OMS persistence is required but Postgres is unavailable")
+            if self.require_persistence and not await self.persistence.execution_schema_ready():
+                raise RuntimeError("OMS requires migrations 010_execution_commits.sql and 011_execution_generation.sql")
             await self._load_persisted_state()
             await self.reconcile_stale_pending_idempotency(stale_after_sec=60.0)
         elif self.require_persistence:
@@ -2806,7 +3123,7 @@ class OMSCore:
         await self._reconcile_protective_stops_on_startup()
 
         # Restore per-strategy realized PnL from today's closed trades (mid-day restart resilience)
-        realized = await self.persistence.load_daily_realized_pnl(date.today())
+        realized = await self.persistence.load_daily_realized_pnl(datetime.now(_KST).date())
         if realized:
             self.state.strategy_realized_pnl = realized
             self.state.daily_realized_pnl = sum(realized.values())

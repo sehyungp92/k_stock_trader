@@ -1,0 +1,10 @@
+{
+  "kalcb.exit.price_lock_bars": 2,
+  "kalcb.exit.price_lock_allow_prior_close_proxy": true,
+  "kalcb.exit.liquidity_guard_enabled": true,
+  "kalcb.entry.order_expiry_bars": 0,
+  "kalcb.exit.liquidity_guard_lookback": 12,
+  "kalcb.exit.liquidity_guard_quantile": 0.1,
+  "kalcb.exit.liquidity_guard_reserve": 0.5,
+  "kalcb.risk.max_participation_30m": 0.01
+}

@@ -7,7 +7,7 @@ from typing import Any
 
 
 STRATEGY_ID = "KALCB"
-KALCB_CORE_VERSION = "kalcb-core-v13"
+KALCB_CORE_VERSION = "kalcb-core-v15"
 
 
 class CarryMode(str, Enum):
@@ -68,6 +68,9 @@ class KALCBConfig:
     entry_window_start: time = time(9, 30)
     entry_window_end: time = time(12, 0)
     flatten_time: time = time(15, 20)
+    entry_require_complete_prefix: bool = False
+    # Opt-in action-value research. Metadata may only reduce ordinary sizing.
+    entry_action_quantity_scale_enabled: bool = False
 
     ws_budget: int = 10
     ws_max_registrations: int = 40
@@ -150,6 +153,7 @@ class KALCBConfig:
     entry_detail_size_mults: dict[str, float] | None = None
     entry_plan_mode: str = "breakout"
     entry_plan_routes: tuple[dict[str, Any], ...] = ()
+    entry_checkpoint_enabled: bool = False
     entry_plan_max_signal_bars: int = 1
     entry_plan_after_bar: int = 0
     entry_plan_min_bar_ret: float = -9.99
@@ -187,6 +191,7 @@ class KALCBConfig:
     entry_plan_route_risk_mult: float = 1.0
     entry_plan_route_notional_mult: float = 1.0
     entry_plan_route_participation_mult: float = 1.0
+    entry_order_expiry_bars: int = 0
     entry_plan_route_max_session_trades: int = 0
     entry_plan_route_context_min: dict[str, float] | None = None
     entry_plan_route_context_max: dict[str, float] | None = None
@@ -213,6 +218,16 @@ class KALCBConfig:
     risk_dynamic_min_session_return_pct: float = -9.99
     risk_dynamic_max_open_positions: int = 0
     risk_dynamic_max_open_notional_pct: float = 0.0
+    entry_quantity_multiplier: float = 1.0
+    risk_max_single_equity_pct: float = 0.0
+    risk_max_gross_equity_pct: float = 0.0
+    risk_drawdown_start_pct: float = 0.0
+    risk_drawdown_full_pct: float = 0.0
+    risk_drawdown_min_mult: float = 1.0
+    risk_daily_vol_target: float = 0.0
+    risk_volatility_lookback: int = 20
+    risk_volatility_min_mult: float = 0.25
+    risk_volatility_warmup_mult: float = 0.65
 
     use_partial_takes: bool = False
     partial_r_trigger: float = 1.25
@@ -248,6 +263,16 @@ class KALCBConfig:
     exit_hard_stop_enabled: bool = True
     exit_stop_mode: str = "momentum"
     exit_stop_pct: float = 0.006
+    exit_price_lock_bars: int = 0
+    exit_price_lock_min_prior_close_return: float = 0.29
+    exit_price_lock_allow_prior_close_proxy: bool = False
+    exit_liquidity_guard_enabled: bool = False
+    exit_liquidity_guard_start: time = time(13, 0)
+    exit_liquidity_guard_lookback: int = 6
+    exit_liquidity_guard_quantile: float = 0.25
+    exit_liquidity_guard_participation: float = 0.005
+    exit_liquidity_guard_reserve: float = 0.20
+    exit_late_trend_extension_minutes: int = 0
     exit_target_r: float = 0.0
     exit_breakeven_trigger_r: float = 0.0
     exit_breakeven_stop_r: float = 0.0
@@ -259,6 +284,7 @@ class KALCBConfig:
     exit_failed_followthrough_mfe_r: float = 0.0
     exit_failed_followthrough_close_r: float = 0.0
     exit_failed_followthrough_persistent: bool = False
+    exit_timed_acceptance_extension_bars: int = 0
     exit_vwap_fail_bars: int = 0
     exit_vwap_fail_pct: float = 0.0
     exit_vwap_fail_after_mfe_r: float = 0.0
@@ -266,6 +292,19 @@ class KALCBConfig:
     exit_mfe_giveback_start_r: float = 0.0
     exit_mfe_giveback_gap_r: float = 0.0
     exit_mfe_giveback_min_hold_bars: int = 0
+    exit_profit_retention_enabled: bool = False
+    exit_profit_retention_start_r: float = 6.0
+    exit_profit_retention_fraction: float = 0.5
+    exit_profit_retention_min_hold_bars: int = 6
+    exit_profit_retention_vwap_closes: int = 2
+    exit_profit_retention_start_atr: float = 0.0
+    exit_profit_retention_cost_multiple: float = 0.0
+    exit_profit_retention_roundtrip_cost_bps: float = 48.0
+    exit_profit_retention_reduce_fraction: float = 1.0
+    exit_profit_retention_confirmation: str = "session_vwap"
+    exit_profit_retention_recent_bars: int = 6
+    exit_profit_retention_recent_overlay_atr: float = 0.0
+    exit_profit_retention_recent_overlay_fraction: float = 0.6
     exit_mfe_floor_enabled: bool = False
     exit_mfe_floor_start_r: float = 0.0
     exit_mfe_floor_floor_r: float = 0.0
@@ -323,6 +362,21 @@ class KALCBConfig:
     tax_bps_on_sell: float = 18.0
 
     def __post_init__(self) -> None:
+        if not 0 <= self.risk_daily_vol_target < 1 or self.risk_volatility_lookback < 2:
+            raise ValueError('Invalid daily volatility target or history length')
+        if not 0 < self.risk_volatility_min_mult <= self.risk_volatility_warmup_mult <= 1:
+            raise ValueError('Volatility sizing multipliers must be ordered within (0, 1]')
+        if not 0 < self.entry_quantity_multiplier <= 1:
+            raise ValueError('entry_quantity_multiplier must be within (0, 1]')
+        if not 0 <= self.risk_max_single_equity_pct <= 1 or not 0 <= self.risk_max_gross_equity_pct <= self.intraday_leverage:
+            raise ValueError('Equity notional caps exceed allowed exposure')
+        if not 0 < self.risk_drawdown_min_mult <= 1:
+            raise ValueError('risk_drawdown_min_mult must be within (0, 1]')
+        if self.risk_drawdown_full_pct or self.risk_drawdown_start_pct:
+            if not 0 <= self.risk_drawdown_start_pct < self.risk_drawdown_full_pct < 1:
+                raise ValueError('Drawdown ramp requires ordered percentage thresholds')
+        if self.exit_timed_acceptance_extension_bars < 0:
+            raise ValueError('Timed acceptance extension cannot be negative')
         if self.strategy_id.upper() != STRATEGY_ID:
             raise ValueError("KALCBConfig.strategy_id must be KALCB")
         if self.timeframe.lower() != "5m":
@@ -396,6 +450,24 @@ class KALCBConfig:
             raise ValueError("entry_plan_route_notional_mult cannot be negative")
         if self.entry_plan_route_participation_mult < 0:
             raise ValueError("entry_plan_route_participation_mult cannot be negative")
+        if self.entry_order_expiry_bars < 0:
+            raise ValueError("entry_order_expiry_bars cannot be negative")
+        if self.exit_liquidity_guard_lookback < 2:
+            raise ValueError("liquidity guard requires at least two observations")
+        if not 0 <= self.exit_liquidity_guard_quantile <= 1:
+            raise ValueError("liquidity guard quantile must be in [0, 1]")
+        if not 0 < self.exit_liquidity_guard_participation <= 1:
+            raise ValueError("liquidity guard participation must be in (0, 1]")
+        if not 0 <= self.exit_liquidity_guard_reserve < 1:
+            raise ValueError("liquidity guard reserve must be in [0, 1)")
+        if self.exit_late_trend_extension_minutes not in (0, 15):
+            raise ValueError("late trend extension must be disabled or the declared 15-minute action")
+        if self.exit_late_trend_extension_minutes and not self.exit_liquidity_guard_enabled:
+            raise ValueError("late trend extension requires the native liquidity guard")
+        if self.exit_late_trend_extension_minutes:
+            from math import isfinite
+            if not isfinite(self.exit_profit_retention_roundtrip_cost_bps) or self.exit_profit_retention_roundtrip_cost_bps < 0:
+                raise ValueError("late trend extension requires finite nonnegative known friction")
         if self.entry_plan_route_max_session_trades < 0:
             raise ValueError("entry_plan_route_max_session_trades cannot be negative")
         _validate_float_mapping(self.entry_plan_route_context_min, "entry_plan_route_context_min")
@@ -410,6 +482,32 @@ class KALCBConfig:
             raise ValueError("first30 range_atr thresholds must be positive")
         if self.entry_plan_min_first30_range_atr > self.entry_plan_max_first30_range_atr:
             raise ValueError("entry_plan_min_first30_range_atr cannot exceed entry_plan_max_first30_range_atr")
+        if self.exit_price_lock_bars not in (0,) and self.exit_price_lock_bars < 2:
+            raise ValueError("price lock exit requires at least two completed bars, or zero to disable")
+        if not 0 < self.exit_price_lock_min_prior_close_return < 1:
+            raise ValueError("price lock prior-close return must be between zero and one")
+        if self.exit_profit_retention_enabled:
+            from math import isfinite
+            if self.exit_profit_retention_confirmation not in {"session_vwap", "recent_vwap"}:
+                raise ValueError("Unsupported profit retention confirmation")
+            if self.exit_profit_retention_recent_bars < 2:
+                raise ValueError("Recent profit retention requires at least two completed bars")
+            if not isfinite(self.exit_profit_retention_recent_overlay_atr) or self.exit_profit_retention_recent_overlay_atr < 0:
+                raise ValueError("Recent retention overlay maturity must be finite and nonnegative")
+            if not 0 < self.exit_profit_retention_recent_overlay_fraction < 1:
+                raise ValueError("Recent retention overlay fraction must be between zero and one")
+            if not isfinite(self.exit_profit_retention_start_r) or self.exit_profit_retention_start_r <= 0:
+                raise ValueError("profit retention requires finite positive start_r")
+            if not 0 < self.exit_profit_retention_fraction < 1:
+                raise ValueError("profit retention fraction must be in (0, 1)")
+            if self.exit_profit_retention_min_hold_bars < 1 or self.exit_profit_retention_vwap_closes < 1:
+                raise ValueError("profit retention requires completed holding and confirmation bars")
+            for value in (self.exit_profit_retention_start_atr, self.exit_profit_retention_cost_multiple,
+                          self.exit_profit_retention_roundtrip_cost_bps):
+                if not isfinite(value) or value < 0:
+                    raise ValueError("profit retention maturity parameters must be finite and nonnegative")
+            if not 0 < self.exit_profit_retention_reduce_fraction <= 1:
+                raise ValueError("profit retention reduction must be in (0, 1]")
         if self.exit_mfe_giveback_enabled:
             if self.exit_mfe_giveback_start_r <= 0 or self.exit_mfe_giveback_gap_r <= 0:
                 raise ValueError("mfe giveback requires positive start_r and gap_r")
@@ -491,6 +589,7 @@ class KALCBConfig:
             "entry_window_start",
             "entry_window_end",
             "flatten_time",
+            "exit_liquidity_guard_start",
             "pdh_entry_window_end",
             "or_caution_window_start",
             "or_caution_window_end",
@@ -559,6 +658,8 @@ _ALIASES = {
     "kalcb.session.entry_window_start": "entry_window_start",
     "kalcb.session.entry_window_end": "entry_window_end",
     "kalcb.session.flatten_time": "flatten_time",
+    "kalcb.source.require_complete_prefix": "entry_require_complete_prefix",
+    "kalcb.risk.max_participation_30m": "max_participation_30m",
     "kalcb.session.auction_mode": "auction_mode",
     "kalcb.session.ws_budget": "ws_budget",
     "kalcb.live.ws_budget": "ws_budget",
@@ -642,6 +743,7 @@ _ALIASES = {
     "kalcb.entry.plan_mode": "entry_plan_mode",
     "kalcb.entry.entry_plan_mode": "entry_plan_mode",
     "kalcb.entry.routes": "entry_plan_routes",
+    "kalcb.entry.checkpoint_enabled": "entry_checkpoint_enabled",
     "kalcb.entry.plan_routes": "entry_plan_routes",
     "kalcb.entry.entry_plan_routes": "entry_plan_routes",
     "kalcb.entry.max_signal_bars": "entry_plan_max_signal_bars",
@@ -694,6 +796,7 @@ _ALIASES = {
     "kalcb.entry.route_notional_mult": "entry_plan_route_notional_mult",
     "kalcb.entry.notional_mult": "entry_plan_route_notional_mult",
     "kalcb.entry.route_participation_mult": "entry_plan_route_participation_mult",
+    "kalcb.entry.order_expiry_bars": "entry_order_expiry_bars",
     "kalcb.entry.participation_mult": "entry_plan_route_participation_mult",
     "kalcb.entry.route_max_session_trades": "entry_plan_route_max_session_trades",
     "kalcb.entry.max_session_trades": "entry_plan_route_max_session_trades",
@@ -765,6 +868,16 @@ _ALIASES = {
     "kalcb.exit.hard_stop_enabled": "exit_hard_stop_enabled",
     "kalcb.exit.stop_mode": "exit_stop_mode",
     "kalcb.exit.stop_pct": "exit_stop_pct",
+    "kalcb.exit.price_lock_bars": "exit_price_lock_bars",
+    "kalcb.exit.price_lock_min_prior_close_return": "exit_price_lock_min_prior_close_return",
+    "kalcb.exit.price_lock_allow_prior_close_proxy": "exit_price_lock_allow_prior_close_proxy",
+    "kalcb.exit.liquidity_guard_enabled": "exit_liquidity_guard_enabled",
+    "kalcb.exit.liquidity_guard_start": "exit_liquidity_guard_start",
+    "kalcb.exit.liquidity_guard_lookback": "exit_liquidity_guard_lookback",
+    "kalcb.exit.liquidity_guard_quantile": "exit_liquidity_guard_quantile",
+    "kalcb.exit.liquidity_guard_participation": "exit_liquidity_guard_participation",
+    "kalcb.exit.liquidity_guard_reserve": "exit_liquidity_guard_reserve",
+    "kalcb.exit.late_trend_extension_minutes": "exit_late_trend_extension_minutes",
     "kalcb.exit.target_r": "exit_target_r",
     "kalcb.exit.breakeven_trigger_r": "exit_breakeven_trigger_r",
     "kalcb.exit.breakeven_stop_r": "exit_breakeven_stop_r",
@@ -783,6 +896,19 @@ _ALIASES = {
     "kalcb.exit.mfe_giveback_start_r": "exit_mfe_giveback_start_r",
     "kalcb.exit.mfe_giveback_gap_r": "exit_mfe_giveback_gap_r",
     "kalcb.exit.mfe_giveback_min_hold_bars": "exit_mfe_giveback_min_hold_bars",
+    "kalcb.exit.profit_retention_enabled": "exit_profit_retention_enabled",
+    "kalcb.exit.profit_retention_start_r": "exit_profit_retention_start_r",
+    "kalcb.exit.profit_retention_fraction": "exit_profit_retention_fraction",
+    "kalcb.exit.profit_retention_min_hold_bars": "exit_profit_retention_min_hold_bars",
+    "kalcb.exit.profit_retention_vwap_closes": "exit_profit_retention_vwap_closes",
+    "kalcb.exit.profit_retention_start_atr": "exit_profit_retention_start_atr",
+    "kalcb.exit.profit_retention_cost_multiple": "exit_profit_retention_cost_multiple",
+    "kalcb.exit.profit_retention_roundtrip_cost_bps": "exit_profit_retention_roundtrip_cost_bps",
+    "kalcb.exit.profit_retention_reduce_fraction": "exit_profit_retention_reduce_fraction",
+    "kalcb.exit.profit_retention_confirmation": "exit_profit_retention_confirmation",
+    "kalcb.exit.profit_retention_recent_bars": "exit_profit_retention_recent_bars",
+    "kalcb.exit.profit_retention_recent_overlay_atr": "exit_profit_retention_recent_overlay_atr",
+    "kalcb.exit.profit_retention_recent_overlay_fraction": "exit_profit_retention_recent_overlay_fraction",
     "kalcb.exit.mfe_floor_enabled": "exit_mfe_floor_enabled",
     "kalcb.exit.mfe_floor_start_r": "exit_mfe_floor_start_r",
     "kalcb.exit.mfe_floor_floor_r": "exit_mfe_floor_floor_r",

@@ -1,0 +1,49 @@
+{
+  "version": "portfolio-development-finalist-v1",
+  "status": "development_qualified_awaiting_source_qualified_oos",
+  "recipe": "k_marginal",
+  "settings": {
+    "policy": {
+      "max_gross_notional": 50000000.0,
+      "max_symbol_notional": 25000000.0,
+      "max_sector_notional": 50000000.0,
+      "notional_cap_mode": "equity_scaled",
+      "notional_cap_reference_equity": 25000000,
+      "funding_mode": "native_buying_power",
+      "same_symbol_policy": "aggregate",
+      "strategy_priority": [
+        "KALCB",
+        "OLR"
+      ]
+    },
+    "quality": false,
+    "decision_rank": false,
+    "olr_capacity": {
+      "capacity_joint_allocation": true,
+      "capacity_exit_quantile": 0.5,
+      "capacity_redistribute": true,
+      "capacity_redistribution_evidence": "entry",
+      "capacity_redistribution_max_multiplier": 1.5,
+      "capacity_recycle_liquidity_only": true
+    },
+    "native_budget": {
+      "kalcb_sizing_fraction": 0.75,
+      "olr_fraction": 0.625,
+      "max_kalcb_stop_risk_fraction": 0.02,
+      "allocation_mode": "symbol",
+      "allocation_seed": 0
+    },
+    "kalcb_marginal_quantity": "supported_next_lower_tier_v1"
+  },
+  "initial_equity_krw": 25000000,
+  "development_selection": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_targeted_validation_20261009\\development_selection.json",
+    "sha256": "c057858471ca239e51758dc0b8fa8de6f3d36f025524b1b317941c7845ba7858"
+  },
+  "acceptance": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_targeted_validation_20261009\\acceptance.json",
+    "sha256": "7a3ccb93268a3b3fedac74127833aef14daf6415af8918117a172719ff4dc69f"
+  },
+  "live_deployment_enabled": false,
+  "canonical_selected_profile_changed": false
+}

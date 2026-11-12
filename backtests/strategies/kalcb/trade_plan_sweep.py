@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backtests.core.input_manifest import frozen_input_loader
+
 import argparse
 import hashlib
 import json
@@ -16,11 +18,12 @@ from pathlib import Path
 from statistics import mean, median
 from typing import Any, Callable, Iterable
 
-from backtests.auto.shared.cache_keys import fingerprint_paths, stable_signature
+from backtests.auto.shared.cache_keys import fingerprint_paths, fingerprint_tree, stable_signature
+from backtests.core.input_manifest import active_manifest, input_stream, read_input_bytes
 from backtests.auto.shared.phase_state import _utc_now_iso
 from backtests.analysis.metrics import compute_trade_metrics
 from backtests.config import load_yaml_config, normalize_runtime_config
-from backtests.engine.replay import run_replay
+from backtests.engine.replay import run_replay, candidate_management_bars
 from backtests.engine.sim_broker import BrokerCosts
 from strategy_common.actions import action_to_json_dict
 from strategy_common.clock import KST
@@ -52,7 +55,7 @@ from .premarket_frontier_sweep import (
 
 
 TRADE_PLAN_SWEEP_VERSION = "kalcb-fixed-candidate-trade-plan-sweep-v3"
-PREPARED_CONTEXT_CACHE_VERSION = "slim-v6-joint-context"
+PREPARED_CONTEXT_CACHE_VERSION = "slim-v8-management-feed"
 TRADE_PLAN_OBJECTIVE_VERSION = "portfolio-net-v2"
 PRIMARY_OBJECTIVE_METRIC = "broker_net_return_pct"
 LEGACY_SLOT_METRIC = "slot_cumulative_net_return_pct"
@@ -220,6 +223,7 @@ class CompiledCoreReplay:
     initial_equity: float
     source_fingerprint: str
     candidate_artifact_hash: str
+    capacity_scenario: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,6 +305,7 @@ def _evaluate_spec_from_process_worker(spec: TradePlanSpec) -> PlanResult:
     )
 
 
+@frozen_input_loader
 def load_or_build_prepared_context(
     config: dict[str, Any],
     *,
@@ -327,6 +332,9 @@ def load_or_build_prepared_context(
         if status_callback is not None:
             status_callback(stage, **extra)
 
+    if active_manifest():
+        config = active_manifest().remap(config)
+        compiled_cache_dir = active_manifest().path.parent / "derived_artifacts" / "fixed_plan"
     training_config = _training_only_config(dict(config), train_only=train_only)
     candidate_source = load_fixed_candidate_source(
         optimized_source,
@@ -568,11 +576,6 @@ def _preflight_context_fingerprint(
             data_snapshot_end=data_snapshot_end,
         )
     ]
-    daily_paths = [
-        daily_root,
-        daily_root / "manifest.json",
-        daily_root / "tables" / "sector_map.parquet",
-    ]
     config_paths = [universe_path] if str(universe_path) not in {"", "."} else []
     source_payload = {
         "path": candidate_source.source_path,
@@ -600,7 +603,7 @@ def _preflight_context_fingerprint(
                 },
                 "daily": {
                     "path": str(daily_root),
-                    "fingerprint": fingerprint_paths(daily_paths, root=daily_root.parent if daily_root.parent.exists() else None),
+                    "fingerprint": fingerprint_tree(daily_root),
                 },
                 "config": fingerprint_paths(config_paths, root=Path.cwd()) if config_paths else "",
             },
@@ -659,7 +662,10 @@ def _write_prepared_context_cache(
     context: PreparedTradePlanContext,
     metadata: dict[str, Any],
 ) -> None:
-    cache_context = _slim_prepared_context_for_cache(context)
+    # The bounded study reuses this immutable feature context in isolated
+    # workers. Guarded pools need its bars and contexts, so a slim cache would
+    # force the same source preparation and baseline replay for every recipe.
+    cache_context = context if context.training_config.get("corrective_study_hash") else _slim_prepared_context_for_cache(context)
     cache_tmp = cache_path.with_name(cache_path.name + ".tmp")
     meta_tmp = meta_path.with_name(meta_path.name + ".tmp")
     with cache_tmp.open("wb") as handle:
@@ -1109,8 +1115,10 @@ def _resolve_optimized_source_path(path: Path) -> Path:
 
 
 def _read_optimized_source_row(path: Path, *, section: str, rank: int) -> tuple[str, str, dict[str, Any]]:
+    if active_manifest():
+        path = active_manifest().resolve(path)
     if path.stat().st_size <= 64_000_000:
-        raw = path.read_bytes()
+        raw = read_input_bytes(path)
         payload = json.loads(raw.decode("utf-8"))
         rows = payload.get(section) or []
         row = rows[max(0, int(rank))] if isinstance(rows, list) and len(rows) > max(0, int(rank)) else {}
@@ -1124,17 +1132,24 @@ def _read_optimized_source_row(path: Path, *, section: str, rank: int) -> tuple[
     array_seen = False
     row_index = 0
     decoder = json.JSONDecoder()
-    with path.open("rb") as handle:
+    import codecs
+    text_decoder = codecs.getincrementaldecoder("utf-8")()
+    with input_stream(path) as handle:
         for raw_chunk in iter(lambda: handle.read(1024 * 1024), b""):
             hasher.update(raw_chunk)
             if row is not None and sweep_hash:
                 continue
-            chunk = raw_chunk.decode("utf-8", errors="ignore")
+            chunk = text_decoder.decode(raw_chunk)
             buffer += chunk
             if not sweep_hash:
                 match = re.search(r'"(?:sweep_hash|calibration_hash)"\s*:\s*"([^"]+)"', buffer)
                 if match:
                     sweep_hash = match.group(1)
+            if row is not None:
+                # Hash the full source, but retain only a bounded overlap while
+                # looking for metadata that may occur after a very large array.
+                buffer = buffer[-2_000_000:]
+                continue
             if row is None:
                 if not marker_seen:
                     marker_index = buffer.find(marker)
@@ -1162,7 +1177,7 @@ def _read_optimized_source_row(path: Path, *, section: str, rank: int) -> tuple[
                         obj, end = decoder.raw_decode(buffer)
                     except json.JSONDecodeError:
                         if len(buffer) > 8_000_000:
-                            buffer = buffer[-8_000_000:]
+                            raise ValueError("Optimized source row exceeds streaming parser limit")
                         break
                     if row_index == max(0, int(rank)):
                         row = obj if isinstance(obj, dict) else {}
@@ -1452,7 +1467,7 @@ def compile_core_replay(
                     "core_version": KALCB_CORE_VERSION,
                 },
             )
-    ordered_bars = tuple(sorted(bars, key=lambda item: (item.timestamp, item.symbol)))
+    ordered_bars = candidate_management_bars(dataset.bars_by_key, snapshots, date_set)
     candidate_hash = stable_signature({day.isoformat(): snapshot.artifact_hash for day, snapshot in sorted(snapshots.items())})
     return CompiledCoreReplay(
         bars=ordered_bars,
@@ -1462,6 +1477,7 @@ def compile_core_replay(
         initial_equity=float((dataset.config or {}).get("initial_equity", 100_000_000.0) or 100_000_000.0),
         source_fingerprint=stable_signature([dataset.source_fingerprint, dataset.daily_source_fingerprint, candidate_hash]),
         candidate_artifact_hash=candidate_hash,
+        capacity_scenario=dict(dataset.config.get("capacity_scenario") or {}) or None,
     )
 
 
@@ -1510,7 +1526,7 @@ def _core_outcomes_metrics_digest(
     outcomes = _broker_trades_to_slot_outcomes(trades, cfg)
     metrics = summarize_outcomes(outcomes, session_dates=dates, selection_counts=selection_counts)
     _add_compiled_candidate_pool_metrics(metrics, compiled, dates, len(outcomes))
-    broker_metrics = compute_trade_metrics(trades, replay.equity_curve, initial_equity=compiled.initial_equity)
+    broker_metrics = compute_trade_metrics(trades, replay.equity_curve, timestamps=replay.timestamps, mark_coverage=replay.broker.mark_coverage or None, initial_equity=compiled.initial_equity)
     final_equity = float(replay.equity_curve[-1]) if replay.equity_curve else float(compiled.initial_equity)
     official_mtm_net = (final_equity / float(compiled.initial_equity) - 1.0) if compiled.initial_equity else 0.0
     metrics.update(
@@ -1534,6 +1550,10 @@ def _core_outcomes_metrics_digest(
     )
     _add_portfolio_equivalent_metrics(metrics, outcomes, dates, compiled.initial_equity)
     _add_return_divergence_metrics(metrics)
+    if replay.broker.capacity_policy is not None:
+        from backtests.engine.capacity_audit import audit_capacity
+        checks = [audit_capacity(b) for b in (replay.broker, *getattr(replay.broker, "capacity_shadow_brokers", ()))]
+        metrics["capacity_model_valid"] = all(r["status"] == "model_consistent" for r in checks)
     return outcomes, metrics, _replay_digest(replay, trades)
 
 
@@ -1820,6 +1840,7 @@ def _audit_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _run_core_replay(spec: TradePlanSpec, compiled: CompiledCoreReplay, cfg: KALCBConfig, *, audit: bool):
+    from backtests.engine.capacity import capacity_from_config
     plan_cfg = _core_config_for_spec(cfg, spec, audit=audit)
     costs = BrokerCosts(commission_bps=plan_cfg.commission_bps, tax_bps_on_sell=plan_cfg.tax_bps_on_sell, slippage_bps=plan_cfg.slippage_bps)
     adapter = KALCBReplayAdapter(plan_cfg, _clone_snapshots_for_replay(compiled.snapshots), initial_equity=compiled.initial_equity, costs=costs)
@@ -1831,6 +1852,8 @@ def _run_core_replay(spec: TradePlanSpec, compiled: CompiledCoreReplay, cfg: KAL
         close_open_positions=False,
         bars_are_ordered=True,
         buying_power_leverage=max(float(plan_cfg.intraday_leverage), 1.0),
+        capacity_policy=capacity_from_config({"capacity_scenario": compiled.capacity_scenario}),
+        candidate_scoped=True,
     )
     result.decisions.extend(adapter._sync_new_fills(result.broker))
     result.trades = _collapse_exit_legs(result.trades)
@@ -1961,6 +1984,8 @@ def _candidate_from_context(
     extra_candidate_metadata: dict[str, Any] | None = None,
 ) -> KALCBDailyCandidate:
     prior = _prior_daily_row(dataset, selection.symbol, selection.trade_date) or {}
+    from strategy_common.execution_session import prior_session_issue
+    reference_issue = prior_session_issue(selection.trade_date, _row_date(prior) if prior else None)
     prior_high = _float(prior.get("high"), ctx.daily.prev_close)
     prior_low = _float(prior.get("low"), ctx.daily.prev_close)
     prior_close = _float(prior.get("close"), ctx.daily.prev_close)
@@ -2066,6 +2091,8 @@ def _candidate_from_context(
         **dict(extra_candidate_metadata or {}),
         "core_version": KALCB_CORE_VERSION,
         "ws_budget": cfg.ws_budget,
+        "prior_day_date": _row_date(prior).isoformat() if prior else None,
+        "prior_reference_status": reference_issue or "verified_previous_session",
     }
     if source_calibration_metadata:
         metadata["source_calibration"] = dict(source_calibration_metadata)
@@ -2084,7 +2111,8 @@ def _candidate_from_context(
         rs_percentile=float((extra_candidate_metadata or {}).get("rs_percentile") or (extra_candidate_metadata or {}).get("relative_strength_pct") or 0.0),
         accumulation_score=float(ctx.flow.combined_5d if ctx.flow.available else 0.0),
         flow_score=float(ctx.flow.sector_flow_5d if ctx.flow.available else 0.0),
-        tradable=True,
+        tradable=reference_issue is None,
+        reject_reasons=(reference_issue,) if reference_issue else (),
         source_fingerprint=stable_signature([dataset.source_fingerprint, dataset.daily_source_fingerprint, selection.trade_date.isoformat(), selection.symbol]),
         metadata=metadata,
     )
@@ -2767,6 +2795,8 @@ def _invalid_plan_result(
 
 
 def score_plan(metrics: dict[str, float], fold_rows: tuple[dict[str, Any], ...], baseline_train: dict[str, float]) -> tuple[float, str]:
+    if metrics.get("capacity_model_valid") is False:
+        return 0.0, "capacity_model_path_failed"
     selected = metrics.get("selected_count", 0.0)
     trades = metrics.get("trade_count", 0.0)
     if selected <= 0:
@@ -3037,7 +3067,9 @@ def _prior_day_high(dataset: KALCBFirst30Dataset, symbol: str, trade_date: date)
 
 
 def _prior_daily_row(dataset: KALCBFirst30Dataset, symbol: str, trade_date: date) -> dict[str, Any] | None:
-    rows = [row for row in dataset.daily_by_symbol.get(symbol, []) if _row_date(row) < trade_date]
+    from kis_core.trading_calendar import get_trading_calendar
+    expected = get_trading_calendar().previous_trading_day(trade_date)
+    rows = [row for row in dataset.daily_by_symbol.get(symbol, []) if _row_date(row) == expected]
     if not rows:
         return None
     return max(rows, key=_row_date)
@@ -3561,14 +3593,14 @@ def _load_focused_seed_rows(
     source = Path(path)
     rows: list[PlanResult] = []
     if source.suffix.lower() == ".jsonl":
-        with source.open("r", encoding="utf-8") as handle:
+        with input_stream(source) as handle:
             for line in handle:
-                text = line.strip()
+                text = line.decode("utf-8").strip()
                 if not text:
                     continue
                 rows.append(_row_from_payload(json.loads(text)))
     else:
-        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload = json.loads(read_input_bytes(source))
         if isinstance(payload, dict):
             raw_rows = []
             for key in ("rows", "top_promoted", "top_train"):

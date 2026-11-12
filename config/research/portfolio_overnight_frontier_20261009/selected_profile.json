@@ -1,0 +1,458 @@
+{
+  "version": "portfolio-allocation-challenge-profile-v1",
+  "status": "research_selected_full_native_audits_passed",
+  "scope": "reused_development_only",
+  "live_deployment_enabled": false,
+  "independent_performance_established": false,
+  "recipe": "k75_o62.5",
+  "settings": {
+    "policy": {
+      "max_gross_notional": 50000000.0,
+      "max_symbol_notional": 25000000.0,
+      "max_sector_notional": 50000000.0,
+      "notional_cap_mode": "equity_scaled",
+      "notional_cap_reference_equity": 25000000,
+      "funding_mode": "native_buying_power",
+      "same_symbol_policy": "aggregate",
+      "strategy_priority": [
+        "KALCB",
+        "OLR"
+      ]
+    },
+    "quality": false,
+    "decision_rank": false,
+    "olr_capacity": {
+      "capacity_joint_allocation": true,
+      "capacity_exit_quantile": 0.5,
+      "capacity_redistribute": true,
+      "capacity_redistribution_evidence": "entry",
+      "capacity_redistribution_max_multiplier": 1.5,
+      "capacity_recycle_liquidity_only": true
+    },
+    "native_budget": {
+      "kalcb_sizing_fraction": 0.75,
+      "olr_fraction": 0.625,
+      "max_kalcb_stop_risk_fraction": 0.02,
+      "allocation_mode": "symbol",
+      "allocation_seed": 0
+    }
+  },
+  "initial_equity_krw": 25000000,
+  "evaluation_window": {
+    "start": "2025-08-07",
+    "end": "2026-03-31"
+  },
+  "source_generation_hash": "d3cf70c7591a709bda2dc8928b216c97e742c7d5b4f5b5dd329060148ff24a6e",
+  "study": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\study.json",
+    "sha256": "dd2b4fab384cfe6ab5ec5da4b661561e02cb05226cbdb66154109af8af59a017"
+  },
+  "challenge_root": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009",
+  "protocol": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\protocol.json",
+    "sha256": "5f433bab203db72d3c7dd02d69a8c6698de8d9f44ebc69319481c0c4e9091a3c"
+  },
+  "selection": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\selection.json",
+    "sha256": "a843d46608b9ce1036bd8e05bd8bc82e81448272e965ec26f39441500e2ddcdd"
+  },
+  "qualification": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\qualification.json",
+    "sha256": "a536b396b6cef8ba1a36197cc0155ec43aee22b645f990e359164231414f0940"
+  },
+  "studies": {
+    "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\study.json": {
+      "study": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\study.json",
+        "sha256": "dd2b4fab384cfe6ab5ec5da4b661561e02cb05226cbdb66154109af8af59a017"
+      },
+      "manifest": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\inputs\\manifest.json",
+        "sha256": "aba916e8b674126cee4b628f462cb60d0e9010de9db98bc38f77d38cae4cf081"
+      },
+      "registration": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\registration.json",
+        "sha256": "5c0cb1dcaa6b607262e4d6cf00ffeb40b0d8275dc020cf60726f1b062fb1abf0"
+      }
+    },
+    "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\mechanisms\\study.json": {
+      "study": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\mechanisms\\study.json",
+        "sha256": "b0172f11461f71fcb41846319c82a64174a3ca409230a5d520219010085de4a4"
+      },
+      "manifest": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\mechanisms\\inputs\\manifest.json",
+        "sha256": "55a9fe2cb150ae53126ce42064ae5e5724f9891026861e40ae512676f55579ed"
+      },
+      "registration": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\mechanisms\\registration.json",
+        "sha256": "d95aa94bc910b6e3dec00f2304cda1d61d2d5a206ca73651095622b6c6f83b25"
+      }
+    }
+  },
+  "qualified_cases": {
+    "baseline": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_baseline",
+      "recipe": "k75_o62.5",
+      "scenario": "baseline",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_baseline\\completion.json",
+          "sha256": "67d8eac9de6580310bce3540fc36fb067302578efbc2bb99d8e8236f7e753746"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_baseline\\request.json",
+          "sha256": "a9655be20ca7550f5944571005aa95702783b4e611a8c5f66e2e4602fd6ad4e0"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_baseline\\result.json",
+          "sha256": "21a42b8dd8984d15b22a92c44f68f1db83c5c39f3e8b6e58cb8d6e0e9baed519"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_baseline\\execution_audit.json",
+          "sha256": "aac61d9ab9d6e24ff0665c3870d0398dfdb32f54bcd325269ff6022fc79a41af"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_baseline\\allocation_audit.json",
+          "sha256": "7e6dcc0f8c98e65d619cf7b4332d77a0d8a3435e3c0ede066712ad09b4d16c9a"
+        }
+      },
+      "metrics": {
+        "return_pct": 131.16889743038357,
+        "drawdown_pct": 7.97786739488231,
+        "trades": 520,
+        "worst_session_pct": -2.7310016653128932,
+        "worst_decile_mean_pct": -1.6496161703785337,
+        "overnight_max": 0.6263175354805283,
+        "overnight_mean": 0.1902133712889644
+      }
+    },
+    "cost": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_cost",
+      "recipe": "k75_o62.5",
+      "scenario": "cost",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_cost\\completion.json",
+          "sha256": "88b2d40b420dfe25f1eb1e572957a9f5d7dab6eeaa6ff41fc59d3b66b52e9ae9"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_cost\\request.json",
+          "sha256": "2b5e7e5faa18cbdf3388e69d92b4bd6ee5d427f8a0f69b53997a69f2a293ce77"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_cost\\result.json",
+          "sha256": "d2ccaead44022fa66e66f60daa9d592c1a38371cec1666c089563eafb014e3a6"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_cost\\execution_audit.json",
+          "sha256": "5a7e2af62f0690545e9204dde198805f13564f82f1ddcefde1a6bd13421c3259"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_cost\\allocation_audit.json",
+          "sha256": "4ed3676d2f927212d48ebad37e86fe7b3ceb7de41b3f1e614328c76e4808de86"
+        }
+      },
+      "metrics": {
+        "return_pct": 88.87391572160948,
+        "drawdown_pct": 9.750560611681987,
+        "trades": 524,
+        "worst_session_pct": -2.7721274808166108,
+        "worst_decile_mean_pct": -1.7044126992347732,
+        "overnight_max": 0.6263606261212968,
+        "overnight_mean": 0.18955011060769053
+      }
+    },
+    "participation": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_participation",
+      "recipe": "k75_o62.5",
+      "scenario": "participation",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_participation\\completion.json",
+          "sha256": "4dee81e6b83efddf263259f058b8417241bfdb9035bc37b7a7271f8f23aaf551"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_participation\\request.json",
+          "sha256": "6b88c2f4155dd4f0310f006aaa61f001e66978ebc43bc0adaeafc475ba40a2d4"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_participation\\result.json",
+          "sha256": "30f81810022457acbd015b14eda9f8d6d39b36212d64c5e6b2672cc9e3b827bc"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_participation\\execution_audit.json",
+          "sha256": "6ba02288637af79bf83cf516d6814bad8dcd06bf4de123740ad04331dfbb5bf4"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_participation\\allocation_audit.json",
+          "sha256": "4a5318ce7f4f46708c07057abb07f3e186be13ec520eb8ac7b17642b7fc0ed01"
+        }
+      },
+      "metrics": {
+        "return_pct": 124.0642885759819,
+        "drawdown_pct": 9.01432875193286,
+        "trades": 524,
+        "worst_session_pct": -2.930102670186008,
+        "worst_decile_mean_pct": -1.731991077938428,
+        "overnight_max": 0.626098375514123,
+        "overnight_mean": 0.19211718393585137
+      }
+    },
+    "combined": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_combined",
+      "recipe": "k75_o62.5",
+      "scenario": "combined",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_combined\\completion.json",
+          "sha256": "d3a9bc1c102af06ad1b8a04fb1399cb6962681aef0704e995ed1db45f2bfd422"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_combined\\request.json",
+          "sha256": "efe530bfeca6ff5f614ee4e9ed5756b144f531be5b8dc9fa1dfd499d1a940fa7"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_combined\\result.json",
+          "sha256": "9677bdf849d5ec048646e1db638ba3a50a27eea3b2e87059958e28cbb283bc92"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_combined\\execution_audit.json",
+          "sha256": "f20b47424a1f1bfa4931e93eaca9cc1909d504b91f40be92d4db5d93bbe843fd"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_combined\\allocation_audit.json",
+          "sha256": "b0d13c8a0878e4ba1fbfdbb421889a9a52ef78b298a4e60e11f2fbd94d8476b0"
+        }
+      },
+      "metrics": {
+        "return_pct": 86.39856028907285,
+        "drawdown_pct": 11.261727804422636,
+        "trades": 523,
+        "worst_session_pct": -3.0049063979309065,
+        "worst_decile_mean_pct": -1.7447921778248394,
+        "overnight_max": 0.62612123206843,
+        "overnight_mean": 0.19153762303680316
+      }
+    },
+    "auction_price_baseline": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_baseline",
+      "recipe": "k75_o62.5_price",
+      "scenario": "baseline",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_baseline\\completion.json",
+          "sha256": "38a92a29cf2564f7b94e92c159f52ec1819e46e23cfea401b3fb4b9d55887e6b"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_baseline\\request.json",
+          "sha256": "f971dc0b3d0d99e512cc93f1aaf961763e0347f96bd07c03cd2962fce4244ab8"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_baseline\\result.json",
+          "sha256": "23ef7f4586fec61b791c9e1d0dd72e103f7b2f32dfd4e5ecae67f2b56f32c40c"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_baseline\\execution_audit.json",
+          "sha256": "950b118a1c4ba00594f924ea3f5579f26ef1a0f109f51ccc5ce99cfab6c0faef"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_baseline\\allocation_audit.json",
+          "sha256": "aca7617c5e1ec00346e0ee006ece75a3bfd405e715aa161be157ad8c9ccc8d21"
+        }
+      },
+      "metrics": {
+        "return_pct": 122.09834542047267,
+        "drawdown_pct": 8.653550390870041,
+        "trades": 521,
+        "worst_session_pct": -3.4665712999317533,
+        "worst_decile_mean_pct": -1.731581763719762,
+        "overnight_max": 0.626132130645523,
+        "overnight_mean": 0.19161275504949066
+      }
+    },
+    "auction_price_combined": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_combined",
+      "recipe": "k75_o62.5_price",
+      "scenario": "combined",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_combined\\completion.json",
+          "sha256": "32d0bffdf0ada96afab235cae486d55eb1d48820266708abd5dd99591f39c4d1"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_combined\\request.json",
+          "sha256": "7a5076c98a06f7501ff90fb898a7711d521061b19a74c2785bd2671ff0123c3e"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_combined\\result.json",
+          "sha256": "c76608d7fb083a13782e68ac0e8b1dce28d549b648150e0528a79a9d2bdc3a95"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_combined\\execution_audit.json",
+          "sha256": "200bb9941d389429963f534beb67a8eec6286c73779ab20a8197a26848d5482b"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_price_combined\\allocation_audit.json",
+          "sha256": "c09da9eda91f770806e6a9b8b7d0a7428b6e70d293a95b040abb98504b39474e"
+        }
+      },
+      "metrics": {
+        "return_pct": 74.75573075800818,
+        "drawdown_pct": 11.457629189451811,
+        "trades": 521,
+        "worst_session_pct": -3.643467675881895,
+        "worst_decile_mean_pct": -1.8213669756438648,
+        "overnight_max": 0.6255897865678124,
+        "overnight_mean": 0.1933753215122068
+      }
+    },
+    "auction_nonfill_baseline": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_baseline",
+      "recipe": "k75_o62.5_nonfill",
+      "scenario": "baseline",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_baseline\\completion.json",
+          "sha256": "b9d859362c659f65156191f45e52b861d50ce6acbe4314b2fb655db59d81c0fd"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_baseline\\request.json",
+          "sha256": "a2252f5a49ffefd4cff8c3ef6c76282f79258e643192f18d2fe77a1dc7b193fe"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_baseline\\result.json",
+          "sha256": "a0d99c14cbb1ffffee89c8e70ae284a83f3d46167261620f475cad9cee1d5296"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_baseline\\execution_audit.json",
+          "sha256": "c7126284983215159676ede26e1faadd92348b1f9869c70a7938a0e10fe17e59"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_baseline\\allocation_audit.json",
+          "sha256": "0cb1e7adde5b44b9a6bceef5114f9cad36e2380b5ac59e0528c46593499b9d65"
+        }
+      },
+      "metrics": {
+        "return_pct": 129.89577938123108,
+        "drawdown_pct": 9.019254209812221,
+        "trades": 520,
+        "worst_session_pct": -3.075092652932576,
+        "worst_decile_mean_pct": -1.8067111973369667,
+        "overnight_max": 0.6262029329586758,
+        "overnight_mean": 0.27922559389008617
+      }
+    },
+    "auction_nonfill_combined": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_combined",
+      "recipe": "k75_o62.5_nonfill",
+      "scenario": "combined",
+      "evidence": {
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_combined\\completion.json",
+          "sha256": "528771b647e265ae90fa0ec5e67ad0cba7c06be4a27b8c10a1ee7d14a1d51da9"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_combined\\request.json",
+          "sha256": "d37810586eeee0039d2b411c605feabe3dbaeaffabbec3cd6c999c5bfc495f05"
+        },
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_combined\\result.json",
+          "sha256": "dda6510116a5e28fa2d79f7583631d61ecb09e7075f6805b6182b3ae57a073af"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_combined\\execution_audit.json",
+          "sha256": "d7ecb2d4c90484435e64e92d940ed61be33d5f161cd753e827e0cd02ca1811c5"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_overnight_frontier_20261009\\coarse\\qualified\\k75_o62.5_nonfill_combined\\allocation_audit.json",
+          "sha256": "ce11852c8c00de65f8aefa3400ea2bf64beb6dd776a2a7207edefda92d714e19"
+        }
+      },
+      "metrics": {
+        "return_pct": 89.0714680867172,
+        "drawdown_pct": 11.929930469124669,
+        "trades": 524,
+        "worst_session_pct": -3.341484301268993,
+        "worst_decile_mean_pct": -1.8951527160736046,
+        "overnight_max": 0.626199343983595,
+        "overnight_mean": 0.273821274200761
+      }
+    }
+  },
+  "incumbent_profile": {
+    "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\config\\research\\portfolio_native_budget_20261009\\selected_profile.json",
+    "sha256": "f3983e8a588086c591f71205e3f2216582d55e9fbe2caf0deff765db820770db"
+  },
+  "incumbent_bridge": {
+    "baseline": {
+      "new": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\mechanisms\\cases\\k075_o075_baseline\\completion.json",
+        "sha256": "160039c6400de0dc7cf0f276a4cd7dc404988ab0da6df8714e1fac688079af9d"
+      },
+      "old": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline\\completion.json",
+        "sha256": "a16e959cc851774ab5aa0ec583d6bf82e39aeaf9bf775d6b2d3df10899feb1f9"
+      },
+      "economic_hashes": {
+        "trades.json": "1af7500a561b3d5dbdeee81978ac70064a21c8969cd50f95713903e369b5b57c",
+        "daily.json": "a77bf4ea8f0aeef6ffe6e3adb8482884b1b33e7ba5ab90f737429e2716c2191e",
+        "equity.json": "5d783eef415c2e7c0c0d25cb8d00cfe77cdc52192f0f85c42708d190955eeedc"
+      }
+    },
+    "combined": {
+      "new": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\mechanisms\\cases\\k075_o075_combined\\completion.json",
+        "sha256": "b2221294e1560ab22415a97c594df500efb5007e7aecfb84e706350c03ac9be9"
+      },
+      "old": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined\\completion.json",
+        "sha256": "1c47392099bd1e0db512096b9ddd7e864a4cc4b5a5e9b437f4129a14912bf79e"
+      },
+      "economic_hashes": {
+        "trades.json": "6fc04863355f6097d78f27daa9dfca63ac8779fde2c0d7eacf04d5ee95be63dd",
+        "daily.json": "321c8809cc35c4c0d38452d53603b1c29d49917632a74f4791d61102e396b241",
+        "equity.json": "3dc1a7c73f1659cecab32cedc282f71966c6c0d177eb8b20c7ac3f1b7deebb89"
+      }
+    }
+  },
+  "initial_challenge_selection": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\selection.json",
+    "sha256": "b5bc2d92091863cd41c807e8c56980fb0f64bbc1b45416518b1c6181d90fbe7a"
+  },
+  "funded_benchmarks": {
+    "study": {
+      "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\study.json",
+      "sha256": "56dc6568b637a0ef7de09b645d1ee1977ae1aeeecf926020e05b24453520b163"
+    },
+    "cases": {
+      "shared_baseline": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\cases\\shared_baseline\\completion.json",
+        "sha256": "1254664388bdc67b9364d7f15c54e3887139221a307c13ccbb9d38c141f28586"
+      },
+      "shared_combined": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\cases\\shared_combined\\completion.json",
+        "sha256": "a3aa202f0ed29571ce2d8b05666009334a0425d50d5059f90481614a0764d6f3"
+      },
+      "partition_baseline": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\cases\\partition_baseline\\completion.json",
+        "sha256": "4dd92b170f5176929938b1fa92451e285030cd8ac2a69c18df5f61a75e9f0593"
+      },
+      "partition_combined": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\cases\\partition_combined\\completion.json",
+        "sha256": "6e1229278ea8f682e3ebb630d8f09b8c5d6c7833389ebdcd1755cc0423dc2e92"
+      },
+      "daily_rebalanced_baseline": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\cases\\daily_rebalanced_baseline\\completion.json",
+        "sha256": "671a200cc7b2786f3af800dd235dc66bd6502cc0635eae0e28bcdef98871df08"
+      },
+      "daily_rebalanced_combined": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_allocation_challenge_20261009\\partition_cash_funded\\cases\\daily_rebalanced_combined\\completion.json",
+        "sha256": "65c61db62e28f41b85ed5aeb43576acf399a699d8054146e5f235bc99d26772b"
+      }
+    },
+    "scope": "Physical/account-audited mechanism diagnostics; not full source-qualified portfolio candidates."
+  },
+  "risk_interpretation": "Empirical eight-scenario gates, not future loss bounds. Native ranks are not calibrated expected return.",
+  "operational_scope": "Research only; native broker funding/execution parity and unused-data performance remain unestablished."
+}

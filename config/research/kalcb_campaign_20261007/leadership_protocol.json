@@ -1,0 +1,10 @@
+{
+  "version": "kalcb-relative-leadership-v1",
+  "hypothesis": "Absolute momentum depends on market heat; top relative leaders and emerging leaders need explicit ordinal context. Existing sector return spreads do not encode ranks within the fixed observed universe.",
+  "features": "Within-session mid-ranks of prior 20-day/5-day returns and completed opening return/relative volume, plus persistence=min(prior20 rank, opening rank), emergence=opening rank-prior20 rank",
+  "cohort": "Every observed full-universe candidate at that completed opening cutoff, including opening-not-ready and native-guard-rejected observations; never future outcomes",
+  "interactions": [["daily_return_20d", "leader_persistence"], ["first30_ret", "leader_opening_return_rank"], ["leader_daily_return_rank", "leader_opening_volume_rank"]],
+  "fixed": "Current 89 features, inherited spline basis, alpha=120, expanding mature history, 20-session refits, quantity ladder, execution, costs and risk gates",
+  "variants": 1,
+  "scope": "Adaptive development hypothesis; same reused history, no June-July access; report all trials"
+}

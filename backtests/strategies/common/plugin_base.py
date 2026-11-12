@@ -51,7 +51,9 @@ def attach_official_metric_contract(
         requires_audit_pass or metrics.get("promotion_requires_audit_pass", False)
     )
     metrics["official_replay_pass"] = bool(metrics.get("official_replay_pass", official_replay_pass))
-    metrics["audit_pass"] = bool(metrics.get("audit_pass", False if audit_pass is None else audit_pass))
+    prior_contract = metrics.get("metric_contract") or {}
+    audit_claims = (metrics.get("audit_pass"), prior_contract.get("audit_pass"), audit_pass)
+    metrics["audit_pass"] = False if any(value is False for value in audit_claims) else any(value is True for value in audit_claims)
     metrics["audit_status"] = str(metrics.get("audit_status") or audit_status)
     contract = dict(metrics.get("metric_contract") or {})
     official_metrics = list(contract.get("official_metrics") or [primary_metric])
@@ -329,7 +331,12 @@ class SharedStrategyPluginMixin:
     def _last_result_for_mutations(self, mutations: dict[str, Any]) -> Any | None:
         if getattr(self, "_last_mutation_signature", None) != mutation_signature(mutations):
             return None
-        return getattr(self, "_last_result", None)
+        result = getattr(self, "_last_result", None)
+        from backtests.engine.integrity import receipt_matches
+        from backtests.engine.evaluation_identity import request_identity
+        config = getattr(self, "training_config", self.config) if self.capability_level.lower() not in {"synthetic", "dry_run"} else self.config
+        return result if result is not None and receipt_matches(result.metrics,
+            expected_request=request_identity(config, mutations), expected_mutations=mutation_signature(mutations)) else None
 
     def _get_or_create_pool(self, init_worker: Callable, initargs: tuple[Any, ...]):
         init_signature = build_cache_key(

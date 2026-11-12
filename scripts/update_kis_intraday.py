@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import hashlib
+import math
 import os
 import sys
 import time
@@ -35,6 +37,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from kis_core import KoreaInvestAPI, KoreaInvestEnv, build_kis_config_from_env
 import kis_core.kis_client as kis_client_module
+from kis_core.trading_calendar import get_trading_calendar
+from strategy_common.session_coverage import session_bar_coverage
 
 
 KST = ZoneInfo("Asia/Seoul")
@@ -216,15 +220,15 @@ def update_symbol(
     skip_up_to_date: bool,
 ) -> SymbolUpdate:
     retention_start = target_end - timedelta(days=retention_days)
-    output_start_dt = _combine_kst(retention_start, MARKET_OPEN)
-    output_end_dt = _combine_kst(target_end, MARKET_CLOSE)
+    output_start_dt = _combine_kst(retention_start, get_trading_calendar().session_hours(retention_start)[0])
+    output_end_dt = _collection_end(target_end)
     previous_latest, previous_path = latest_existing_timestamp(symbol, raw_root, parquet_root)
     fetch_start_date = start_override or (
         (previous_latest.date() - timedelta(days=overlap_days)) if previous_latest is not None else retention_start
     )
     if fetch_start_date < retention_start:
         fetch_start_date = retention_start
-    fetch_start_dt = _combine_kst(fetch_start_date, MARKET_OPEN)
+    fetch_start_dt = _combine_kst(fetch_start_date, get_trading_calendar().session_hours(fetch_start_date)[0])
 
     update = SymbolUpdate(
         symbol=symbol,
@@ -260,6 +264,7 @@ def update_symbol(
             market_code=market_code,
             extra_sleep_sec=extra_sleep_sec,
             max_pages=max_pages_per_symbol,
+            raw_page_root=raw_root / "provider_responses",
         )
     update.fetched_rows = int(len(fetched))
     update.fetched_pages = int(pages)
@@ -329,7 +334,7 @@ def download_symbols(
     updates_by_symbol: dict[str, SymbolUpdate] = {}
     changed_csvs: list[Path] = []
     failures: list[dict[str, Any]] = []
-    target_end_dt = _combine_kst(target_end, MARKET_CLOSE)
+    target_end_dt = _combine_kst(target_end, get_trading_calendar().session_hours(target_end)[1])
 
     def run_one(index: int, symbol: str) -> SymbolUpdate:
         print(f"[{index:03d}/{total:03d}] updating {symbol}", flush=True)
@@ -421,6 +426,7 @@ def fetch_kis_1m_bars(
     market_code: str,
     extra_sleep_sec: float,
     max_pages: int | None,
+    raw_page_root: Path | None = None,
 ) -> tuple[pd.DataFrame, int]:
     rows: dict[pd.Timestamp, dict[str, Any]] = {}
     cursor = end_dt
@@ -436,6 +442,18 @@ def fetch_kis_1m_bars(
             break
 
         page = fetch_kis_1m_page(api, symbol, cursor, market_code=market_code)
+        if raw_page_root is not None:
+            payload = {"endpoint": "inquire-time-dailychartprice", "symbol": symbol,
+                "market": market_code, "cursor": cursor.isoformat(), "rows": page,
+                "retrieved_at": datetime.now(KST).isoformat(),
+                "price_basis": "provider_adjustment_vintage_not_yet_qualified",
+                "volume_field": "cntg_vol", "volume_basis": "interval_shares"}
+            content = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+            target = raw_page_root / symbol / (hashlib.sha256(content).hexdigest() + ".json")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.exists():
+                with target.open("xb") as stream:
+                    stream.write(content)
         pages += 1
         if extra_sleep_sec > 0:
             time.sleep(extra_sleep_sec)
@@ -452,7 +470,10 @@ def fetch_kis_1m_bars(
             continue
 
         for row in normalized:
-            rows[pd.Timestamp(row["timestamp"])] = row
+            stamp = pd.Timestamp(row["timestamp"])
+            if stamp in rows and rows[stamp] != row:
+                raise ValueError(f"Conflicting provider minute observations for {symbol} at {stamp.isoformat()}")
+            rows[stamp] = row
         oldest = min(row["timestamp"] for row in normalized)
         if oldest <= start_dt:
             break
@@ -536,24 +557,7 @@ def latest_existing_timestamp(symbol: str, raw_root: Path, parquet_root: Path) -
 
 
 def parquet_symbol_covers_target(parquet_root: Path, symbol: str, timeframes: Sequence[str], target_end: date) -> bool:
-    for timeframe in timeframes:
-        files = sorted((parquet_root / symbol).glob(f"{symbol}_{timeframe}_*.parquet"))
-        if not files:
-            return False
-        latest: datetime | None = None
-        for path in files:
-            try:
-                frame = pd.read_parquet(path, columns=["timestamp"])
-            except Exception:
-                continue
-            if frame.empty:
-                continue
-            ts = _timestamp_to_datetime(_coerce_timestamp_series(frame["timestamp"]).max())
-            if latest is None or ts > latest:
-                latest = ts
-        if latest is None or latest.date() < target_end:
-            return False
-    return True
+    return parquet_symbol_covers_date_window(parquet_root, symbol, timeframes, target_end, target_end)
 
 
 def parquet_symbol_covers_date_window(
@@ -566,11 +570,12 @@ def parquet_symbol_covers_date_window(
     expected_dates = set(expected_trading_dates(start, end))
     if not expected_dates:
         return True
-    for timeframe in timeframes:
+    # Coarse bin labels alone cannot prove that their last input minute exists.
+    for timeframe in dict.fromkeys(("1m", *timeframes)):
         files = sorted((parquet_root / symbol).glob(f"{symbol}_{timeframe}_*.parquet"))
         if not files:
             return False
-        dates_seen: set[date] = set()
+        observed = set()
         for path in files:
             try:
                 frame = pd.read_parquet(path, columns=["timestamp"])
@@ -579,9 +584,10 @@ def parquet_symbol_covers_date_window(
             if frame.empty:
                 continue
             ts = _coerce_timestamp_series(frame["timestamp"])
-            dates_seen.update(item.date() for item in ts.dropna())
-        if not expected_dates.issubset(dates_seen):
-            return False
+            observed.update(item.to_pydatetime() for item in ts.dropna() if start <= item.date() <= end)
+        for day in expected_dates:
+            if session_bar_coverage(observed, day, _timeframe_minutes(timeframe), symbol=symbol)["status"] != "pass":
+                return False
     return True
 
 
@@ -589,26 +595,14 @@ _EXPECTED_TRADING_DATES_CACHE: dict[tuple[date, date], list[date]] = {}
 
 
 def expected_trading_dates(start: date, end: date) -> list[date]:
-    key = (start, end)
-    if key in _EXPECTED_TRADING_DATES_CACHE:
-        return list(_EXPECTED_TRADING_DATES_CACHE[key])
-    daily_index = PROJECT_ROOT / "data" / "krx_daily_parquet" / "tables" / "index_ohlcv.parquet"
-    dates: list[date] = []
-    if daily_index.exists():
-        try:
-            frame = pd.read_parquet(daily_index, columns=["date"])
-            parsed = pd.to_datetime(frame["date"]).dt.date
-            dates = sorted({item for item in parsed if start <= item <= end})
-        except Exception:
-            dates = []
-    if not dates:
-        cursor = start
-        while cursor <= end:
-            if cursor.weekday() < 5:
-                dates.append(cursor)
-            cursor += timedelta(days=1)
-    _EXPECTED_TRADING_DATES_CACHE[key] = dates
-    return list(dates)
+    calendar = get_trading_calendar()
+    dates = []
+    cursor = start
+    while cursor <= end:
+        if calendar.is_trading_day(cursor):
+            dates.append(cursor)
+        cursor += timedelta(days=1)
+    return dates
 
 
 def load_existing_1m(symbol: str, raw_root: Path, parquet_root: Path, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
@@ -636,30 +630,52 @@ def load_existing_1m(symbol: str, raw_root: Path, parquet_root: Path, start_dt: 
 
 
 def merge_1m_frames(*frames: pd.DataFrame, start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
+    """Combine compatible observations; never silently choose a revised basis.
+
+    Frame order is not evidence that two prices/share quantities have the same
+    convention. Conflicting overlap requires a separately qualified complete
+    session replacement, outside the incremental updater.
+    """
     non_empty = [frame for frame in frames if frame is not None and not frame.empty]
     if not non_empty:
         return pd.DataFrame(columns=_bar_columns())
+    bases = {str(frame.attrs["source_basis_id"]) for frame in non_empty
+             if frame.attrs.get("source_basis_id") is not None}
+    if len(bases) > 1:
+        raise ValueError("Incompatible declared minute source bases")
     data = pd.concat(non_empty, ignore_index=True)
     data = normalize_bar_frame(data)
     mask = (data["timestamp"] >= pd.Timestamp(start_dt)) & (data["timestamp"] <= pd.Timestamp(end_dt))
     data = data.loc[mask]
+    duplicates = data[data.timestamp.duplicated(keep=False)]
+    if not duplicates.empty:
+        conflicts = duplicates.groupby("timestamp", sort=False)[_bar_columns()[1:]].nunique().gt(1).any(axis=1)
+        if conflicts.any():
+            stamp = conflicts[conflicts].index[0]
+            raise ValueError(
+                f"Conflicting minute OHLCV at {stamp.isoformat()}; "
+                "qualify a complete session and its price/share basis before replacement"
+            )
     data = data.drop_duplicates(subset=["timestamp"], keep="last")
-    return data.sort_values("timestamp").reset_index(drop=True)
+    return data.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
 def normalize_bar_frame(frame: pd.DataFrame) -> pd.DataFrame:
     data = frame.copy()
     for column in _bar_columns():
         if column not in data.columns:
-            data[column] = 0 if column == "volume" else pd.NA
+            data[column] = pd.NA
     data = data[_bar_columns()]
     data["timestamp"] = _coerce_timestamp_series(data["timestamp"])
     data = data.dropna(subset=["timestamp"])
     for column in ("open", "high", "low", "close"):
         data[column] = pd.to_numeric(data[column], errors="coerce")
-    data["volume"] = pd.to_numeric(data["volume"], errors="coerce").fillna(0).astype("int64")
+    volume = pd.to_numeric(data["volume"], errors="coerce")
+    if volume.isna().any() or (~volume.map(math.isfinite)).any() or (volume < 0).any() or (volume % 1 != 0).any():
+        raise ValueError("Missing, nonfinite, negative or fractional interval volume")
+    data["volume"] = volume.astype("int64")
     data = data.dropna(subset=["open", "high", "low", "close"])
-    return data.sort_values("timestamp").reset_index(drop=True)
+    return data.sort_values("timestamp", kind="stable").reset_index(drop=True)
 
 
 def aggregate_timeframe(frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:
@@ -671,6 +687,14 @@ def aggregate_timeframe(frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     if data.empty:
         return pd.DataFrame(columns=_bar_columns())
     indexed = data.set_index("timestamp").sort_index()
+    # Keep after-scheduled-close observations at their source time. Flooring a
+    # 15:32 auction to 15:30 would allow execution before matching occurred.
+    calendar = get_trading_calendar()
+    delayed = indexed.index.map(lambda stamp: stamp.time().replace(tzinfo=None) > calendar.session_hours(stamp.date())[1])
+    after_close = indexed.loc[delayed]
+    indexed = indexed.loc[~delayed]
+    if indexed.empty:
+        return after_close.reset_index()[_bar_columns()]
     aggregated = indexed.resample(
         f"{minutes}min",
         label="left",
@@ -685,6 +709,8 @@ def aggregate_timeframe(frame: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     )
     aggregated = aggregated.dropna(subset=["open", "high", "low", "close"]).reset_index()
     aggregated["volume"] = aggregated["volume"].fillna(0).astype("int64")
+    if not after_close.empty:
+        aggregated = pd.concat([aggregated, after_close.reset_index()], ignore_index=True).sort_values("timestamp").reset_index(drop=True)
     return aggregated[_bar_columns()]
 
 
@@ -839,6 +865,9 @@ def validate_parquet_dataset(
                     }
                 )
                 tf_summary["stale"] += 1
+            elif not parquet_symbol_covers_target(parquet_root, symbol, [timeframe], target_end):
+                failures.append({"stage": "validate", "symbol": symbol, "timeframe": timeframe,
+                    "error": "unverified_session_completeness", "target_end": target_end.isoformat()})
         if latest_values:
             tf_summary["latest_min"] = min(latest_values).isoformat()
             tf_summary["latest_max"] = max(latest_values).isoformat()
@@ -959,11 +988,22 @@ def _normalize_kis_minute_row(row: Mapping[str, Any]) -> dict[str, Any] | None:
         "high": _float_value(_first_present(row, "stck_hgpr", "high"), close),
         "low": _float_value(_first_present(row, "stck_lwpr", "low"), close),
         "close": close,
-        "volume": int(_float_value(_first_present(row, "cntg_vol", "acml_vol", "volume"), 0.0)),
+        "volume": _interval_volume(row),
     }
     if min(item["open"], item["high"], item["low"], item["close"]) <= 0:
         return None
     return item
+
+
+def _interval_volume(row):
+    value = _first_present(row, "cntg_vol", "volume")
+    try:
+        number = float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        raise ValueError("Interval volume is required; cumulative acml_vol is not an interval") from None
+    if not math.isfinite(number) or number < 0 or not number.is_integer():
+        raise ValueError("Interval volume must be finite nonnegative integer shares")
+    return int(number)
 
 
 def _resolve_symbols(args: argparse.Namespace) -> tuple[str, ...]:
@@ -1045,7 +1085,15 @@ def _combine_kst(day: date, value: dt_time) -> datetime:
 
 
 def _previous_day_close(cursor: datetime) -> datetime:
-    return _combine_kst(cursor.astimezone(KST).date() - timedelta(days=1), MARKET_CLOSE)
+    calendar = get_trading_calendar()
+    day = calendar.previous_trading_day(cursor.astimezone(KST).date())
+    return _collection_end(day)
+
+
+def _collection_end(day: date) -> datetime:
+    # Query through the extension window; execution still requires a sourced
+    # matching event. Do not confuse this retrieval bound with session hours.
+    return _combine_kst(day, get_trading_calendar().session_hours(day)[1]) + timedelta(minutes=10)
 
 
 def _min_timestamp_string(frame: pd.DataFrame) -> str:

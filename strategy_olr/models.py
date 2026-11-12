@@ -225,11 +225,19 @@ class OLRAfternoonContext:
 
 
 def snapshot_hash(snapshot: OLRDailySnapshot) -> str:
+    # Outcome annotations must not change executable candidate identity or the
+    # deterministic auction-nonfill key. They are unavailable at decision time.
+    candidates = []
+    for candidate in snapshot.candidates:
+        row = candidate.to_json_dict()
+        row["metadata"] = {key: value for key, value in row.get("metadata", {}).items()
+                           if key not in {"close_to_close_label_pct", "next_session_mfe_label_pct"}}
+        candidates.append(row)
     payload = {
         "strategy_id": snapshot.strategy_id,
         "trade_date": snapshot.trade_date.isoformat(),
         "source_fingerprint": snapshot.source_fingerprint,
-        "candidates": [candidate.to_json_dict() for candidate in snapshot.candidates],
+        "candidates": candidates,
     }
     hash_bound_metadata = _hash_bound_metadata(snapshot.metadata)
     if hash_bound_metadata:

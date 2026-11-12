@@ -292,6 +292,7 @@ def _allocation_mutations(allocation: dict[str, Any]) -> dict[str, Any]:
 
 
 def _audit_row(row, source, allocation, fast, full) -> dict[str, Any]:
+    from backtests.engine.contracts import execution_valid
     metric_keys = ("official_mtm_net_return_pct", "official_mtm_max_drawdown_pct", "official_mtm_sharpe")
     deltas = {
         key: float(full.metrics.get(key, 0.0) or 0.0) - float(fast.metrics.get(key, 0.0) or 0.0)
@@ -302,7 +303,7 @@ def _audit_row(row, source, allocation, fast, full) -> dict[str, Any]:
     fast_keys = _official_audit_key_evidence(fast)
     full_keys = _official_audit_key_evidence(full)
     keys_match = _audit_keys_match(fast_keys, full_keys)
-    audit_pass = (
+    parity_pass = (
         trade_hash_fast == trade_hash_full
         and keys_match
         and max((abs(value) for value in deltas.values()), default=0.0) <= 1e-10
@@ -319,7 +320,8 @@ def _audit_row(row, source, allocation, fast, full) -> dict[str, Any]:
         "official_audit_keys_match": keys_match,
         "fast_official_audit_keys": fast_keys,
         "full_official_audit_keys": full_keys,
-        "audit_pass": audit_pass,
+        "fast_full_audit_passed": parity_pass,
+        "audit_pass": parity_pass and execution_valid(fast.metrics) and execution_valid(full.metrics),
     }
 
 

@@ -1,0 +1,33 @@
+{
+  "baseline_date": "2026-10-07",
+  "scope": {
+    "olr_round": 1,
+    "strategy_ids": [
+      "OLR"
+    ]
+  },
+  "paper_trading_approved": false,
+  "live_capital_approved": false,
+  "promotion_status": "offline_validation_only",
+  "notes": [
+    "Fully repaired OLR control only. Offline validation binding; no paper/live approval.",
+    "The full declared 103-symbol feature universe is required for sector rotation and leadership."
+  ],
+  "artifacts": [
+    {
+      "label": "olr_round1_optimized_config",
+      "path": "data/backtests/output/olr/round_1/optimized_config.json",
+      "sha256": "018f2e9644b36b0565df87b2b54ba6fd0afcf33960e45d3da218c630fd4ad229"
+    },
+    {
+      "label": "olr_frozen_universe",
+      "path": "config/universe_103.yaml",
+      "sha256": "c58542e92c3e7950ee6048700925126ac4babe5acb449b1bf706b847f4283dfa"
+    },
+    {
+      "label": "olr_sector_map",
+      "path": "config/olr/sector_map.yaml",
+      "sha256": "d83df4a6a0977e6442e92ce3c3cab196a3e0c54da03397f073df156d1876ea1f"
+    }
+  ]
+}

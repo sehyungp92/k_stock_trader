@@ -125,7 +125,56 @@ def compute_entry_qty(
     if participation_qty <= 0:
         return 0
     qty = min(risk_qty, notional_qty, participation_qty)
-    return max(0, qty)
+    if config.entry_action_quantity_scale_enabled:
+        scale = float(candidate.metadata.get("action_quantity_scale", 1.0))
+        if not math.isfinite(scale) or not 0.0 <= scale <= 1.0:
+            raise ValueError("Action quantity scale must be finite and within [0, 1]")
+        qty = int(qty * scale)
+    return governed_entry_qty(qty=qty, entry_price=entry, config=config,
+        portfolio_equity=portfolio_equity, open_notional=open_notional,
+        portfolio_drawdown_pct=portfolio_drawdown_pct)
+
+
+def governed_entry_qty(*, qty, entry_price, config, portfolio_equity=None,
+                       open_notional=0.0, portfolio_drawdown_pct=None):
+    """Apply reduction-only risk limits after the learned quantity action.
+
+    Equity and drawdown must be the contemporaneous portfolio view. The gross
+    cap is an admission cap; fills, gaps and outstanding orders still require
+    the broker's reservation and risk checks. It is not a guaranteed DD bound.
+    """
+    mult=config.entry_quantity_multiplier
+    if config.risk_drawdown_full_pct:
+        drawdown=float(portfolio_drawdown_pct or 0)
+        fraction=max(0,min(1,(drawdown-config.risk_drawdown_start_pct)/
+            (config.risk_drawdown_full_pct-config.risk_drawdown_start_pct)))
+        mult*=1-fraction*(1-config.risk_drawdown_min_mult)
+    result=int(qty*mult)
+    if config.risk_max_single_equity_pct or config.risk_max_gross_equity_pct:
+        if portfolio_equity is None or not math.isfinite(portfolio_equity) or portfolio_equity<=0:
+            return 0
+        if config.risk_max_single_equity_pct:
+            result=min(result,int(portfolio_equity*config.risk_max_single_equity_pct/entry_price))
+        if config.risk_max_gross_equity_pct:
+            room=max(0,portfolio_equity*config.risk_max_gross_equity_pct-open_notional)
+            result=min(result,int(room/entry_price))
+    return max(0,result)
+
+
+def volatility_quantity_scale(history, session, config):
+    """Past realised return/size ratios estimate unit-exposure volatility.
+
+    Normalisation is a risk-estimation proxy, never a claimed executable return.
+    Each session's multiplier is fixed before its first entry and never exceeds
+    the original action. Cash-only days remain in the trading-session history.
+    """
+    from statistics import pstdev
+    prior=sorted((r for r in history if r['day']<session),key=lambda r:r['day'])[-config.risk_volatility_lookback:]
+    if len(prior)<config.risk_volatility_lookback:return config.risk_volatility_warmup_mult
+    values=[r['return']/r['scale'] for r in prior]
+    if not all(math.isfinite(x) for x in values):raise ValueError('Nonfinite risk history')
+    vol=pstdev(values)
+    return max(config.risk_volatility_min_mult,min(1,config.risk_daily_vol_target/vol)) if vol>0 else 1.0
 
 
 def effective_max_position_notional_pct(

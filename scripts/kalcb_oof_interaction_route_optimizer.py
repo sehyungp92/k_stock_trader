@@ -36,6 +36,7 @@ def _load_base_module():
 
 
 base = _load_base_module()
+from backtests.strategies.kalcb.chronological import past_only_folds, validate_predictor_columns
 shared = base.shared
 opt = base.opt
 train_opt = base.train_opt
@@ -96,27 +97,33 @@ def oof_ranker_specs() -> list[OOFRankerSpec]:
     ]
 
 
-def chronological_folds(train: pd.DataFrame, folds: int = 5) -> list[np.ndarray]:
-    dates = np.array(sorted(str(day)[:10] for day in train["trade_date"].dropna().unique()))
-    out: list[np.ndarray] = []
-    for fold in range(folds):
-        lo = int(fold * len(dates) / folds)
-        hi = int((fold + 1) * len(dates) / folds)
-        fold_dates = set(dates[lo:hi])
-        out.append(train["trade_date"].astype(str).str[:10].isin(fold_dates).to_numpy())
-    return out
+def chronological_folds(train: pd.DataFrame, folds: int = 5, *, min_train_sessions: int = 60, embargo_sessions: int = 1):
+    if folds < 1:
+        raise ValueError("folds must be positive")
+    sessions = train["trade_date"].astype(str).str[:10].nunique()
+    width = max(1, math.ceil((sessions - min_train_sessions - embargo_sessions) / folds))
+    return past_only_folds(train["trade_date"].tolist(), min_train_sessions=min_train_sessions,
+        validation_sessions=width, embargo_sessions=embargo_sessions,
+        label_end_dates=train["label_end_date"].tolist() if "label_end_date" in train else None)
 
 
 def fit_oof_rankers(train: pd.DataFrame, holdout: pd.DataFrame, folds: int = 5) -> dict[str, dict[str, Any]]:
     fitted: dict[str, dict[str, Any]] = {}
     fold_masks = chronological_folds(train, folds)
+    if len(holdout) and train["trade_date"].astype(str).str[:10].max() >= holdout["trade_date"].astype(str).str[:10].min():
+        raise ValueError("Holdout must start after every training session")
     for spec in oof_ranker_specs():
         features = base.feature_columns(train, spec.feature_set)
+        validate_predictor_columns(features)
         scope_mask = opt.scope_mask(train, spec.scope)
         oof = np.full(len(train), np.nan, dtype=float)
         fold_rows: list[dict[str, Any]] = []
-        for fold_index, valid_mask in enumerate(fold_masks):
-            train_mask = scope_mask & ~valid_mask
+        for fold_index, fold in enumerate(fold_masks):
+            train_mask = np.zeros(len(train), dtype=bool)
+            train_mask[list(fold.train_indices)] = True
+            train_mask &= scope_mask
+            valid_mask = np.zeros(len(train), dtype=bool)
+            valid_mask[list(fold.valid_indices)] = True
             valid_scope = scope_mask & valid_mask
             model = base.make_model(spec.model_kind)
             log(
@@ -141,6 +148,11 @@ def fit_oof_rankers(train: pd.DataFrame, holdout: pd.DataFrame, folds: int = 5) 
             fold_rows.append(
                 {
                     "fold": fold_index,
+                    "train_through": fold.train_through,
+                    "label_through": fold.label_through,
+                    "valid_from": fold.valid_from,
+                    "valid_through": fold.valid_through,
+                    "train_rows": int(train_mask.sum()),
                     "valid_rows": int(valid_mask.sum()),
                     "valid_scope_rows": int(valid_scope.sum()),
                     "selected_rows": int(len(selected)),
@@ -149,9 +161,7 @@ def fit_oof_rankers(train: pd.DataFrame, holdout: pd.DataFrame, folds: int = 5) 
                 }
             )
             log("oof_fold_fit_done", name=spec.name, fold=fold_index, selected_r=fold_rows[-1]["selected_positive_r"])
-        if np.isnan(oof).any():
-            fallback = np.nanmedian(oof)
-            oof = np.nan_to_num(oof, nan=float(fallback if math.isfinite(fallback) else 0.0))
+        # Warm-up sessions have no past-trained forecast. Do not invent scores.
         full_model = base.make_model(spec.model_kind)
         full_model.fit(train.loc[scope_mask, features], base.target_values(train.loc[scope_mask], spec.target))
         fitted[spec.name] = {
@@ -159,7 +169,8 @@ def fit_oof_rankers(train: pd.DataFrame, holdout: pd.DataFrame, folds: int = 5) 
             "features": features,
             "model": full_model,
             "train_score": oof,
-            "holdout_score": np.asarray(full_model.predict(holdout[features]), dtype=float),
+            "holdout_score": np.asarray(full_model.predict(holdout[features]), dtype=float) if len(holdout) else np.array([]),
+            "unscored_warmup_rows": int(np.isnan(oof).sum()),
             "fold_proxy_rows": fold_rows,
         }
         log("oof_ranker_done", name=spec.name, fold_selected_r=sum(num(row["selected_positive_r"]) for row in fold_rows))
@@ -167,7 +178,8 @@ def fit_oof_rankers(train: pd.DataFrame, holdout: pd.DataFrame, folds: int = 5) 
 
 
 def pool_rows_for_score(part: pd.DataFrame, score: np.ndarray, spec: OOFRankerSpec, feature_by_key: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
-    selected = opt.select_by_budget(part, score, spec.scope, spec.budget, {})
+    finite = np.isfinite(score)
+    selected = opt.select_by_budget(part.loc[finite].copy().reset_index(drop=True), np.asarray(score)[finite], spec.scope, spec.budget, {})
     return shared.selected_pool_rows(
         selected=selected,
         feature_by_key=feature_by_key,

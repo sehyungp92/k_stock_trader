@@ -146,7 +146,8 @@ class PhaseRunner:
                 greedy_result.final_metrics = dict(metrics or {})
                 self.phase_logger.save_phase_output(phase, "greedy", _to_dict(greedy_result))
                 extra_criteria = _plugin_phase_acceptance_criteria(self.plugin, phase, base_mutations, metrics, greedy_result)
-                gate_result = evaluate_gate([*spec.gate_criteria_fn(metrics), *extra_criteria, *_metric_contract_criteria(metrics)], greedy_result)
+                gate_result = evaluate_gate([*spec.gate_criteria_fn(metrics), *extra_criteria,
+                    *_metric_contract_criteria(metrics, archived_validator=getattr(self.plugin, "validate_archived_execution", None))], greedy_result)
                 state.record_gate(phase, _gate_to_dict(gate_result))
                 save_phase_state(state, self.state_path)
                 self.phase_logger.log_activity(phase, "gate_check", {"passed": gate_result.passed, "failure_category": gate_result.failure_category})
@@ -538,7 +539,7 @@ def _plugin_phase_acceptance_criteria(
     return list(criteria or [])
 
 
-def _metric_contract_criteria(metrics: dict[str, Any]) -> list[GateCriterion]:
+def _metric_contract_criteria(metrics: dict[str, Any], *, archived_validator=None) -> list[GateCriterion]:
     metrics = metrics or {}
     contract = metrics.get("metric_contract") if isinstance(metrics.get("metric_contract"), dict) else {}
     primary_metric = str(metrics.get("primary_promotion_metric", contract.get("primary_promotion_metric", "")) or "")
@@ -586,15 +587,16 @@ def _metric_contract_criteria(metrics: dict[str, Any]) -> list[GateCriterion]:
     for metric_name, tolerance_name, default_tolerance in (
         ("same_bar_fill_count", "max_same_bar_fills", 0.0),
         ("forced_replay_close_count", "max_forced_replay_closes", 0.0),
-        ("rejected_order_count", "max_rejected_orders", 0.0),
+        (("invalid_order_rejection_count", "max_invalid_order_rejections", 0.0)
+         if "invalid_order_rejection_count" in metrics else ("rejected_order_count", "max_rejected_orders", 0.0)),
     ):
-        present = metric_name in metrics or metric_name in contract
+        present = _is_finite(metrics.get(metric_name, contract.get(metric_name)))
         tolerance = float(metrics.get(tolerance_name, contract.get(tolerance_name, default_tolerance)) or 0.0)
         actual = float(metrics.get(metric_name, contract.get(metric_name, 0.0)) or 0.0)
         passed = (present or metric_name not in required_hygiene or allow_missing_hygiene) and actual <= tolerance
         criteria.append(GateCriterion(f"hard_{metric_name}", tolerance, actual, passed))
     open_tolerance = float(metrics.get("max_end_open_positions", contract.get("max_end_open_positions", 0.0)) or 0.0)
-    end_open_present = "end_open_position_count" in metrics or "end_open_position_count" in contract
+    end_open_present = _is_finite(metrics.get("end_open_position_count", contract.get("end_open_position_count")))
     end_open = float(metrics.get("end_open_position_count", contract.get("end_open_position_count", 0.0)) or 0.0)
     allow_open_with_mtm = bool(metrics.get("allow_end_open_positions_with_mtm", contract.get("allow_end_open_positions_with_mtm", False)))
     end_open_evidence = end_open_present or "end_open_position_count" not in required_hygiene or allow_missing_hygiene
@@ -607,17 +609,21 @@ def _metric_contract_criteria(metrics: dict[str, Any]) -> list[GateCriterion]:
         criteria.append(GateCriterion(f"hard_{field}", 1.0, 1.0 if value else 0.0, bool(value)))
 
     audit_status = str(metrics.get("audit_status", contract.get("audit_status", "")) or "").lower()
-    audit_pass = bool(
-        metrics.get("audit_pass")
-        or contract.get("audit_pass")
-        or metrics.get("full_official_audit_passed")
-        or metrics.get("fast_full_audit_passed")
-        or audit_status in {"pass", "passed"}
-    )
+    from backtests.engine.contracts import execution_valid
+    # Archived native accounts must use their authenticated source-version
+    # verifier, never a fabricated current-checkout receipt. Default evaluation
+    # remains unchanged; an audit label alone cannot enter this explicit path.
+    if metrics.get("archived_native_evidence") is True and callable(archived_validator):
+        audit_pass = bool(archived_validator(metrics)) and metrics.get("audit_pass") is True and contract.get("audit_pass") is not False
+    else:
+        audit_pass = execution_valid({**metrics, "metric_contract": contract})
     if audit_status in {"fail", "failed", "missing", "not_run"}:
         audit_pass = False
     if requires:
         criteria.append(GateCriterion("hard_audit_pass", 1.0, 1.0 if audit_pass else 0.0, audit_pass))
+        if metrics.get("parity_required", contract.get("parity_required", False)):
+            parity = metrics.get("fast_full_audit_passed") is True
+            criteria.append(GateCriterion("hard_replay_parity", 1.0, float(parity), parity))
         execution_contract = contract.get("execution_contract") if isinstance(contract.get("execution_contract"), dict) else {}
         capability_level = str(
             metrics.get("capability_level")
@@ -626,8 +632,7 @@ def _metric_contract_criteria(metrics: dict[str, Any]) -> list[GateCriterion]:
             or ""
         ).lower()
         synthetic_levels = {"synthetic", "fixture", "mock", "test"}
-        allow_synthetic = bool(metrics.get("allow_synthetic_promotion", contract.get("allow_synthetic_promotion", False)))
-        capability_ok = bool(capability_level) and (capability_level not in synthetic_levels or allow_synthetic)
+        capability_ok = bool(capability_level) and capability_level not in synthetic_levels
         criteria.append(
             GateCriterion(
                 "hard_non_synthetic_capability",

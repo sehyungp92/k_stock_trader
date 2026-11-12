@@ -267,7 +267,8 @@ def test_prior_day_high_is_causal_and_ignores_trade_date_row() -> None:
     rows.insert(0, rows.pop(-2))
     dataset = replace(dataset, daily_by_symbol={"005930": rows})
 
-    assert _prior_day_high(dataset, "005930", TRADE_DATE) == pytest.approx(112.0)
+    # Monday's reference must be Friday; the later Sunday row is not a session.
+    assert _prior_day_high(dataset, "005930", TRADE_DATE) == pytest.approx(101.0)
 
 
 def test_same_bar_stop_target_conflict_resolves_stop_first() -> None:
@@ -626,10 +627,13 @@ def test_prepared_context_cache_reuses_causal_replay_bundle(monkeypatch: pytest.
         "daily_data_root": str(tmp_path / "daily"),
         "baseline": {"holdout_start": "2026-04-01"},
         "kalcb": {"session": {"flatten_time": "15:20"}},
+        "corrective_study_hash": "frozen-test-study",
     }
-
-    first = load_or_build_prepared_context(config, output_dir=tmp_path, compiled_cache_dir=tmp_path / "cache", train_only=True)
-    second = load_or_build_prepared_context(config, output_dir=tmp_path, compiled_cache_dir=tmp_path / "cache", train_only=True)
+    from backtests.strategies.kalcb.fixed_trade_plan_phase import _replay_context_config
+    first_config = _replay_context_config({**config, "initial_mutations": {"kalcb.exit.target_r": 5}})
+    second_config = _replay_context_config({**config, "initial_mutations": {"kalcb.exit.target_r": 8}})
+    first = load_or_build_prepared_context(first_config, output_dir=tmp_path, compiled_cache_dir=tmp_path / "cache", train_only=True)
+    second = load_or_build_prepared_context(second_config, output_dir=tmp_path, compiled_cache_dir=tmp_path / "cache", train_only=True)
     rebuilt = load_or_build_prepared_context(
         config,
         output_dir=tmp_path,
@@ -645,6 +649,7 @@ def test_prepared_context_cache_reuses_causal_replay_bundle(monkeypatch: pytest.
     assert second.cache_key == first.cache_key
     assert second.compiled_replay.source_fingerprint == first.compiled_replay.source_fingerprint
     assert second.baseline_train == first.baseline_train
+    assert second.dataset.bars_by_key and second.context_by_key
 
 
 def test_official_trade_plan_objective_prefers_portfolio_net_over_slot_proxy() -> None:

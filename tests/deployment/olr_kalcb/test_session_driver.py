@@ -120,27 +120,27 @@ def test_router_records_compact_strategy_state_snapshot(tmp_path):
     assert "oversized" not in json.dumps(row)
 
 
-def test_driver_applies_paper_fill_to_seeded_portfolio_context_when_refresh_empty(tmp_path):
+def test_driver_refuses_unidentified_paper_fill_without_fresh_account(tmp_path):
     driver = _driver(tmp_path, _NoActionEngine(), mode="paper", oms=_NoRefreshOMS())
     driver.portfolio_context.account_state = AccountState(equity=1_000.0, buyable_cash=1_000.0)
 
-    asyncio.run(
-        driver.handle_fill(
-            SimpleNamespace(
-                order_id="broker-fill",
-                symbol="005930",
-                side="BUY",
-                qty=2,
-                price=100.0,
-                timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
-                reason="paper_fill",
-                metadata={},
+    with pytest.raises(ValueError, match="durable execution identity"):
+        asyncio.run(
+            driver.handle_fill(
+                SimpleNamespace(
+                    order_id="broker-fill",
+                    symbol="005930",
+                    side="BUY",
+                    qty=2,
+                    price=100.0,
+                    timestamp=datetime(2026, 2, 2, 9, 35, tzinfo=KST),
+                    reason="paper_fill",
+                    metadata={},
+                )
             )
         )
-    )
 
-    assert driver.portfolio_context.strategy_exposure("KALCB", "005930").qty == 2
-    assert driver.portfolio_context.cash_equity().cash == 800.0
+    assert driver.portfolio_context.cash_equity().cash == 1000.0
 
 
 def test_driver_records_timer_no_action(tmp_path):
@@ -332,7 +332,7 @@ def test_driver_resolves_broker_fill_to_provisional_order_ref(tmp_path):
     assert fill_row["event"]["metadata"]["broker_order_id"] == order_row["order_id"]
     assert position is not None
     assert position.entry_order_id.startswith("KALCB:")
-    assert position.entry_order_id not in engine.state.order_roles
+    assert position.entry_order_id in engine.state.order_roles  # No terminal/cumulative evidence yet.
 
 
 def test_driver_partial_fill_releases_only_filled_router_reservation(tmp_path):

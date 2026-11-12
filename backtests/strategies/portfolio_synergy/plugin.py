@@ -34,12 +34,15 @@ class PortfolioSynergyOptimizationPlugin:
         *,
         output_dir: Path | None = None,
         max_workers: int = 1,
-        capability_level: str = "source_artifact_portfolio_replay",
+        capability_level: str = "synthetic",
+        synthetic_fixture: bool = False,
     ):
+        if not synthetic_fixture:
+            raise ValueError("portfolio_synergy requires explicit synthetic_fixture=True; historical evaluation is unavailable")
         self.config = dict(config or {})
         self.output_dir = Path(output_dir or ".")
         self.max_workers = min(max(1, int(max_workers or 1)), 2)
-        self.capability_level = str(self.config.get("capability_level", capability_level) or capability_level)
+        self.capability_level = "synthetic"
         self.num_phases = int(self.config.get("num_phases", 7) or 7)
         self.ultimate_targets = dict(ULTIMATE_TARGETS)
         self.initial_mutations = self.canonicalize_mutations(
@@ -73,7 +76,7 @@ class PortfolioSynergyOptimizationPlugin:
             "max_score_components": 7,
             "max_workers": self.max_workers,
             "capability_level": self.capability_level,
-            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "replay_mode": "synthetic",
             "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
             "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
             "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
@@ -105,11 +108,11 @@ class PortfolioSynergyOptimizationPlugin:
             max_rounds=int(self.config.get("max_rounds_per_phase", 4) or 4),
             prune_threshold=0.18,
             reject_streak_limit=2,
-            phase_metric_basis="train_only_source_fingerprinted_portfolio_arbitration",
+            phase_metric_basis="synthetic",
             primary_promotion_metric="official_mtm_net_return_pct",
             official_metric_keys=("official_mtm_net_return_pct", "max_drawdown_pct", "profit_factor", "total_trades"),
             proxy_metric_keys=("entries_blocked_by_portfolio", "positive_alpha_block_rate", "blocked_avg_r"),
-            promotion_requires_audit_pass=False,
+            promotion_requires_audit_pass=True,
         )
 
     def create_evaluate_batch(
@@ -320,6 +323,7 @@ class PortfolioSynergyOptimizationPlugin:
         result = evaluate_portfolio(
             canonical,
             bundle=self._ensure_bundle(),
+            synthetic_fixture=True,
             candidate_snapshot_hash=self.candidate_snapshot_hash,
         )
         self._result_cache[signature] = result
@@ -512,7 +516,7 @@ class PortfolioSynergyOptimizationPlugin:
 
     def _ensure_bundle(self) -> PortfolioBundle:
         if self._bundle is None:
-            self._bundle = load_portfolio_bundle(self.config)
+            self._bundle = load_portfolio_bundle(self.config, synthetic_fixture=True)
         return self._bundle
 
     def _analysis_extra(

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from backtests.engine.evaluation_identity import bound_evaluation
+from backtests.engine.capacity import capacity_from_config
+
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -7,6 +10,8 @@ from statistics import mean
 from typing import Any, Iterable
 
 from backtests.analysis.metrics import compute_trade_metrics
+from backtests.engine.integrity import audit_broker
+from backtests.engine.contracts import EXECUTION_VERSION
 from backtests.auto.shared.cache_keys import stable_signature
 from backtests.core.replay_bundle import EventReplayBundle
 from backtests.core.replay_events import ReplayEvent
@@ -18,8 +23,9 @@ from strategy_common.clock import KST
 from strategy_common.events import DecisionEvent
 from strategy_common.market import MarketBar, require_completed_bar
 from strategy_olr.config import OLRConfig, OLR_CORE_VERSION, STRATEGY_ID
-from strategy_olr.core.core_models import OLRExpiredOrderEvent, OLRFillEvent, OLRPortfolioView
-from strategy_olr.core.logic import on_olr_fill, on_olr_order_expired, remember_submitted_order, step_olr_core
+from strategy_olr.core.core_models import OLRExpiredOrderEvent, OLRFillEvent, OLROrderUpdateEvent, OLRPortfolioView
+from strategy_olr.core.logic import (on_olr_fill, on_olr_order_expired, on_olr_order_update,
+    remember_submitted_order, step_olr_core, pending_entry_reservation, on_olr_timer)
 from strategy_olr.core.state import OLRState
 from strategy_olr.execution import normalize_action_prices
 from strategy_olr.models import OLRDailyCandidate, OLRDailySnapshot
@@ -46,11 +52,17 @@ class StrategyBacktestResult:
 
 class OLRReplayAdapter:
     strategy_id = STRATEGY_ID
+    records_strategy_state = True
 
-    def __init__(self, config: OLRConfig, snapshots: dict[date, OLRDailySnapshot]):
+    def __init__(self, config: OLRConfig, snapshots: dict[date, OLRDailySnapshot], *, decision_context_provider=None, economic_policy=None):
         if not snapshots:
             raise ValueError("OLR replay adapter requires at least one candidate snapshot")
         self.config = config
+        if decision_context_provider is not None and economic_policy is not None:
+            raise ValueError('Only one research economic controller may own decisions')
+        self.economic_policy=economic_policy
+        self.decision_context_provider = economic_policy.entry_context if economic_policy is not None else decision_context_provider
+        self._observed_decision_account = None
         self.snapshots = dict(sorted(snapshots.items()))
         first_snapshot = next(iter(self.snapshots.values()))
         self.state = OLRState(
@@ -59,6 +71,8 @@ class OLRReplayAdapter:
         )
         self._fill_cursor = 0
         self._expired_cursor = 0
+        self._order_journal_cursor = 0
+        self._order_journal_timestamp = None
         self.auction_order_count = 0
         self.submitted_order_ids: set[str] = set()
         self.action_payloads: list[dict[str, Any]] = []
@@ -69,9 +83,12 @@ class OLRReplayAdapter:
         }
 
     def on_bar(self, bar: MarketBar, broker: SimBroker) -> list[DecisionEvent]:
+        from strategy_olr.core.capacity import observe_routed
+        observe_routed(self.state, bar, self.config, self.snapshots.get(bar.timestamp.date()))
         decisions: list[DecisionEvent] = []
         decisions.extend(self._sync_new_fills(broker))
         decisions.extend(self._sync_expired_orders(broker, bar.timestamp))
+        decisions.extend(self._sync_order_updates(broker, bar.timestamp))
         snapshot = self.snapshots.get(bar.timestamp.date())
         if not self._should_step_symbol(bar.symbol, snapshot):
             return decisions
@@ -83,8 +100,92 @@ class OLRReplayAdapter:
 
     def on_timestamp_end(self, timestamp: datetime, bars: tuple[MarketBar, ...], broker: SimBroker) -> list[DecisionEvent]:
         decisions = self._sync_new_fills(broker)
+        decisions.extend(on_olr_timer(self.state,timestamp+timedelta(minutes=5),self.config).decisions)
         decisions.extend(self._sync_expired_orders(broker, timestamp))
+        decisions.extend(self._sync_order_updates(broker, timestamp))
+        self._record_reconciliation(broker, timestamp)
         return decisions
+
+    def on_bars(self, bars, broker):
+        from strategy_olr.core.allocation import step_olr_batch
+        from strategy_olr.core.capacity import observe_routed
+        bars = tuple(bars)
+        if not bars:
+            return []
+        stamp = bars[0].timestamp
+        decisions = self._sync_new_fills(broker)
+        decisions.extend(self._sync_expired_orders(broker, stamp))
+        decisions.extend(self._sync_order_updates(broker, stamp))
+        snapshot = self.snapshots.get(stamp.date())
+        for bar in bars:
+            observe_routed(self.state, bar, self.config, snapshot)
+        selected = tuple(b for b in bars if self._should_step_symbol(b.symbol, snapshot))
+        provider=None
+        if self.decision_context_provider is not None:
+            from .decision_account import ObservedAccount
+            if self._observed_decision_account is None:
+                self._observed_decision_account=ObservedAccount(broker.initial_equity)
+            observed=self._observed_decision_account.consume(broker.journal,stamp+timedelta(minutes=5),
+                actual_cash=broker.cash,actual_equity=broker._portfolio_equity())
+            if self.economic_policy is not None:
+                self.economic_policy.observe_account(observed)
+            def provider(request):
+                request['observed_account']=dict(observed)
+                context=self.decision_context_provider(request)
+                if context is not None and context['actual_high_water']!=observed['high_water']:
+                    raise ValueError('Joint context changed the actual account high-water mark')
+                if context is not None and context.get('actual_equity',request['account']['equity'])!=observed['equity']:
+                    raise ValueError('Joint context substituted sizing equity for actual NAV')
+                return context
+        result = step_olr_batch(self.state, selected, self.config, snapshot, self._portfolio_view(broker),
+                                decision_context_provider=provider,economic_policy=self.economic_policy)
+        self._submit_actions(result.actions, broker, stamp)
+        return decisions+list(result.decisions)
+
+    def on_fills(self, broker: SimBroker) -> list[DecisionEvent]:
+        decisions = self._sync_new_fills(broker)
+        if broker.fills:
+            decisions.extend(self._sync_order_updates(broker, broker.fills[-1].timestamp))
+        return decisions
+
+    def _sync_order_updates(self, broker: SimBroker, timestamp: datetime) -> list[DecisionEvent]:
+        """Deliver terminal acknowledgements once, including cancels caused by fills.
+
+        Expiry retains its existing auction-fallback handler. Journal order and
+        the broker's event timestamp, rather than submission time, are causal.
+        """
+        decisions = []
+        while self._order_journal_cursor < len(broker.journal):
+            row = broker.journal[self._order_journal_cursor]
+            self._order_journal_cursor += 1
+            stamp = row.get("timestamp") or row.get("fill", {}).get("timestamp")
+            if stamp is not None:
+                self._order_journal_timestamp = datetime.fromisoformat(stamp) if isinstance(stamp, str) else stamp
+            order = row.get("order", {})
+            if row["event"] not in {"reject", "cancel"} or order.get("strategy_id") != self.strategy_id:
+                continue
+            observed = self._order_journal_timestamp or timestamp
+            result = on_olr_order_update(self.state, OLROrderUpdateEvent(
+                order_id=str(order["order_id"]), symbol=order["symbol"],
+                status="REJECTED" if row["event"] == "reject" else "CANCELLED",
+                timestamp=observed, side=order["side"], order_type=order["order_type"],
+                qty=order.get("qty"), reason=row.get("reason", "broker_" + row["event"]),
+                metadata=dict(order.get("metadata", {}))), self.config)
+            self._submit_actions(result.actions, broker, observed)
+            decisions.extend(result.decisions)
+        return decisions
+
+    def _record_reconciliation(self, broker: SimBroker, timestamp: datetime) -> None:
+        # The independent ledger auditor compares these core observations with
+        # orders/quantities reconstructed from preceding broker events.
+        broker.journal.append({"event": "strategy_state", "strategy_id": self.strategy_id,
+            "timestamp": timestamp.isoformat(),
+            "positions": {s: x.position.qty_open for s, x in self.state.symbols.items() if x.position},
+            "pending_entries": {x.pending_entry_order_id: {"symbol": s,
+                "remaining_qty": pending_entry_reservation(x)[0],
+                "reserved_notional": pending_entry_reservation(x)[1]}
+                for s, x in self.state.symbols.items() if x.pending_entry_order_id},
+            "pending_exits": {x.pending_exit_order_id: s for s, x in self.state.symbols.items() if x.pending_exit_order_id}})
 
     def _sync_new_fills(self, broker: SimBroker) -> list[DecisionEvent]:
         decisions: list[DecisionEvent] = []
@@ -162,10 +263,13 @@ class OLRReplayAdapter:
             mark_price = broker.last_prices.get(symbol, position.avg_price)
             invested_notional += float(position.qty) * float(mark_price)
         equity = float(broker.cash) + invested_notional
+        available_cash = float(broker.cash)
+        if hasattr(broker, "strategy_account_view"):
+            equity, available_cash = broker.strategy_account_view(self.strategy_id)
         gross = invested_notional / equity if equity > 0.0 else 0.0
         self.exposure_points.append(gross)
         return OLRPortfolioView(
-            cash=float(broker.cash),
+            cash=available_cash,
             equity=equity,
             positions=positions,
             open_positions=len(positions),
@@ -187,10 +291,13 @@ class OLRReplayAdapter:
         return key in self._snapshot_symbol_sets.get(snapshot.trade_date, frozenset())
 
 
+@bound_evaluation
 def run_olr_backtest(
     config: dict[str, Any] | None = None,
     mutations: dict[str, Any] | None = None,
     replay_bundle: EventReplayBundle | None = None,
+    *,
+    execution_clock: str = EXECUTION_VERSION,
 ) -> StrategyBacktestResult:
     raw_config = dict(config or {})
     raw_mutations = dict(mutations or {})
@@ -234,11 +341,34 @@ def run_olr_backtest(
         adapter,
         initial_equity=initial_equity,
         costs=costs,
+        capacity_policy=capacity_from_config(raw_config),
+        execution_clock=execution_clock,
         bars_are_ordered=True,
         close_open_positions=False,
+        candidate_scoped=True,
     )
     result.decisions.extend(adapter._sync_new_fills(result.broker))
-    metrics = compute_trade_metrics(result.trades, result.equity_curve, initial_equity=initial_equity)
+    window = replay_bundle.metadata.get("training_window") or {}
+    if window.get("eligible_snapshot_end") and window.get("end"):
+        from datetime import date as _date
+        from kis_core.trading_calendar import get_trading_calendar
+        calendar = get_trading_calendar()
+        last = _date.fromisoformat(window["eligible_snapshot_end"])
+        end = _date.fromisoformat(window["end"])
+        dispositions = {}
+        cursor = calendar.next_trading_day(last)
+        while cursor <= end:
+            dispositions[cursor.isoformat()] = "outside_declared_entry_horizon"
+            cursor = calendar.next_trading_day(cursor)
+        result.broker.qualification_day_dispositions = {"OLR": dispositions}
+    from backtests.analysis.trade_groups import collapse_exit_legs
+    result.trades = collapse_exit_legs(result.trades)
+    declared = replay_bundle.metadata.get("declared_window") or window or raw_config.get("date_range") or {}
+    declared = {key: declared[key] for key in ("start", "end")} if all(declared.get(key) for key in ("start", "end")) else None
+    result.broker.evaluation_window = declared
+    metrics = compute_trade_metrics(result.trades, result.equity_curve, timestamps=result.timestamps,
+        mark_coverage=result.broker.mark_coverage or None, initial_equity=initial_equity,
+        declared_window=declared, initial_cash_only=True)
     _apply_official_metrics(metrics, result, adapter, initial_equity, costs, cfg)
     candidate_snapshot_hash = _aggregate_snapshot_hash(snapshots)
     feature_bundle_hash = str((replay_bundle.metadata or {}).get("olr_feature_bundle_hash") or replay_bundle.source_fingerprint)
@@ -253,6 +383,10 @@ def run_olr_backtest(
     metrics["trade_exit_plan_mode"] = str((cfg.trade_exit_plan or {}).get("mode") or cfg.exit_mode)
     metrics["official_trade_plan_supported"] = 1.0 if _official_exit_plan_supported(cfg.trade_exit_plan) else 0.0
     metrics["official_performance"] = False
+    # bound_evaluation audits once, after binding the complete request identity.
+    result.broker.evaluation_identity = {"input_manifest": replay_bundle.metadata.get("input_manifest"),
+        "config": cfg.to_dict() if hasattr(cfg, "to_dict") else repr(cfg),
+        "source_fingerprint": replay_bundle.source_fingerprint, "candidate_snapshot_hash": candidate_snapshot_hash}
     return StrategyBacktestResult(
         "olr",
         metrics,
@@ -415,6 +549,8 @@ def _apply_official_metrics(
     metrics["open_order_count"] = float(len(result.broker.orders))
     metrics["expired_order_count"] = float(len(result.broker.expired_orders))
     metrics["entry_fill_count"] = float(sum(1 for fill in result.broker.fills if fill.strategy_id == adapter.strategy_id and fill.side == "BUY"))
+    metrics["entry_lifecycle_count"] = float(len({(fill.metadata.get("order_date"), fill.order_id)
+        for fill in result.broker.fills if fill.strategy_id == adapter.strategy_id and fill.side == "BUY"}))
     metrics["exit_fill_count"] = float(sum(1 for fill in result.broker.fills if fill.strategy_id == adapter.strategy_id and fill.side == "SELL"))
     metrics.update(_entry_level_trade_metrics(result.trades))
     metrics["close_to_close_alpha_capture_pct"] = float(_close_to_close_alpha_capture(result.trades))

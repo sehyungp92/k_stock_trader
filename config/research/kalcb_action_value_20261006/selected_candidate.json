@@ -1,0 +1,92 @@
+{
+  "version": "kalcb-research-candidate-v1",
+  "policy": "q_ridge_risk_strict",
+  "status": "development_candidate_for_fresh_validation",
+  "production_enabled": false,
+  "untouched_oos": false,
+  "code_generation": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\code_v10",
+  "replay_plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\final_plan.json",
+  "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\final_audit_generation\\manifest.json",
+  "audit_manifest_sha256": "fc707b32ad5d5cf4c3c90146c1ca113993c9433c3610c0fdfb97d83911666e2f",
+  "training": {
+    "window": "expanding",
+    "minimum_sessions": 60,
+    "embargo_sessions": 1,
+    "refit_interval_sessions": 20
+  },
+  "maximum_predicted_failure_probability": 0.001,
+  "quantity_ladder": [
+    0,
+    0.25,
+    0.5,
+    1
+  ],
+  "development_results": {
+    "baseline": {
+      "policy": "q_ridge_risk_strict",
+      "scenario": "baseline",
+      "return_pct": 20.554709568867892,
+      "drawdown_pct": 8.044909055999412,
+      "trades": 305,
+      "sessions": 156,
+      "active_days": 109,
+      "residual_sessions": {},
+      "terminal_inventory": {},
+      "terminal_pending": 0,
+      "execution_validity_pass": true,
+      "audit_status": "passed",
+      "result_path": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\final_audited_strict\\q_ridge_risk_strict_baseline\\result.json",
+      "result_sha256": "eb8ecbdf0f4148a6169e11c23e038929ae1f82fd05a77316af06c3d166200d10"
+    },
+    "participation": {
+      "policy": "q_ridge_risk_strict",
+      "scenario": "participation",
+      "return_pct": 18.18516275701041,
+      "drawdown_pct": 8.344129726487584,
+      "trades": 304,
+      "sessions": 156,
+      "active_days": 109,
+      "residual_sessions": {},
+      "terminal_inventory": {},
+      "terminal_pending": 0,
+      "execution_validity_pass": true,
+      "audit_status": "passed",
+      "result_path": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\final_audited_strict\\q_ridge_risk_strict_participation\\result.json",
+      "result_sha256": "476db2b047f49dc23f750aba350da2f7ec89bc6c64907757160b30d4a0557897"
+    },
+    "cost": {
+      "policy": "q_ridge_risk_strict",
+      "scenario": "cost",
+      "return_pct": 11.855671520745181,
+      "drawdown_pct": 8.975166854818681,
+      "trades": 307,
+      "sessions": 156,
+      "active_days": 109,
+      "residual_sessions": {},
+      "terminal_inventory": {},
+      "terminal_pending": 0,
+      "execution_validity_pass": true,
+      "audit_status": "passed",
+      "result_path": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\final_audited_strict\\q_ridge_risk_strict_cost\\result.json",
+      "result_sha256": "803193d153f9735bc2f3f0174385468a3f5d7f74a835fdbcbf6754f98245640b"
+    },
+    "combined": {
+      "policy": "q_ridge_risk_strict",
+      "scenario": "combined",
+      "return_pct": 10.891345020717736,
+      "drawdown_pct": 9.345963268353394,
+      "trades": 307,
+      "sessions": 156,
+      "active_days": 109,
+      "residual_sessions": {},
+      "terminal_inventory": {},
+      "terminal_pending": 0,
+      "execution_validity_pass": true,
+      "audit_status": "passed",
+      "result_path": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\final_audited_strict\\q_ridge_risk_strict_combined\\result.json",
+      "result_sha256": "a6b477f505a391b9cc8b68a70dcddeb1033e03fa8aa3e7617a74b2903eb90be1"
+    }
+  },
+  "delivery": "E:\\CodexResearch\\k_stock_trader\\kalcb_action_value_20261006\\delivery.json",
+  "note": "Freeze the procedure before fresh validation; do not extrapolate saved fold models beyond their valid-through dates."
+}

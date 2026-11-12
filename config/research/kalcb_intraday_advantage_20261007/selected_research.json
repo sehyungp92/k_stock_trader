@@ -1,0 +1,132 @@
+{
+  "status": "qualified_research_only",
+  "live_enabled": false,
+  "primary_profile": "cost_margin_activity",
+  "configuration": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\config\\research\\kalcb_intraday_advantage_20261007\\selected_config.json",
+  "configuration_sha256": "400f67719926e0e36f246cbeea60b930355ea262a47e04153d2d8099b8a758a1",
+  "date_range": {
+    "start": "2025-08-07",
+    "end": "2026-03-31",
+    "sessions": 156
+  },
+  "initial_equity_krw": 100000000,
+  "training_coverage": {
+    "start": "2025-05-12",
+    "end": "2026-03-31"
+  },
+  "june_july_2026_used": false,
+  "drawdown_preferences": {
+    "baseline": 8,
+    "combined": 10,
+    "hard_rejection_thresholds": false
+  },
+  "metrics": {
+    "baseline": {
+      "return_pct": 73.13031454719585,
+      "drawdown_pct": 7.679723007727198,
+      "trades": 370,
+      "active_days": 110,
+      "audit_status": "passed"
+    },
+    "participation": {
+      "return_pct": 68.30492041580725,
+      "drawdown_pct": 7.5308779730279145,
+      "trades": 368,
+      "active_days": 110,
+      "audit_status": "passed"
+    },
+    "cost": {
+      "return_pct": 52.44503557244853,
+      "drawdown_pct": 8.325447542686035,
+      "trades": 370,
+      "active_days": 110,
+      "audit_status": "passed"
+    },
+    "combined": {
+      "return_pct": 47.81214656273163,
+      "drawdown_pct": 8.31737670207572,
+      "trades": 371,
+      "active_days": 110,
+      "audit_status": "passed"
+    }
+  },
+  "comparison_to_previous_selected_full": {
+    "baseline": {
+      "return_change_pp": 6.449970069903117,
+      "drawdown_change_pp": 0.0018241653629154087,
+      "trade_change": 22,
+      "active_day_change": 11
+    },
+    "participation": {
+      "return_change_pp": 9.552241000217563,
+      "drawdown_change_pp": -0.22975829172767348,
+      "trade_change": 21,
+      "active_day_change": 11
+    },
+    "cost": {
+      "return_change_pp": 6.8137624066407625,
+      "drawdown_change_pp": -0.44488247796224556,
+      "trade_change": 21,
+      "active_day_change": 11
+    },
+    "combined": {
+      "return_change_pp": 7.501669107358168,
+      "drawdown_change_pp": -0.5867172736713204,
+      "trade_change": 22,
+      "active_day_change": 11
+    }
+  },
+  "result_paths": {
+    "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_cost_margin_final\\baseline\\result.json",
+    "participation": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_cost_margin_final\\participation\\result.json",
+    "cost": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_cost_margin_final\\cost\\result.json",
+    "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\qualified_cost_margin_final\\combined\\result.json"
+  },
+  "plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\margin_phase\\cases\\overlay25__cost_margin__1p0\\plan.json",
+  "policy": {
+    "name": "interaction_cost_margin",
+    "directory": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\checkpoint\\interaction_cost_margin_scoped",
+    "manifest_sha256": "f871031d8d1f4cc1b4ebee2752020a4aee4edc3b6f8e5a1f2a7b23565e57e21d",
+    "requires_timed_candidate_updates": true
+  },
+  "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\audit_cost_margin_final\\manifest.json",
+  "audit_manifest_sha256": "f5adb93c8ae2ea65ba2ea1b8b8ae92d8823f4b980bcfa5096f55e0b7f72f675e",
+  "execution_source": {
+    "code": "C:\\Users\\sehyu\\.codex\\tmp\\kalcb_intraday_advantage_20261007\\code_v9",
+    "source_generation_hash": "79b8ad2b7d4c93bf62fb9650c3225b8933977b311d506725709243fd2adcb49f"
+  },
+  "admission_generation_source": {
+    "code": "C:\\Users\\sehyu\\.codex\\tmp\\kalcb_intraday_advantage_20261007\\code_v7",
+    "source_generation_hash": "d5c7d4c7062dc389b4cc6c40e0a03bf83cbc9f9c40f35ea851606457f7b8db3b"
+  },
+  "alternative_profile": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\config\\research\\kalcb_intraday_advantage_20261007\\profit_retention_research.json",
+  "research_protocols": {
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\checkpoint_phase\\study.json": "45b50ae63af5684080df29ca2c6343041d0837de2319cb429725a134cd3afff0",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\combined_phase\\study.json": "cfa2415a0bb800b62bed2cdf9600db3eb9f5987a7ba468df9cb960de3e155f81",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\management\\study.json": "7ac057850e3dbe0418f49b207a0b742cab650495d3bb0675dadc14f542081077",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\management_large\\study.json": "1220d79d097c4813c2f8de23366f9b21d0b8440d2e69af53662798b082bbc7f2",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\management_overlay\\study.json": "2bf5a221a5b3f06819c9e2f8817f9aee56f8f45c7c3d27877a3e93a7321f22d1",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\management_sensitivity\\study.json": "7b1ee086871c97769165654f4c61bb62f4d9e6a4d91b0cf7aca40885d6d4301f",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\margin_phase\\study.json": "9713724b2147801b2b51cbae1c41d5feddc5dfbcc7ae7eb76c0121388a7c4606",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\opening_phase\\study.json": "501b16435e42b3bf3dc520b0a150c66ecc99eca5a385db5c026d8084ddefefda",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\watch_fast_phase\\study.json": "1967f9e5a056eef3985da5f58573eb867fb3f4cddc5e2be94b5e3bd4a7614e03",
+    "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\watch_phase\\study.json": "83e5e5758394853005bdf61056770a413db4a770114e488a039e84f36ab61320"
+  },
+  "tested_variant_count": 20,
+  "all_trials": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\final_trial_summary.json",
+  "scope_preparation_parity": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\scope_preparation_parity.json",
+  "regression_tests": {
+    "passed": 205,
+    "log": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\final_scope_tests.log"
+  },
+  "forecast_reconstruction": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\checkpoint_forecast_verification.json",
+  "final_account_verification": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\final_account_verification.json",
+  "input_verification": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\release_input_verification.json",
+  "attribution": "E:\\CodexResearch\\k_stock_trader\\kalcb_intraday_advantage_20261007\\margin_attribution.json",
+  "limits": [
+    "Adaptive selection on reused development data; no independent forward-return claim.",
+    "Baseline drawdown is effectively unchanged versus the predecessor, not lower.",
+    "The exit-only alternative has lower drawdown and fewer trades.",
+    "Live feature delivery and paper execution remain to be qualified."
+  ]
+}

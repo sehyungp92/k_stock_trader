@@ -1,0 +1,31 @@
+{
+  "completion_requires_future_sessions": false,
+  "evaluation_window_policy": "Use the declared available window, retaining all eligible sessions and reporting sample size and uncertainty. No fixed minimum number of future sessions is a completion condition.",
+  "evidence_policy": "Implementation and report completion are separate from independent performance, statistical confidence and operational readiness. Inconclusive evidence can be reported without blocking completion; existing integrity checks remain required.",
+  "historical_evidence_policy": "Superseded sealed contracts and recorded status files retain their original bytes. Their former future-session requirement is not an active completion condition.",
+  "kalcb_protocol": "config/research/kalcb_selected_full_recovery_20261007/prospective_protocol.json",
+  "live_promotion": false,
+  "olr": {
+    "control_protocol": {
+      "contract_hash": "581bfae99b20232998ff2c4a08ea137163c6d0a9ca397d0da86198d493fb82d0",
+      "parent_contract_hash": "7b5e2e15825b7be0b20587776f584a710a9711f0bc332617cee32bcc2008c2ef",
+      "path": "E:\\CodexResearch\\k_stock_trader\\olr_forward_validation_20261008\\control_protocol\\prospective_validation_contract.json"
+    },
+    "forward_protocol": {
+      "contract_hash": "fd1c7c342f7b52aade11f5922b0a653b05be658830428ce0ae0196f06791f2a5",
+      "parent_contract_hash": "d4c050f74ac727c0a5d9c175083915adc9a94fd3b5f20244543d3c7cd58924ec",
+      "path": "E:\\CodexResearch\\k_stock_trader\\olr_forward_validation_20261008\\forward_protocol\\prospective_validation_contract.json"
+    }
+  },
+  "performance_evaluated_by_this_revision": false,
+  "portfolio_protocol": "config/research/portfolio_synergy_intent_20261008/forward_validation_protocol.json",
+  "revised_at_utc": "2026-10-08T09:24:49.831959+00:00",
+  "scope": [
+    "olr",
+    "kalcb",
+    "portfolio_synergy"
+  ],
+  "training_policy": "Historical training, warmup and calibration lookbacks are unchanged.",
+  "version": "forward-validation-completion-policy-v1",
+  "portfolio_protocol_revision_utc": "2026-10-08T13:06:11.438074+00:00"
+}

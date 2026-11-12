@@ -124,7 +124,7 @@ def test_olr_official_audit_uses_train_only_followup_sessions_for_auction_recove
     assert date(2026, 1, 14) not in followups
 
 
-def test_olr_official_replay_gate_rejects_stale_orders_or_unclosed_positions() -> None:
+def test_olr_official_replay_gate_rejects_stale_orders_or_unclosed_positions(monkeypatch) -> None:
     clean = {
         "official_trade_plan_supported": 1.0,
         "same_bar_fill_count": 0.0,
@@ -134,6 +134,8 @@ def test_olr_official_replay_gate_rejects_stale_orders_or_unclosed_positions() -
         "exit_fill_count": 10.0,
     }
 
+    assert not _official_replay_pass(clean)  # Hygiene alone is not an execution receipt.
+    monkeypatch.setattr("backtests.engine.contracts.execution_valid", lambda metrics: True)
     assert _official_replay_pass(clean)
     assert not _official_replay_pass({**clean, "open_order_count": 1.0})
     assert not _official_replay_pass({**clean, "end_open_position_count": 1.0})

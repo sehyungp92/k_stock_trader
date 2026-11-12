@@ -1,0 +1,219 @@
+artifact_promotion_policy: research_only_until_oos_and_paper_parity
+artifact_root: data/strategy/olr
+auction_mode: resting_close_auction_after_14_30_decision
+baseline_name: Low-325
+capability_level: real_replay
+capacity_scenario:
+  name: research-baseline
+  participation: 0.01
+corrective_study_hash: olr-rule-ablation-v1
+daily_data_root: data/krx_daily_parquet
+data_root: data/kis_intraday_parquet
+date_range:
+  end: '2026-03-31'
+  start: '2025-05-12'
+entry_require_complete_prefix: false
+holdout_days: 42
+holdout_excluded_from_optimization: true
+holdout_start: '2026-04-01'
+initial_equity: 10000000.0
+initial_mutations:
+  olr.afternoon.max_flow_divergence: 9.99
+  olr.afternoon.max_gap: 0.2
+  olr.afternoon.max_open_drawdown: 0.2
+  olr.afternoon.max_prior_ret20: 999.0
+  olr.afternoon.max_range_atr: 99.0
+  olr.afternoon.min_bar_count: 1
+  olr.afternoon.min_close_location: 0.0
+  olr.afternoon.min_flow_5d: 0.0
+  olr.afternoon.min_flow_agreement: -9.99
+  olr.afternoon.min_flow_z: -9.99
+  olr.afternoon.min_foreign_flow_5d: -9.99
+  olr.afternoon.min_foreign_z: -9.99
+  olr.afternoon.min_gap: -0.2
+  olr.afternoon.min_high_from_open: -0.2
+  olr.afternoon.min_institutional_flow_5d: -9.99
+  olr.afternoon.min_institutional_z: -9.99
+  olr.afternoon.min_lagged_flow_score: -999.0
+  olr.afternoon.min_low_vs_prev_close: -0.2
+  olr.afternoon.min_market_score: -9.99
+  olr.afternoon.min_prior_ret20: -100.0
+  olr.afternoon.min_prior_ret5: -100.0
+  olr.afternoon.min_prior_ret60: -100.0
+  olr.afternoon.min_rel_volume: 0.0
+  olr.afternoon.min_ret: 0.0
+  olr.afternoon.min_sector_flow: 0.0
+  olr.afternoon.min_sector_foreign_flow: -9.99
+  olr.afternoon.min_sector_institutional_flow: -9.99
+  olr.afternoon.min_vwap_ret: -0.02
+  olr.afternoon.reject_score_max: 0.0
+  olr.afternoon.reject_score_min: 0.0
+  olr.afternoon.require_close_above_prev: false
+  olr.afternoon.score_band_rules:
+  - max_score: 325.0
+    name: base_low_lt300
+  - allowed_sectors:
+    - CHEMICALS
+    - SEMICONDUCTORS
+    - DEFENSE
+    - ELECTRONICS
+    - IT
+    - SHIPBUILDING
+    - FINANCIAL
+    max_score: 500.0
+    min_score: 400.0
+    name: mid_400_500_static_sector_prior
+  - max_score: 500.0
+    min_score: 400.0
+    name: mid_400_500_looser_breakout_dynamic_overlay
+    sector_admission:
+      min_sector_intraday_ret_pct: 2.0
+      min_stock_sector_daily_ret5_gap_pct: 11.0
+      mode: dynamic_confirmed_rotation
+  - min_score: 650.0
+    name: base_high_gt650
+  olr.afternoon.score_mode: momentum
+  olr.afternoon.top_n: 8
+  olr.afternoon.use_lagged_flow_score: true
+  olr.afternoon.weight_sector_rotation: 0.0005
+  olr.afternoon.weight_stock_sector_leadership: 0.001
+  olr.allocation.max_position_pct: 0.65
+  olr.allocation.min_selected: 1
+  olr.allocation.mode: rank_weighted
+  olr.allocation.rank_decay: 1.5
+  olr.allocation.target_gross_exposure: 1.2
+  olr.cost.tax_bps_on_sell: 20.0
+  olr.execution.auction_fill_time: '15:30'
+  olr.frontier.active_selection_mode: hot
+  olr.overnight.slot_count: 5
+  olr.premarket.frontier_size: 30
+  olr.premarket.min_adv20_krw: 0.0
+  olr.premarket.min_foreign5_z: -9.99
+  olr.research.max_box_range_pct: 0.0
+  olr.research.max_flow_divergence: 9.99
+  olr.research.max_median_spread_pct: 0.35
+  olr.research.min_accumulation_score: -1.0
+  olr.research.min_adv20_krw: 2000000000.0
+  olr.research.min_compression_score: 0.0
+  olr.research.min_flow_5d: -9.99
+  olr.research.min_flow_agreement: -9.99
+  olr.research.min_flow_z: -9.99
+  olr.research.min_foreign_flow_5d: -9.99
+  olr.research.min_history_days: 60
+  olr.research.min_institutional_flow_5d: -9.99
+  olr.research.min_price_krw: 1000.0
+  olr.research.min_rs_percentile: 0.0
+  olr.research.min_sector_flow_5d: -9.99
+  olr.research.min_sector_flow_agreement: -9.99
+  olr.research.min_sector_foreign_flow_5d: -9.99
+  olr.research.min_sector_institutional_flow_5d: -9.99
+  olr.research.min_sector_participation: 0.5
+  olr.research.min_trend_score: 0.0
+  olr.research.require_spread: false
+  olr.research.top_long_count: 20
+  olr.research.weights.accumulation: 0.1
+  olr.research.weights.compression: 0.1
+  olr.research.weights.daily_signal: 0.1
+  olr.research.weights.daily_trend: 0.16
+  olr.research.weights.flow: 0.05
+  olr.research.weights.flow_agreement: 0.02
+  olr.research.weights.foreign_flow: 0.03
+  olr.research.weights.institutional_flow: 0.02
+  olr.research.weights.relative_strength: 0.2
+  olr.research.weights.sector_participation: 0.07
+  olr.research.weights.sector_regime: 0.07
+  olr.research.weights.stock_regime: 0.08
+  olr.signal.allow_secular: true
+  olr.signal.bb_pctb_trigger: 0.05
+  olr.signal.cdd_max: 99
+  olr.signal.cdd_min_for_rsi5: 2
+  olr.signal.daily_max_score: 100.0
+  olr.signal.daily_min_score: 0.0
+  olr.signal.daily_rescue_min_score: 0.0
+  olr.signal.daily_signal_family: discrete_pullback_v2
+  olr.signal.daily_structure_weight: 0.0
+  olr.signal.depth_atr_trigger: 1.5
+  olr.signal.flow_policy: soft_penalty_rescue
+  olr.signal.gap_down_trigger_pct: -2.0
+  olr.signal.gap_max_pct: 20.0
+  olr.signal.max_parent_20d_return_pct: 999.0
+  olr.signal.max_relative_strength_pct: 100.0
+  olr.signal.min_market_breadth_pct: 0.0
+  olr.signal.min_market_heat_score: 0.0
+  olr.signal.min_parent_20d_return_pct: -20.0
+  olr.signal.min_relative_strength_pct: 0.0
+  olr.signal.relative_strength_trigger_pct: 70.0
+  olr.signal.rescue_size_mult: 0.65
+  olr.signal.roc5_drop_trigger_pct: -3.0
+  olr.signal.rsi2_trigger_thresh: 15.0
+  olr.signal.rsi5_trigger_thresh: 30.0
+  olr.signal.secular_sizing_mult: 0.65
+  olr.signal.signal_floor: 0.0
+  olr.signal.structure_size_mult_max: 1.25
+  olr.signal.structure_size_mult_min: 0.7
+  olr.signal.structure_sizing_enabled: false
+  olr.signal.volume_climax_trigger: 2.0
+  olr.source.require_complete_prefix: true
+  olr.trade_plan.entry:
+    max_signal_bars: 6
+    max_vwap_extension_pct: 0.025
+    min_bar_ret: -0.001
+    min_close_location: 0.5
+    min_vwap_ret: 0.0
+    mode: confirm_next_bar
+    name: confirm_b6_vwap_cap25
+  olr.trade_plan.exit:
+    hard_stop_enabled: false
+    mfe_fade_floor_r: 0.0
+    mfe_fade_gap_r: 1.25
+    mfe_fade_start_r: 1.0
+    mode: managed
+    name: mfe_fade1_g125
+  olr.universe.complete_size: 103
+input_manifest_path: E:\CodexResearch\k_stock_trader\olr_round2_low325_20261007\inputs\manifest.json
+live_parity_fill_timing: research_only_14_30_decision
+official_performance: false
+paper_live_parity_required: true
+promotion_status: research_only_development_qualified_independent_validation_pending
+regression_window:
+  end: '2026-05-12'
+  start: '2026-04-01'
+require_complete_feature_prefix: true
+research_cost_policy:
+  basis: conservative_flat_2026_rate_for_full_evaluation_window
+  historically_exact_tax_schedule: false
+  note: 20 bps is conservative for the 2025 training segment and matches the 2026
+    ordinary-share sell-tax rate; broker commission and live execution still require
+    account-specific qualification.
+  previous_sell_tax_bps: 18.0
+  sell_tax_bps: 20.0
+  sources:
+  - https://securities.koreainvestment.com/main/customer/guide/_static/TF04ae010000.jsp?tab=2
+  - https://securities.miraeasset.com/bbs/board/message/view.do?categoryId=66&messageId=2336448&selectedId=1000000202&selectedId=1000000203&selectedId=1000003101
+sector_map_path: olr/sector_map.yaml
+source_dependency_scope:
+  candidate_intraday_before: '16:00'
+  feature_intraday_before: '14:30'
+  strategy: olr
+  version: causal-feature-and-management-v2
+strategy: olr
+timeframe: 5m
+universe: universe_103.yaml
+use_full_available_window: false
+selected_candidate: low325
+previous_promotion_guard_required: true
+previous_promotion_tolerance_abs: 1.0e-10
+development_qualification:
+  selected: low325
+  challenger_development_qualified: true
+  independent_oos_pass: false
+  live_promotion: false
+  study_hash: 4bd7bdd22eaed37b821c0d94bd125bf5a7be36e202abd13d649eb757bde1f2a0
+  mutations_hash: 7e11cb56fe0cfe4f1f27a03578283af9710095ecabfb2f3a8565d991a05622f0
+  source_directory: E:\CodexResearch\k_stock_trader\olr_forward_validation_20261007\development
+  artifacts:
+    qualification_decision.json: 33d849aaf7c921a6395e84b147c55826609be1d263b10c61aa7c31d50c4276cd
+    selected_recipe.json: a8e6e8c183ac94884e2f74bdd79c9eaa5eff4f1439477528733cd5666f509f80
+    scenario_summary.json: fb62972c68aef539f03c1a04173544f7452d4005721eb24d93cc18d5f44b4392
+    incremental_trade_attribution.json: b638894f06e4648de9347ae9f3d4edfb5b325185fe562a62404026a31769b2be
+    phase_v3/phase_state.json: 0501094e522047b1a9bab3286c0cbd6f4e1f2096b65bc45007be07cc72dab0c9

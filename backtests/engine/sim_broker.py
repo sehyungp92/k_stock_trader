@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field, replace
+import json
+import math
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, time
+from datetime import timedelta
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -27,6 +30,8 @@ from strategy_common.actions import (
 )
 from strategy_common.events import TradeOutcome
 from strategy_common.market import MarketBar
+from strategy_common.execution_session import bar_execution_issue, bar_reopens_after_label, bar_has_periodic_auction, bar_is_delayed_closing_auction
+from .contracts import EXECUTION_VERSION, LEGACY_EXECUTION_VERSION
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +91,24 @@ class FillEvent:
 class SimBroker:
     """Single long-only KRX fill model used by all replay runners."""
 
-    def __init__(self, initial_equity: float, costs: BrokerCosts | None = None, *, buying_power_leverage: float = 1.0):
+    def __init__(self, initial_equity: float, costs: BrokerCosts | None = None, *, buying_power_leverage: float = 1.0, execution_clock: str = EXECUTION_VERSION, capacity_policy=None):
+        if execution_clock not in {EXECUTION_VERSION, LEGACY_EXECUTION_VERSION}:
+            raise ValueError(f"Unknown execution clock: {execution_clock}")
+        self.execution_clock = execution_clock
+        self.journal: list[dict[str, Any]] = []
+        self.bar_issues: dict[str, int] = {}
+        self.last_bar_times: dict[str, datetime] = {}
+        self.mark_coverage: list[dict[str, Any]] = []
+        self.source_events = hashlib.sha256()
+        self.source_event_count = 0
+        self.capacity_policy = capacity_policy
+        self.capacity_used = {}
+        self.previous_capacity_bars = {}
+        self.order_filled = {}
+        self._phase = "decision"
+        self._decision_available_at: datetime | None = None
+        self._activation_phase = "decision"
+        self._order_sequence = 0
         self.initial_equity = float(initial_equity)
         self.cash = float(initial_equity)
         self.costs = costs or BrokerCosts()
@@ -98,6 +120,7 @@ class SimBroker:
         self.rejected_orders: list[SimOrder] = []
         self.expired_orders: list[SimOrder] = []
         self.last_prices: dict[str, float] = {}
+        self.last_closing_mark_days: dict[str, Any] = {}
         self.equity_curve: list[float] = [float(initial_equity)]
         self.timestamps: list[datetime] = []
         self.same_bar_fill_violations = 0
@@ -105,7 +128,32 @@ class SimBroker:
         self.auction_nonfill_count = 0
         self.same_day_forced_exit_count = 0
 
+    def _next_order_id(self) -> str:
+        self._order_sequence += 1
+        return f"sim-{self._order_sequence:09d}"
+
     def submit(self, action: StrategyAction, submitted_at: datetime) -> str | None:
+        before = {order.order_id: asdict(order) for order in self.orders}
+        order_id = self._submit(action, submitted_at)
+        for order in self.orders:
+            if order.side == "SELL" and order.order_type == "STOP":
+                order.metadata = _with_stop_parity_metadata(order.metadata)
+            old = before.pop(order.order_id, None)
+            if old is None:
+                order.metadata["order_date"] = submitted_at.date().isoformat()
+            else:
+                order.metadata["order_date"] = old["metadata"].get("order_date", old["submitted_at"].date().isoformat())
+            if old is None or old != asdict(order):
+                order.metadata = {**order.metadata,
+                    "activation_phase": self._activation_phase,
+                    "activation_at": submitted_at.isoformat(),
+                    "decision_available_at": (self._decision_available_at or submitted_at).isoformat()}
+                self.journal.append({"event": "submit" if old is None else "amend", "order": asdict(order)})
+        for old in before.values():
+            self.journal.append({"event": "cancel", "order": old, "timestamp": submitted_at.isoformat()})
+        return order_id
+
+    def _submit(self, action: StrategyAction, submitted_at: datetime) -> str | None:
         if isinstance(action, CancelOrders):
             self.orders = [
                 order for order in self.orders
@@ -127,6 +175,7 @@ class SimBroker:
             for order in self.orders:
                 if order.strategy_id == action.strategy_id and order.symbol == action.symbol and order.side == "SELL" and order.order_type == "STOP":
                     matched = True
+                    order.submitted_at = submitted_at
                     order.stop_price = action.stop_price
                     order.qty = action.qty or order.qty
                     order.reason = action.reason
@@ -138,7 +187,7 @@ class SimBroker:
                 return None
             metadata = {"order_role": "STOP", "stop_kind": "protected_stop", **dict(action.metadata)}
             order = SimOrder(
-                order_id=str(uuid4()),
+                order_id=self._next_order_id(),
                 strategy_id=action.strategy_id,
                 symbol=action.symbol,
                 side="SELL",
@@ -153,7 +202,7 @@ class SimBroker:
             return order.order_id
         if isinstance(action, SubmitProtectiveStop):
             order = SimOrder(
-                order_id=str(uuid4()),
+                order_id=self._next_order_id(),
                 strategy_id=action.strategy_id,
                 symbol=action.symbol,
                 side="SELL",
@@ -175,7 +224,7 @@ class SimBroker:
             if order_type not in {"MARKET", "CLOSE_AUCTION"}:
                 order_type = "MARKET"
             order = SimOrder(
-                order_id=str(uuid4()),
+                order_id=self._next_order_id(),
                 strategy_id=action.strategy_id,
                 symbol=action.symbol,
                 side="SELL",
@@ -189,7 +238,7 @@ class SimBroker:
             return order.order_id
         if isinstance(action, SubmitEntry):
             order = SimOrder(
-                order_id=str(uuid4()),
+                order_id=self._next_order_id(),
                 strategy_id=action.strategy_id,
                 symbol=action.symbol,
                 side="BUY",
@@ -208,7 +257,7 @@ class SimBroker:
             if qty <= 0:
                 return None
             order = SimOrder(
-                order_id=str(uuid4()),
+                order_id=self._next_order_id(),
                 strategy_id=action.strategy_id,
                 symbol=action.symbol,
                 side="SELL",
@@ -227,7 +276,16 @@ class SimBroker:
         position = self.positions.get(_position_key(strategy_id, symbol))
         return int(position.qty) if position else 0
 
-    def process_bar(self, bar: MarketBar) -> list[FillEvent]:
+    def _phase_order_key(self, order):
+        return (0 if order.side == "SELL" and order.order_type == "STOP" else 1 if order.side == "SELL" else 2,
+                order.submitted_at, order.strategy_id, order.symbol, order.order_id)
+
+    def _policy_execution_quantity(self, order, price, quantity, timestamp):
+        return quantity
+
+    def _legacy_process_bar(self, bar: MarketBar) -> list[FillEvent]:
+        if bar_execution_issue(bar) or bar_reopens_after_label(bar) or bar_has_periodic_auction(bar):
+            return []
         self.last_prices[bar.symbol] = float(bar.close)
         fills: list[FillEvent] = []
         for position in self.positions.values():
@@ -251,6 +309,9 @@ class SimBroker:
             eligible_orders.append(order)
         eligible_orders.sort(key=lambda order: _execution_priority(order, bar))
         for order in eligible_orders:
+            if bar_is_delayed_closing_auction(bar) and order.order_type != "CLOSE_AUCTION":
+                remaining_orders.append(order)
+                continue
             fill_price = self._fill_price(order, bar)
             if fill_price is None:
                 if order.order_type == "CLOSE_AUCTION" and _is_close_auction_bar(order, bar):
@@ -264,16 +325,19 @@ class SimBroker:
                 continue
             fill = self._apply_fill(order, fill_price, bar.timestamp)
             if fill is not None:
+                fill.metadata.update({"execution_id": f"legacy-fill-{len(self.fills) + len(fills) + 1}",
+                    "order_date": order.metadata.get("order_date", order.submitted_at.date().isoformat()),
+                    "order_qty": order.qty, "filled_qty_before": 0, "filled_qty_after": fill.qty})
                 fills.append(fill)
                 ambiguity_fill = self._maybe_apply_same_bar_entry_stop(order, fill, bar)
                 if ambiguity_fill is not None:
                     fills.append(ambiguity_fill)
         self.orders = remaining_orders
         self.fills.extend(fills)
-        self.mark_to_market(bar)
+        self._legacy_mark_to_market(bar)
         return fills
 
-    def mark_to_market(self, bar: MarketBar) -> float:
+    def _legacy_mark_to_market(self, bar: MarketBar) -> float:
         self.last_prices[bar.symbol] = float(bar.close)
         equity = self.cash
         for position in self.positions.values():
@@ -285,51 +349,227 @@ class SimBroker:
         self.timestamps.append(bar.timestamp)
         return float(equity)
 
+    def process_bar(self, bar: MarketBar) -> list[FillEvent]:
+        if self.execution_clock == LEGACY_EXECUTION_VERSION:
+            return self._legacy_process_bar(bar)
+        return self.process_batch((bar,))
+
+    def process_batch(self, bars, *, on_fills=None) -> list[FillEvent]:
+        """Opening flows, intrabar stop-first, auction, then synchronized marks.
+
+        Priority is sell before buy, then submission time, strategy, symbol and
+        submission sequence. Intrabar ambiguity is resolved adversely (stop first).
+        """
+        bars = tuple(bars)
+        if not bars:
+            return []
+        timestamp = bars[0].timestamp
+        if any(bar.timestamp != timestamp for bar in bars) or len({bar.symbol for bar in bars}) != len(bars):
+            raise ValueError("A batch requires one bar per symbol at one timestamp")
+        if self.timestamps and timestamp <= self.timestamps[-1]:
+            raise ValueError("Replay batches must have strictly increasing timestamps")
+        start = len(self.fills)
+        executable = {}
+        closing_bars = {}
+        for bar in bars:
+            self.source_events.update(json.dumps(bar.to_json_dict(), sort_keys=True, default=str).encode())
+            self.source_event_count += 1
+            issue = bar_execution_issue(bar)
+            if issue:
+                self.bar_issues[issue] = self.bar_issues.get(issue, 0) + 1
+            else:
+                closing_bars[bar.symbol] = bar
+                self.last_bar_times[bar.symbol] = timestamp
+                if bar_has_periodic_auction(bar):
+                    if any(order.symbol == bar.symbol and not _order_expired(order, timestamp) for order in self.orders):
+                        self.bar_issues["unsupported_periodic_auction_execution"] = self.bar_issues.get("unsupported_periodic_auction_execution", 0) + 1
+                elif not bar_reopens_after_label(bar):
+                    executable[bar.symbol] = bar
+                    if not bar_is_delayed_closing_auction(bar):
+                        self.last_prices[bar.symbol] = float(bar.open)
+                elif any(order.symbol == bar.symbol and not _order_expired(order, timestamp) for order in self.orders):
+                    # Five-minute OHLC cannot order this resumption auction against
+                    # the other symbols' earlier opening flows. Do not invent a fill.
+                    self.bar_issues["unsupported_halt_boundary_chronology"] = self.bar_issues.get("unsupported_halt_boundary_chronology", 0) + 1
+        for order in list(self.orders):
+            if _order_expired(order, timestamp):
+                self.orders.remove(order)
+                self.expired_orders.append(order)
+                self.journal.append({"event": "expire", "order": asdict(order), "timestamp": timestamp.isoformat()})
+                self.auction_nonfill_count += int(order.order_type == "CLOSE_AUCTION")
+        self.journal.append({"event": "opening_marks", "timestamp": timestamp.isoformat(),
+            "prices": {symbol: float(bar.open) for symbol, bar in executable.items() if not bar_is_delayed_closing_auction(bar)}})
+        for phase in ("open", "intrabar", "auction"):
+            self._phase = phase
+            if self.execution_clock == LEGACY_EXECUTION_VERSION:
+                for bar in executable.values():
+                    self.last_prices[bar.symbol] = bar.close
+            candidates = sorted(list(self.orders), key=self._phase_order_key)
+            for order in candidates:
+                if order not in self.orders:
+                    continue
+                bar = executable.get(order.symbol)
+                if bar is None:
+                    continue
+                if bar_is_delayed_closing_auction(bar) and order.order_type != "CLOSE_AUCTION":
+                    continue
+                available = datetime.fromisoformat(order.metadata.get("decision_available_at", order.submitted_at.isoformat()))
+                same_open_activation = (order.submitted_at == timestamp
+                    and order.metadata.get("activation_phase") == "open_fill"
+                    and order.side == "SELL")
+                if available > timestamp or (order.submitted_at >= timestamp and not same_open_activation):
+                    continue
+                if order.order_type == "STOP_LIMIT":
+                    self.orders.remove(order)
+                    self.rejected_orders.append(order)
+                    self.journal.append({"event": "reject", "order": asdict(order), "reason": "unsupported_stop_limit"})
+                    continue
+                opening = order.order_type == "MARKET" or (
+                    order.order_type == "STOP" and order.stop_price is not None and
+                    (bar.open <= order.stop_price if order.side == "SELL" else bar.open >= order.stop_price)) or (
+                    order.order_type == "LIMIT" and order.limit_price is not None and
+                    (bar.open >= order.limit_price if order.side == "SELL" else bar.open <= order.limit_price))
+                intended_phase = "auction" if order.order_type == "CLOSE_AUCTION" else "open" if opening and not same_open_activation else "intrabar"
+                if intended_phase != phase:
+                    continue
+                # Newly activated protection cannot claim an earlier opening gap.
+                pricing_bar = replace(bar, open=order.stop_price) if same_open_activation and order.order_type == "STOP" else bar
+                price = self._fill_price(order, pricing_bar)
+                if price is None:
+                    if phase == "auction" and _is_close_auction_bar(order, bar):
+                        self.orders.remove(order)
+                        self.expired_orders.append(order)
+                        self.auction_nonfill_count += 1
+                        self.journal.append({"event": "expire", "order": asdict(order), "timestamp": timestamp.isoformat()})
+                    continue
+                capacity_key = (bar.symbol, timestamp.isoformat(), phase)
+                allowed_qty = int(order.qty or self.position_qty(order.strategy_id, order.symbol))
+                budget = None
+                if self.capacity_policy is not None:
+                    quote = self.capacity_policy.quote(bar, phase, self.previous_capacity_bars.get(bar.symbol))
+                    budget = quote.budget
+                    allowed_qty = min(allowed_qty, max(0, budget - self.capacity_used.get(capacity_key, 0)))
+                    # Later interval volume cannot determine an opening callback.
+                    # The independent auditor checks realized feasibility afterward.
+                    self.journal.append({"event": "capacity", "order": asdict(order),
+                        "timestamp": timestamp.isoformat(), "phase": phase,
+                        "requested_qty": int(order.qty or self.position_qty(order.strategy_id, order.symbol)),
+                        "allowed_qty": allowed_qty, "used_qty": self.capacity_used.get(capacity_key, 0),
+                        "quote": asdict(quote)})
+                    if not allowed_qty:
+                        if phase == "auction":
+                            self.orders.remove(order)
+                            self.expired_orders.append(order)
+                            self.auction_nonfill_count += 1
+                            self.journal.append({"event": "expire", "order": asdict(order), "reason": "auction_capacity", "timestamp": timestamp.isoformat()})
+                        continue
+                self.orders.remove(order)
+                allowed_qty = self._policy_execution_quantity(order, price, allowed_qty, timestamp)
+                if allowed_qty <= 0:
+                    self.rejected_orders.append(order)
+                    self.journal.append({"event": "reject", "order": asdict(order), "reason": "portfolio_policy", "timestamp": timestamp.isoformat()})
+                    continue
+                if order.side == "BUY" and not self._can_afford(replace(order, qty=allowed_qty), price):
+                    self.rejected_orders.append(order)
+                    self.journal.append({"event": "reject", "order": asdict(order), "reason": "buying_power", "timestamp": timestamp.isoformat(), "cash": self.cash, "marks": dict(self.last_prices),
+                        "attempted_qty": allowed_qty, "execution_price": price, "execution_bar": bar.to_json_dict()})
+                    continue
+                if order.side == "SELL" and not self.position_qty(order.strategy_id, order.symbol):
+                    self.journal.append({"event": "cancel", "order": asdict(order), "reason": "position_closed"})
+                    continue
+                if order.side == "SELL" and int(order.qty or 0) > self.position_qty(order.strategy_id, order.symbol):
+                    # Alternative exits reserve the same shares. Resize explicitly.
+                    order.qty = self.position_qty(order.strategy_id, order.symbol)
+                    self.journal.append({"event": "amend", "order": asdict(order), "reason": "alternative_exit_resize"})
+                costs = getattr(self, "strategy_costs", {}).get(order.strategy_id, self.costs)
+                bps = costs.slippage_bps
+                if phase == "auction":
+                    bps = max(0.0, bps + float(order.metadata.get("auction_adverse_bps", costs.auction_slippage_bps) or 0))
+                if order.order_type == "MARKET":
+                    base = bar.open
+                elif order.order_type == "CLOSE_AUCTION":
+                    base = bar.close
+                elif order.order_type == "LIMIT":
+                    base = min(order.limit_price, bar.open) if order.side == "BUY" else max(order.limit_price, bar.open)
+                else:
+                    base = float(order.stop_price) if same_open_activation else (max(order.stop_price, bar.open) if order.side == "BUY" else min(order.stop_price, bar.open))
+                cash_before = self.cash
+                order_evidence = asdict(order)
+                allowed_qty = min(allowed_qty, int(order.qty or allowed_qty))
+                fill = self._apply_fill(replace(order, qty=allowed_qty), price, timestamp)
+                if fill is None:
+                    continue
+                if fill.side == "BUY":
+                    self.positions[(fill.strategy_id, fill.symbol)].route_metadata["entry_execution_phase"] = phase
+                fee = fill.qty * price * (costs.commission_bps + (costs.tax_bps_on_sell if fill.side == "SELL" else 0)) / 10000
+                before = self.order_filled.get(order.order_id, 0)
+                fill.metadata.update({"execution_id": f"fill-{len(self.fills) + 1}", "order_qty": before + int(order.qty or fill.qty),
+                    "order_date": order.metadata.get("order_date", order.submitted_at.date().isoformat()),
+                    "filled_qty_before": before, "filled_qty_after": before + fill.qty,
+                    "execution_phase": phase, "base_price": base, "fee": fee,
+                    "execution_bar": bar.to_json_dict(), "submitted_at": order.submitted_at.isoformat()})
+                self.fills.append(fill)
+                self.journal.append({"event": "fill", "order": order_evidence, "fill": asdict(fill),
+                    "costs": asdict(costs), "cash_before": cash_before, "cash_after": self.cash,
+                    "marks": dict(self.last_prices)})
+                self.order_filled[order.order_id] = before + fill.qty
+                self.capacity_used[capacity_key] = self.capacity_used.get(capacity_key, 0) + fill.qty
+                if order.qty and fill.qty < order.qty:
+                    order.qty -= fill.qty
+                    if phase == "auction":
+                        self.expired_orders.append(order)
+                        self.journal.append({"event": "expire", "order": asdict(order), "reason": "auction_remainder", "timestamp": timestamp.isoformat()})
+                    else:
+                        self.orders.append(order)
+                        self.journal.append({"event": "amend", "order": asdict(order), "reason": "partial_remainder"})
+                if on_fills:
+                    self._activation_phase = "open_fill" if phase == "open" else "post_interval_fill"
+                    self._decision_available_at = None
+                    on_fills()
+                    self._activation_phase = "decision"
+                if phase == "intrabar" and fill.side == "BUY":
+                    # General intrabar entry protection needs finer event ordering.
+                    self.bar_issues["unsupported_intrabar_entry_chronology"] = self.bar_issues.get("unsupported_intrabar_entry_chronology", 0) + 1
+        for bar in closing_bars.values():
+            self.previous_capacity_bars[bar.symbol] = bar
+            self.last_prices[bar.symbol] = float(bar.close)
+            for position in self.positions.values():
+                if position.symbol == bar.symbol and (position.entry_fill_time != timestamp
+                        or position.route_metadata.get("entry_execution_phase") == "open"):
+                    position.mark(bar)
+        self.journal.append({"event": "closing_marks", "timestamp": timestamp.isoformat(),
+            "prices": {symbol: float(bar.close) for symbol, bar in closing_bars.items()}})
+        self.equity_curve.append(self._portfolio_equity())
+        self.timestamps.append(timestamp)
+        from kis_core.trading_calendar import get_trading_calendar
+        calendar = get_trading_calendar()
+        for bar in closing_bars.values():
+            if bar.timestamp.time().replace(tzinfo=None) == calendar.closing_match_time(bar.symbol, timestamp.date()):
+                self.last_closing_mark_days[bar.symbol] = timestamp.date()
+        closed_symbols = {symbol for symbol, day in self.last_closing_mark_days.items() if day == timestamp.date()}
+        stale = sorted({p.symbol for p in self.positions.values()
+                        if self.last_bar_times.get(p.symbol) != timestamp and p.symbol not in closed_symbols})
+        closing_complete = all(p.symbol in closed_symbols for p in self.positions.values())
+        self.mark_coverage.append({"timestamp": timestamp.isoformat(), "stale_symbols": stale,
+            "cash_only": not self.positions, "closing_marks_complete": closing_complete})
+        self._phase = "decision"
+        return self.fills[start:]
+
+    def mark_to_market(self, bar: MarketBar) -> float:
+        if bar_execution_issue(bar) is None:
+            self.last_prices[bar.symbol] = float(bar.close)
+        return self._portfolio_equity()
+
     def close_all_at_end(self, bar: MarketBar, reason: str = "end_of_replay") -> None:
-        for key, position in list(self.positions.items()):
-            order = SimOrder(
-                order_id=str(uuid4()),
-                strategy_id=position.strategy_id,
-                symbol=position.symbol,
-                side="SELL",
-                qty=position.qty,
-                order_type="MARKET",
-                submitted_at=position.entry_fill_time,
-                reason=reason,
-            )
-            mark_price = self.last_prices.get(position.symbol, bar.close)
-            self._apply_fill(order, self._sell_slippage(mark_price), bar.timestamp)
-            self.positions.pop(key, None)
-        self.mark_to_market(bar)
+        # A valuation mark is not a liquidation execution. Retain unresolved holdings.
+        if self.positions:
+            self.journal.append({"event": "unresolved_terminal", "timestamp": bar.timestamp.isoformat(),
+                "reason": reason, "positions": {str(k): v.qty for k, v in self.positions.items()}})
 
     def force_same_day_exits(self, bar: MarketBar) -> list[FillEvent]:
-        fills: list[FillEvent] = []
-        remaining_orders: list[SimOrder] = []
-        for order in self.orders:
-            if not _same_day_forced_exit_order(order, bar.timestamp):
-                remaining_orders.append(order)
-                continue
-            key = _position_key(order.strategy_id, order.symbol)
-            position = self.positions.get(key)
-            if position is None:
-                continue
-            mark_price = self.last_prices.get(order.symbol, position.avg_price)
-            metadata = {
-                **dict(order.metadata),
-                "same_day_forced_exit": True,
-                "forced_exit_basis": "last_same_day_mark",
-                "forced_exit_timestamp": bar.timestamp.isoformat(),
-            }
-            forced_order = replace(order, reason=order.reason or "same_day_eod_forced_fill", metadata=metadata)
-            fill = self._apply_fill(forced_order, self._sell_slippage(mark_price), bar.timestamp)
-            if fill is not None:
-                fills.append(fill)
-                self.same_day_forced_exit_count += 1
-        if fills:
-            self.fills.extend(fills)
-            self.mark_to_market(bar)
-        self.orders = remaining_orders
-        return fills
+        # Already eligible orders executed in process_batch against their own symbol.
+        # Missing execution data must remain an unresolved order/position.
+        return []
 
     def _fill_price(self, order: SimOrder, bar: MarketBar) -> float | None:
         if order.order_type == "CLOSE_AUCTION":
@@ -339,21 +579,19 @@ class SimBroker:
                 return self._buy_slippage(bar.open)
             if order.order_type == "LIMIT" and order.limit_price is not None:
                 if bar.low <= order.limit_price:
-                    return self._buy_slippage(min(order.limit_price, bar.open))
-            if order.order_type in {"STOP", "STOP_LIMIT"} and order.stop_price is not None:
+                    return min(float(order.limit_price), self._buy_slippage(min(order.limit_price, bar.open)))
+            if order.order_type == "STOP" and order.stop_price is not None:
                 if bar.high >= order.stop_price:
-                    limit = order.limit_price or bar.open
-                    return self._buy_slippage(max(order.stop_price, min(limit, bar.high)))
+                    return self._buy_slippage(max(order.stop_price, bar.open))
         else:
             if order.order_type == "MARKET":
                 return self._sell_slippage(bar.open)
             if order.order_type == "LIMIT" and order.limit_price is not None:
                 if bar.high >= order.limit_price:
-                    return self._sell_slippage(max(order.limit_price, bar.open))
+                    return max(float(order.limit_price), self._sell_slippage(max(order.limit_price, bar.open)))
             if order.order_type == "STOP" and order.stop_price is not None:
                 decision = _sell_stop_trigger_decision(order, bar)
                 if decision.triggered:
-                    order.metadata = _with_stop_parity_metadata(order.metadata)
                     return self._sell_slippage(min(order.stop_price, bar.open))
         return None
 
@@ -411,6 +649,7 @@ class SimBroker:
                 total_qty = current.qty + qty
                 current.avg_price = ((current.avg_price * current.qty) + (price * qty)) / total_qty
                 current.qty = total_qty
+                current.route_metadata["entry_commission"] = float(current.route_metadata.get("entry_commission", 0)) + commission
             return FillEvent(order.order_id, order.strategy_id, order.symbol, order.side, qty, price, timestamp, order.reason, dict(order.metadata))
         else:
             executed_qty = self._exit_position(order, price, timestamp)
@@ -433,7 +672,7 @@ class SimBroker:
         self.same_bar_stop_ambiguities += 1
         fill.metadata["same_bar_stop_fired"] = True
         stop_order = SimOrder(
-            order_id=str(uuid4()),
+            order_id=self._next_order_id(),
             strategy_id=order.strategy_id,
             symbol=order.symbol,
             side="SELL",
@@ -458,7 +697,9 @@ class SimBroker:
         position = self.positions.get(key)
         if position is None:
             return 0
-        exit_qty = min(int(order.qty or position.qty), position.qty)
+        exit_qty = int(order.qty or position.qty)
+        if exit_qty > position.qty:
+            raise ValueError("Sell execution exceeds the open position")
         if exit_qty <= 0:
             return 0
         sell_commission = self._commission(exit_qty, price, sell=True)
@@ -484,7 +725,7 @@ class SimBroker:
                 realized=True,
                 exit_reason=order.reason,
                 route_metadata=dict(position.route_metadata),
-                cohort_metadata=dict(order.metadata),
+                cohort_metadata={**order.metadata, "position_qty_after": position.qty - exit_qty},
                 mfe=mfe,
                 mae=mae,
             )
@@ -541,11 +782,13 @@ def _position_key(strategy_id: str, symbol: str) -> tuple[str, str]:
 
 
 def _order_expired(order: SimOrder, timestamp: datetime) -> bool:
+    if timestamp.date() > order.submitted_at.date() and _same_day_forced_exit_order(order, order.submitted_at):
+        return True
     raw = order.metadata.get("expiry_timestamp") or order.metadata.get("expiry_ts")
     if not raw:
         if order.order_type != "CLOSE_AUCTION":
             return False
-        target = _parse_time(order.metadata.get("auction_fill_time", "15:30"))
+        target = _auction_target(order)
         submitted = order.submitted_at
         current = timestamp
         if submitted.tzinfo is not None and current.tzinfo is not None:
@@ -557,6 +800,10 @@ def _order_expired(order: SimOrder, timestamp: datetime) -> bool:
         return False
     if expiry.tzinfo is None and timestamp.tzinfo is not None:
         expiry = expiry.replace(tzinfo=timestamp.tzinfo)
+    if order.order_type == "CLOSE_AUCTION" and order.metadata.get("expiry_basis") == "closing_auction":
+        scheduled = _parse_time(order.metadata.get("auction_fill_time", "15:30"))
+        if expiry.date() == order.submitted_at.date() and expiry.time().replace(tzinfo=None) == scheduled:
+            expiry = datetime.combine(expiry.date(), _auction_target(order), tzinfo=expiry.tzinfo)
     return timestamp > expiry
 
 
@@ -636,11 +883,22 @@ _KST = ZoneInfo("Asia/Seoul")
 
 
 def _is_close_auction_bar(order: SimOrder, bar: MarketBar) -> bool:
-    target = _parse_time(order.metadata.get("auction_fill_time", "15:30"))
+    target = _auction_target(order)
     timestamp = bar.timestamp
     if timestamp.tzinfo is not None:
         timestamp = timestamp.astimezone(_KST)
     return timestamp.time().replace(second=0, microsecond=0) == target
+
+
+def _auction_target(order: SimOrder) -> time:
+    target = _parse_time(order.metadata.get("auction_fill_time", "15:30"))
+    if order.metadata.get("expiry_basis") == "closing_auction":
+        from kis_core.trading_calendar import get_trading_calendar
+        calendar = get_trading_calendar()
+        day = order.submitted_at.astimezone(_KST).date() if order.submitted_at.tzinfo else order.submitted_at.date()
+        if target == calendar.session_hours(day)[1]:
+            return calendar.closing_match_time(order.symbol, day)
+    return target
 
 
 def _parse_time(value: Any) -> time:

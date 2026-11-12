@@ -1,0 +1,12 @@
+{
+  "version": "kalcb-quantity-cohort-calibration-v1",
+  "hypothesis": "The current half-size cohort loses net cash under both scenarios while full-size actions supply most profit; test causal forecast calibration rather than deleting an ex-post losing group",
+  "development_observation": "Control full-size cohort net +46.168m baseline / +32.488m combined; half-size -4.114m / -10.413m; descriptive account attribution is not a sizing counterfactual",
+  "rule": "Estimate forecast errors on each quantity's earlier out-of-fold positive-baseline/positive-stress capacity-feasible risk-screened actions. Shrink each intercept toward zero with 100 prior observations. Require 20 valid earlier observations; otherwise leave forecasts unchanged.",
+  "lookback_sessions": 60,
+  "refit_sessions": 20,
+  "embargo_sessions": 1,
+  "selection": "Keep original nonpositive forecasts ineligible. Rechoose from remaining quarter/half/full actions with positive corrected baseline and stress values using corrected baseline cash value.",
+  "variants": 1,
+  "scope": "Adaptive development hypothesis; all corrections past-only; no June-July use or independent validation claim"
+}

@@ -29,6 +29,8 @@
   - "2026-05-01"  # Labor Day
   - "2026-05-05"  # Children's Day
   - "2026-05-25"  # Buddha's Birthday
+  - "2026-06-03"  # Local election day
+  - "2026-07-17"  # Constitution Day
   - "2026-08-17"  # Substitute holiday (for Aug 15)
   - "2026-09-24"  # Chuseok Eve
   - "2026-09-25"  # Chuseok
@@ -36,3 +38,4 @@
   - "2026-10-05"  # Substitute holiday (for Oct 3)
   - "2026-10-09"  # Hangul Day
   - "2026-12-25"  # Christmas Day
+  - "2026-12-31"  # Year-end market closing day

@@ -30,6 +30,24 @@ class KALCBEngine:
     candidate_snapshot: KALCBDailySnapshot | None = None
     decisions: list[DecisionEvent] = field(default_factory=list)
 
+    def observe_candidate_bar(self, bar: MarketBar) -> None:
+        """Warm declared watch observations before an intraday admission.
+
+        The market-data adapter must deliver the same completed watch prefix as
+        replay. This method neither admits a candidate nor submits an order.
+        """
+        from .core.candidate_updates import observe_candidate_bar
+        require_completed_bar(bar)
+        observe_candidate_bar(self.state, bar, self.candidate_snapshot)
+
+    def activate_candidate_snapshot(self, snapshot: KALCBDailySnapshot, available_at) -> None:
+        """Apply a forecast delivered at its information clock, as replay does."""
+        from .core.candidate_updates import activate_candidate_snapshot
+        if not self.config.entry_checkpoint_enabled:
+            raise ValueError("Intraday candidate updates require checkpoint execution")
+        activate_candidate_snapshot(self.state, snapshot, available_at)
+        self.candidate_snapshot = snapshot
+
     def on_bar(self, bar: MarketBar, portfolio: KALCBPortfolioView, submit: SubmitFn) -> list[DecisionEvent]:
         require_completed_bar(bar)
         result = step_kalcb_core(self.state, bar, self.config, self.candidate_snapshot, portfolio)

@@ -30,7 +30,7 @@ from deployment.olr_kalcb.session_capture import PaperSessionRecorder, market_ba
 from strategy_olr.artifact_store import OLR_FINAL_ARTIFACT_STAGE, OLRArtifactStore
 
 DEFAULT_BASELINE_MANIFEST = Path(
-    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json")
+    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "config/olr_kalcb/validation_baseline.json")
 )
 DEFAULT_PORTFOLIO_POLICY = Path("config/olr_kalcb/portfolio_policy.conservative.json")
 DEFAULT_SECTOR_MAP = Path("config/olr/sector_map.yaml")
@@ -180,6 +180,9 @@ async def _watch_bars(args: argparse.Namespace, plan: Any, recorder: PaperSessio
         bars_path = _required_completed_bars_path(args, source)
         while True:
             poll_count += 1
+            poll_feedback = getattr(plan, "poll_execution_feedback", None)
+            if callable(poll_feedback):
+                await poll_feedback()
             olr_final_enabled = _maybe_enable_olr_final(args, plan, coordinator=coordinator) or olr_final_enabled
             processed = 0
             loaded = 0
@@ -266,6 +269,9 @@ async def _watch_kis_websocket_bars(
     try:
         while True:
             poll_count += 1
+            poll_feedback = getattr(plan, "poll_execution_feedback", None)
+            if callable(poll_feedback):
+                await poll_feedback()
             olr_final_enabled = _maybe_enable_olr_final(args, plan, coordinator=coordinator) or olr_final_enabled
             await coordinator.activate_due_windows(datetime.now(tz=KST), runtime_plan=plan)
             bar = await bar_source.next_bar(timeout_s=float(args.poll_seconds))
@@ -486,6 +492,16 @@ def _prepare_plan(
     health_checks = _with_oms_health_payload(health_checks, args, mode=mode)
     initial_account_state = _load_mapping(args.account_state_json, required=False) if args.account_state_json else None
     initial_positions = _load_mapping(args.positions_json, required=False) if args.positions_json else None
+    if mode in {"paper", "live"}:
+        # Capture the same reconciled OMS state that will seed the live runtime.
+        # Supplied historical JSON is useful for dry runs only.
+        initial_account_state, initial_positions = None, None
+        if (health_checks.get("oms_health_payload") or {}).get("broker_reconciliation_ready") is True:
+            try:
+                initial_account_state, initial_positions = _fetch_oms_initial_state(args)
+            except Exception as exc:
+                health_checks["account_ok"] = {
+                    "passed": False, "detail": f"Current OMS state unavailable: {type(exc).__name__}"}
     return prepare_runtime_session(
         args.strategy_ids,
         trade_date=trade_date,
@@ -590,12 +606,26 @@ def _with_oms_health_payload(checks: Mapping[str, Any], args: argparse.Namespace
     augmented = dict(checks or {})
     if str(mode or "").lower() not in {"paper", "live"}:
         return augmented
-    if any(key in augmented for key in OMS_HEALTH_PAYLOAD_KEYS):
-        return augmented
+    # A saved healthy response cannot establish the current connection state.
+    for key in OMS_HEALTH_PAYLOAD_KEYS:
+        augmented.pop(key, None)
+    augmented.pop("oms_health_payload_error", None)
     try:
-        augmented["oms_health_payload"] = _fetch_oms_health_payload(_oms_health_url(args))
+        payload = _fetch_oms_health_payload(_oms_health_url(args))
+        augmented["oms_health_payload"] = payload
+        account_ready = (payload.get("broker_reconciliation_ready") is True
+                         and payload.get("broker_mode") == mode
+                         and bool(payload.get("broker_account_fingerprint")))
+        for key in ("kis_auth_ok", "account_ok", "order_route_enabled"):
+            previous = augmented.get(key)
+            route_disabled = key == "order_route_enabled" and (
+                previous is False or (isinstance(previous, Mapping) and previous.get("passed") is False))
+            augmented[key] = {"passed": account_ready and not route_disabled,
+                              "detail": "current OMS broker reconciliation and account mode"}
     except Exception as exc:
-        augmented["oms_health_payload_error"] = str(exc)
+        augmented["oms_health_payload_error"] = type(exc).__name__
+        for key in ("kis_auth_ok", "account_ok", "order_route_enabled"):
+            augmented[key] = {"passed": False, "detail": "current OMS connection unavailable"}
     return augmented
 
 
@@ -604,6 +634,15 @@ def _oms_health_url(args: argparse.Namespace) -> str:
     if base.endswith("/health"):
         return base
     return f"{base}/health"
+
+
+def _fetch_oms_initial_state(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
+    base = _oms_health_url(args).removesuffix("/health")
+    account = _fetch_oms_health_payload(f"{base}/api/v1/state/account")
+    positions = _fetch_oms_health_payload(f"{base}/api/v1/positions")
+    if any(key not in account for key in ("equity", "buyable_cash")):
+        raise ValueError("OMS account snapshot is incomplete")
+    return account, positions
 
 
 def _fetch_oms_health_payload(url: str) -> dict[str, Any]:

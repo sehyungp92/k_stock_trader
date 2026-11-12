@@ -1,0 +1,15 @@
+{
+  "research_only": true,
+  "study_root": "E:\\CodexResearch\\k_stock_trader\\kalcb_executed_value_20261006",
+  "plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_executed_value_20261006\\plan.json",
+  "summary": "E:\\CodexResearch\\k_stock_trader\\kalcb_executed_value_20261006\\study_summary.json",
+  "report": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\docs\\research\\kalcb_executed_value_implementation_20261006.txt",
+  "production_promotion": false,
+  "guard_semantics": [
+    "actual_signal_bar",
+    "historical_whole_opening_range"
+  ],
+  "admission_budget": 8,
+  "models": "fixed ridge alpha12; executed-value and quality controls",
+  "scope": "Chronological development on historically used data; no untouched OOS claim"
+}

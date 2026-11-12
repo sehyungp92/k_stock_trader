@@ -1,0 +1,274 @@
+artifact_root: data/strategy/olr
+auction_mode: resting_next_close_auction_with_native_nonfill_fallback
+capability_level: real_replay
+capacity_scenario:
+  name: research-baseline
+  participation: 0.01
+daily_data_root: data/krx_daily_parquet
+data_root: data/kis_intraday_parquet
+date_range:
+  end: '2026-03-31'
+  start: '2025-08-07'
+entry_require_complete_prefix: false
+initial_equity: 100000000
+live_parity_fill_timing: research_only_14_30_decision
+official_performance: false
+paper_live_parity_required: true
+previous_promotion_guard_required: false
+previous_promotion_tolerance_abs: 1.0e-10
+regression_window:
+  start: '2026-04-01'
+  end: '2026-07-10'
+require_complete_feature_prefix: true
+research_cost_policy:
+  basis: conservative_flat_2026_rate_for_full_evaluation_window
+  historically_exact_tax_schedule: false
+  note: 20 bps is conservative for the 2025 training segment and matches the 2026
+    ordinary-share sell-tax rate; broker commission and live execution still require
+    account-specific qualification.
+  previous_sell_tax_bps: 18.0
+  sell_tax_bps: 20.0
+  sources:
+  - https://securities.koreainvestment.com/main/customer/guide/_static/TF04ae010000.jsp?tab=2
+  - https://securities.miraeasset.com/bbs/board/message/view.do?categoryId=66&messageId=2336448&selectedId=1000000202&selectedId=1000000203&selectedId=1000003101
+sector_map_path: olr/sector_map.yaml
+source_dependency_scope:
+  candidate_intraday_before: '16:00'
+  feature_intraday_before: '14:30'
+  strategy: olr
+  version: causal-feature-and-management-v2
+strategy: olr
+timeframe: 5m
+universe: universe_103.yaml
+use_full_available_window: false
+baseline_name: Retained I0 policy / N0 interval control
+selected_candidate: I0_c4f49be01ed09b8dc_N0
+input_manifest_path: E:\CodexResearch\k_stock_trader\olr_continuing_research_20261016\relative_context_v2\native_engines\train\control.manifest.json
+promotion_status: user_selected_retained_research_policy_independent_validation_pending
+artifact_promotion_policy: user_selected_retained_research_policy_independent_validation_pending
+independent_oos_pass: false
+live_promotion: false
+development_qualified: false
+baseline_adoption: true
+policy_identity: c4f49be01ed09b8dc
+execution_model: N0_interval_service
+generation_id: olr_round2_retained_i0_n0_20261017
+risk_basis: full_event_mark_to_market
+development_qualification:
+  historical_I0_C1_pass: true
+  N0_source_execution_valid: true
+  new_alpha_improvement: false
+  independent_oos_pass: false
+  live_promotion: false
+diagnostic_scope:
+  accounts: 6
+  new_financial_replays: 0
+  windows: IS and consumed development OOS, flat KRW100m accounts with own IS market
+    history
+  scenarios: nominal, combined 15bp slippage/0.5% participation, no upward compounding
+  physical_queue_verified: false
+diagnostic_limitations:
+- Research-round adoption of retained I0 under N0 execution, not a new alpha improvement
+  or completed economic optimisation objective.
+- All IS and April-July OOS have been adaptively consumed; they are development evidence,
+  not untouched validation.
+- N0 differs from historical I0 in execution/event grids. Source-model return differences
+  are not policy alpha.
+- Physical queue/latency liquidity, paper/live parity and production deployment remain
+  unqualified; no live configuration is changed.
+- Fixed 103-name universe and sector taxonomy create selection/survivorship limitations;
+  no benchmark-adjusted alpha or persistence probability is established.
+- Combined stress changes costs and interval participation, not measured exchange
+  queue dynamics. Capped sizing limits upward compounding, not downside loss.
+- Each OOS scenario restores its own IS observed capacity history but resets cash/positions.
+  Independent account returns are not a continuous portfolio return.
+- Legacy-feed capacity observations and sparse actual auction events remain explicit
+  assumptions. Opening fills are disabled under the interval model.
+- Risk is full opening/interval/closing/fill-event MTM. Native coarser risk is retained
+  separately. Positive returns do not imply recovered drawdown.
+- 'No hard stop is active: failed-followthrough/fade and planned auction exits obey
+  available service. Admission risk budgets do not guarantee realised-loss limits.'
+- Combined cost/participation stress is evaluated jointly; separate single-factor
+  stress and real queue calibration are not established by this six-account matrix.
+adoption_basis: Explicit user adoption after D29 review; cross-source round1 performance
+  is not a same-policy alpha gate. Native validity remains mandatory.
+native_fill_contract: completed_5m_decision_then_later_completed_1m_service; actual_closing_auction
+initial_mutations:
+  olr.afternoon.empty_sector_flow_rescue: false
+  olr.afternoon.max_flow_divergence: 9.99
+  olr.afternoon.max_gap: 0.2
+  olr.afternoon.max_open_drawdown: 0.2
+  olr.afternoon.max_prior_ret20: 999.0
+  olr.afternoon.max_range_atr: 99.0
+  olr.afternoon.min_bar_count: 1
+  olr.afternoon.min_close_location: 0.0
+  olr.afternoon.min_flow_5d: 0.0
+  olr.afternoon.min_flow_agreement: -9.99
+  olr.afternoon.min_flow_z: -9.99
+  olr.afternoon.min_foreign_flow_5d: -9.99
+  olr.afternoon.min_foreign_z: -9.99
+  olr.afternoon.min_gap: -0.2
+  olr.afternoon.min_high_from_open: -0.2
+  olr.afternoon.min_institutional_flow_5d: -9.99
+  olr.afternoon.min_institutional_z: -9.99
+  olr.afternoon.min_lagged_flow_score: -999.0
+  olr.afternoon.min_low_vs_prev_close: -0.2
+  olr.afternoon.min_market_score: -9.99
+  olr.afternoon.min_prior_ret20: -100.0
+  olr.afternoon.min_prior_ret5: -100.0
+  olr.afternoon.min_prior_ret60: -100.0
+  olr.afternoon.min_rel_volume: 0.0
+  olr.afternoon.min_ret: 0.0
+  olr.afternoon.min_sector_flow: 0.0
+  olr.afternoon.min_sector_foreign_flow: -9.99
+  olr.afternoon.min_sector_institutional_flow: -9.99
+  olr.afternoon.min_vwap_ret: -0.02
+  olr.afternoon.reject_score_max: 0.0
+  olr.afternoon.reject_score_min: 0.0
+  olr.afternoon.require_close_above_prev: false
+  olr.afternoon.score_band_rules:
+  - max_score: 325.0
+    name: base_low_lt300
+  - allowed_sectors:
+    - CHEMICALS
+    - SEMICONDUCTORS
+    - DEFENSE
+    - ELECTRONICS
+    - IT
+    - SHIPBUILDING
+    - FINANCIAL
+    max_score: 500.0
+    min_score: 400.0
+    name: mid_400_500_static_sector_prior
+  - max_score: 500.0
+    min_score: 400.0
+    name: mid_400_500_looser_breakout_dynamic_overlay
+    sector_admission:
+      min_sector_intraday_ret_pct: 2.0
+      min_stock_sector_daily_ret5_gap_pct: 11.0
+      mode: dynamic_confirmed_rotation
+  - min_score: 650.0
+    name: base_high_gt650
+  olr.afternoon.score_mode: momentum
+  olr.afternoon.top_n: 8
+  olr.afternoon.use_lagged_flow_score: true
+  olr.afternoon.weight_sector_rotation: 0.0005
+  olr.afternoon.weight_stock_sector_leadership: 0.001
+  olr.allocation.max_position_pct: 0.65
+  olr.allocation.min_selected: 1
+  olr.allocation.mode: rank_weighted
+  olr.allocation.rank_decay: 1.5
+  olr.allocation.target_gross_exposure: 1.2
+  olr.cost.commission_bps: 2.0
+  olr.cost.slippage_bps: 5.0
+  olr.cost.tax_bps_on_sell: 20.0
+  olr.execution.auction_fill_time: '15:30'
+  olr.frontier.active_selection_mode: hot
+  olr.overnight.slot_count: 6
+  olr.premarket.frontier_size: 30
+  olr.premarket.min_adv20_krw: 0.0
+  olr.premarket.min_foreign5_z: -9.99
+  olr.research.continuous_intraday_panel: false
+  olr.research.max_box_range_pct: 0.0
+  olr.research.max_flow_divergence: 9.99
+  olr.research.max_median_spread_pct: 0.35
+  olr.research.min_accumulation_score: -1.0
+  olr.research.min_adv20_krw: 2000000000.0
+  olr.research.min_compression_score: 0.0
+  olr.research.min_flow_5d: -9.99
+  olr.research.min_flow_agreement: -9.99
+  olr.research.min_flow_z: -9.99
+  olr.research.min_foreign_flow_5d: -9.99
+  olr.research.min_history_days: 60
+  olr.research.min_institutional_flow_5d: -9.99
+  olr.research.min_price_krw: 1000.0
+  olr.research.min_rs_percentile: 0.0
+  olr.research.min_sector_flow_5d: -9.99
+  olr.research.min_sector_flow_agreement: -9.99
+  olr.research.min_sector_foreign_flow_5d: -9.99
+  olr.research.min_sector_institutional_flow_5d: -9.99
+  olr.research.min_sector_participation: 0.5
+  olr.research.min_trend_score: 0.0
+  olr.research.minute_exit: false
+  olr.research.require_spread: false
+  olr.research.top_long_count: 20
+  olr.research.weights.accumulation: 0.1
+  olr.research.weights.compression: 0.1
+  olr.research.weights.daily_signal: 0.1
+  olr.research.weights.daily_trend: 0.16
+  olr.research.weights.flow: 0.05
+  olr.research.weights.flow_agreement: 0.02
+  olr.research.weights.foreign_flow: 0.03
+  olr.research.weights.institutional_flow: 0.02
+  olr.research.weights.relative_strength: 0.2
+  olr.research.weights.sector_participation: 0.07
+  olr.research.weights.sector_regime: 0.07
+  olr.research.weights.stock_regime: 0.08
+  olr.signal.allow_secular: true
+  olr.signal.bb_pctb_trigger: 0.05
+  olr.signal.cdd_max: 99
+  olr.signal.cdd_min_for_rsi5: 2
+  olr.signal.daily_max_score: 100.0
+  olr.signal.daily_min_score: 0.0
+  olr.signal.daily_rescue_min_score: 0.0
+  olr.signal.daily_signal_family: discrete_pullback_v2
+  olr.signal.daily_structure_weight: 0.0
+  olr.signal.depth_atr_trigger: 1.5
+  olr.signal.flow_policy: soft_penalty_rescue
+  olr.signal.gap_down_trigger_pct: -2.0
+  olr.signal.gap_max_pct: 20.0
+  olr.signal.max_parent_20d_return_pct: 999.0
+  olr.signal.max_relative_strength_pct: 100.0
+  olr.signal.min_market_breadth_pct: 0.0
+  olr.signal.min_market_heat_score: 0.0
+  olr.signal.min_parent_20d_return_pct: -20.0
+  olr.signal.min_relative_strength_pct: 0.0
+  olr.signal.relative_strength_trigger_pct: 70.0
+  olr.signal.rescue_size_mult: 0.65
+  olr.signal.roc5_drop_trigger_pct: -3.0
+  olr.signal.rsi2_trigger_thresh: 15.0
+  olr.signal.rsi5_trigger_thresh: 30.0
+  olr.signal.secular_sizing_mult: 0.65
+  olr.signal.signal_floor: 0.0
+  olr.signal.structure_size_mult_max: 1.25
+  olr.signal.structure_size_mult_min: 0.7
+  olr.signal.structure_sizing_enabled: false
+  olr.signal.volume_climax_trigger: 2.0
+  olr.source.require_complete_prefix: true
+  olr.trade_plan.entry:
+    max_signal_bars: 6
+    max_vwap_extension_pct: 0.025
+    min_bar_ret: -0.001
+    min_close_location: 0.5
+    min_vwap_ret: 0.0
+    mode: confirm_next_bar
+    name: confirm_b6_vwap_cap25
+  olr.trade_plan.exit:
+    failed_followthrough_bars: 1
+    failed_followthrough_close_r: -1.0
+    failed_followthrough_mfe_r: 4.0
+    hard_stop_enabled: false
+    mfe_fade_floor_r: 0.0
+    mfe_fade_gap_r: 1.25
+    mfe_fade_start_r: 1.0
+    mode: managed
+    name: mfe_fade1_g125
+  olr.universe.complete_size: 103
+  capacity_exit_priority: true
+  capacity_exit_quantile: 0.5
+  capacity_joint_allocation: true
+  capacity_late_confirmation: false
+  capacity_liquidation_tail: false
+  capacity_loss_atr_multiple: 1.25
+  capacity_loss_position_pct: 0.04
+  capacity_loss_sector_pct: 0.06
+  capacity_loss_total_pct: 0.08
+  capacity_opening_tail: false
+  capacity_recycle_liquidity_only: true
+  capacity_redistribute: true
+  capacity_redistribution_evidence: entry
+  capacity_redistribution_max_multiplier: 1.5
+  capacity_risk_repair_mode: 'off'
+  capacity_structural_partial: false
+  capacity_weak_partial_fraction: 0.0
+native_case_plan_sha256: 8564f9cd7de1913f9b58b1d109ff5883418153ab890116036d7d404d82210703

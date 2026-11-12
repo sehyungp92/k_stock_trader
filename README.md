@@ -2,6 +2,8 @@
 
 Algorithmic trading system for the Korean stock market (KRX), built on the Korea Investment & Securities (KIS) Open API.
 
+KALCB optimisation research starts with the [current research briefing](docs/optimisation/kalcb/kalcb-current.md), which links the experiment history, evidence, failure lessons and next bounded design.
+
 The active portfolio is **KALCB** (intraday breakout) and **OLR** (overnight leader rotation with afternoon execution). Both run through a single artifact-gated runtime service that talks to the centralised Order Management System (OMS) for pre-trade risk checks, order routing, and reconciliation.
 
 ## Architecture
@@ -149,13 +151,61 @@ OLR_KALCB_RESTART_RUNTIME_AFTER_AFTERNOON=true
 | `config/olr_kalcb/portfolio_policy.conservative.json` | Cross-strategy arbitration policy |
 | `config/backtests/kalcb.yaml` | KALCB backtest configuration |
 | `config/optimization/kalcb.yaml`, `config/optimization/olr.yaml` | Optimization search configs |
-| `config/optimization/portfolio_synergy.yaml` | Joint portfolio search |
+| `config/optimization/portfolio_synergy.yaml` | Synthetic portfolio fixture; historical search is quarantined |
 | `config/oms_config.yaml` | Risk limits, exposure caps, reconciliation |
 | `trading_assistant_backtest/contracts/k_stock_olr_kalcb/strategy_plugin_contract.json` | Assistant bridge contract for OLR/KALCB parameters, event joins, and deployment evidence |
 | `config/conservative.yaml` | Tighter thresholds (`CONSERVATIVE_MODE=true`) |
 | `config/universe_103.yaml` | Base universe definition |
 
 Replacing the approved deployment universe should be a reviewed config change, not an ad-hoc runtime override.
+
+### Shared research inputs
+
+The OLR and KALCB optimization configs and `config/olr_kalcb/shared_replay.json`
+point to one `input_manifest_path`. The generation freezes source, market files,
+daily data, universe, sector map and calendar. Its `market_input_hash` identifies
+the common market inputs; strategy candidate and consumed-bar hashes may differ.
+The shared file-selection policy lives in `shared_replay.json:market_inputs`,
+including per-symbol snapshot versions. Loaders reject a different generation,
+unmanifested inputs and conflicting overlapping bars.
+
+For a replacement generation, update all three manifest pointers to an unused
+destination first. Replace `NEW_GENERATION` below with that destination:
+
+```bash
+python scripts/prepare_olr_kalcb_integrity_inputs.py --destination data/backtests/integrity/NEW_GENERATION
+python scripts/evaluate_olr_kalcb_shared.py --verify-inputs-only --output data/backtests/output/portfolio_synergy/shared_replay/shared_input_verification.json
+```
+
+Keep `data/backtests/output` limited to `olr`, `kalcb`, and `portfolio_synergy`.
+Shared replay diagnostics belong under `portfolio_synergy/shared_replay`; inactive
+experiments are preserved separately in `data/backtests/archive`, with their
+original files and a relocation manifest. A shared replay is research evidence,
+not a promoted portfolio round.
+
+Research completion does not require collecting a fixed number of future sessions.
+`config/research/forward_validation_policy.json` records the active policy and
+revised protocols. Reports use declared available windows and state sample size,
+uncertainty and integrity failures; completing work does not establish independent
+performance or authorize deployment.
+
+An existing generation is preserved. Freeze a replacement after source or input
+policy changes. Explicit `--input-manifest` selects a generation for a diagnostic replay.
+The replay writes equivalent OLR/KALCB input receipts, bar digests and snapshot
+manifests beside its output. Original round artifacts retain their historical
+identities. Content verification does not certify session completeness, vendor
+price/volume basis, execution liquidity or strategy qualification. Each strategy
+retains its declared execution model.
+
+The OLR/KALCB research configurations also register the shared causal capacity
+model: a 1% prior-contiguous-five-minute volume budget for opening fills and a 1%
+sourced auction-event budget for closing auctions. Partial fills retain actual
+remaining risk. The four-case comparison is available through
+`evaluate_olr_kalcb_shared.py --diagnostic-paired --capacity-sensitivity --output <new-path>`;
+use `--diagnostic-target OLR`, `KALCB` or `shared` to run one account.
+See the [capacity implementation and evidence report](docs/audit/2026-10-04-capacity-model-v15.md)
+for assumptions, results and qualification limits. These are declared research
+models, with execution-phase liquidity still explicitly unverified.
 
 ### Assistant bridge contract
 

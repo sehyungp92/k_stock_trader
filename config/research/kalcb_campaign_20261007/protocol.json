@@ -1,0 +1,18 @@
+{
+  "version": "kalcb-campaign-risk-v1",
+  "research_only": true,
+  "development_end": "2026-03-31",
+  "evaluation_start": "2025-08-07",
+  "excluded_from_optimization": ["2026-06-01", "2026-07-31"],
+  "user_drawdown_targets_pct": {"baseline": 8, "combined": 10},
+  "control": "cv_interaction",
+  "first_experiment": "Add 16 prior-confirmed campaign/completed-opening features; unchanged Ridge, inherited interactions, spline set, quantities, execution, costs and eligibility",
+  "training": "Expanding, minimum 60 mature sessions, one-session embargo, 20-session refits",
+  "next_experiments": [
+    "Paired current-policy management: persistent failure, conditional acceptance extension, hard stop protection; no hindsight price-mark substitutes",
+    "Past-only downside-aware quantity selection and account-aware drawdown/exposure governor, with constant-size control",
+    "One structural later route only if evidence supports its cost-adjusted executed value"
+  ],
+  "decision_contract": "Prefer candidates meeting both drawdown targets with higher stressed return and economically meaningful trading activity; show full frontier and all attempted variants. No relaxed execution audit, no forced trade quota, no claim of independent validation from reused development history.",
+  "promotion": "No automatic live deployment; frozen research selection requires all four unchanged integrity audits"
+}

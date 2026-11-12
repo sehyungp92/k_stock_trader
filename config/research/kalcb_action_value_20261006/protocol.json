@@ -1,0 +1,60 @@
+{
+  "version": "kalcb-action-value-implementation-v1",
+  "research_only": true,
+  "production_promotion": false,
+  "study_root": "E:/CodexResearch/k_stock_trader/kalcb_action_value_20261006",
+  "code_generation": "code_v10",
+  "action_dataset": "prepared_v3",
+  "initial_policies": "policies_v1",
+  "quantity_plan": "quantity_plan_v2.json",
+  "forward_original_plan": "forward_plan_v2.json",
+  "forward_original_policy": "mature_original_v3",
+  "information_contract": {
+    "historical_features": "previously completed observations",
+    "opening_features": "completed opening half-hour only",
+    "training_outcomes": "valid executed cash outcomes available before the fit",
+    "warmup_sessions": 60,
+    "embargo_sessions": 1,
+    "forecast_block_sessions": 20,
+    "evaluation_classification": "reused chronological development; no untouched OOS claim"
+  },
+  "model_comparison": {
+    "fixed_quantity_models": [
+      "unconditional_ridge",
+      "ready_ridge",
+      "ready_hgb",
+      "ready_hurdle",
+      "ready_hgb_rich",
+      "ready_hgb_rolling120",
+      "ready_hgb_decay60"
+    ],
+    "controls": ["ready_rule", "ready_hgb_unthresholded", "cash"],
+    "quantity_models": ["q_ridge", "q_hgb", "q_hgb_rich"],
+    "additional_feasibility_policies": ["q_ridge_risk", "q_hgb_risk", "q_hgb_rich_risk"],
+    "maximum_predicted_execution_failure_probability": 0.01,
+    "strict_feasibility_comparison": {"policy": "q_ridge_risk_strict", "maximum_failure_probability": 0.001, "scope": "same forecasts, one stricter development admission rule"},
+    "quantity_admission": ["expected", "robust"],
+    "fixed_reduction_controls": ["q_fixed_quarter", "q_fixed_half"],
+    "quantity_ladder": [0, 0.25, 0.5, 1],
+    "maximum_admissions_per_session": 8,
+    "quantity_feasibility": "positive forecast combined value and conservative opening-volume exit capacity; zero integer capacity stays zero",
+    "shared_account": "ordinary broker and KALCB core are authoritative"
+  },
+  "policy_calibration": {
+    "lookback_sessions": 60,
+    "minimum_sessions": 40,
+    "minimum_completed_trades_per_scenario": 20,
+    "embargo_sessions": 1,
+    "scenarios": ["baseline", "combined"],
+    "required": ["positive growth in both scenarios", "clean account boundaries", "no observed physical-fill or deadline failures in window"],
+    "objective": "maximum earlier baseline log growth; trading frequency breaks ties; otherwise cash"
+  },
+  "promotion_requirements": [
+    "fresh full-account replay of the complete selected policy",
+    "unchanged standard integrity audit passes",
+    "no exit-deadline or terminal inventory",
+    "positive stressed economics and meaningful improvement over causal controls",
+    "freeze before evaluating genuinely unconsumed observations",
+    "separate live data and latency qualification"
+  ]
+}

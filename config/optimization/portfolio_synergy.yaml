@@ -1,6 +1,8 @@
+# Legacy synthetic fixture only. Current native research uses
+# scripts/replay_selected_portfolio.py and config/research/portfolio_synergy_selected.json.
 strategy: portfolio_synergy
-capability_level: source_artifact_portfolio_replay
-initial_equity: 100000000.0
+capability_level: synthetic
+initial_equity: 25000000.0
 num_phases: 7
 max_rounds_per_phase: 4
 holdout_excluded_from_optimization: true
@@ -11,8 +13,8 @@ risk_basis: mark_to_market_proxy_from_trade_mae_path
 source_paths:
   kalcb_optimized_config: data/backtests/output/kalcb/round_3/optimized_config.json
   kalcb_run_summary: data/backtests/output/kalcb/round_3/run_summary.json
-  olr_optimized_config: data/backtests/output/olr/round_5/optimized_config.json
-  olr_run_summary: data/backtests/output/olr/round_5/run_summary.json
+  olr_optimized_config: data/backtests/output/olr/archive/2026-10-05-before-fully-repaired-control/round_5/optimized_config.json
+  olr_run_summary: data/backtests/output/olr/archive/2026-10-05-before-fully-repaired-control/round_5/run_summary.json
 initial_mutations:
   portfolio.risk_stance: controlled_aggressive
   portfolio.reference_risk_pct: 0.0055

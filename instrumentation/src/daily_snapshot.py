@@ -9,6 +9,10 @@ picks up the saved JSON file and forwards it to the central relay.
 from __future__ import annotations
 
 import json
+import hashlib
+import os
+
+from .execution_accounting import daily_accounting, economics, outcome_stats, event_day
 from collections import Counter
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
@@ -23,6 +27,16 @@ class DailySnapshot:
     bot_id: str
     strategy_type: str
 
+    schema_version: str = "daily_execution_accounting_v2"
+    execution_count: int = 0
+    unknown_cost_execution_count: int = 0
+    unclassified_trade_count: int = 0
+    costs_complete: bool = True
+    known_fees: float = 0.0
+    accounting_day_basis: str = "UTC"
+    completed_trades: list = field(default_factory=list)
+    snapshot_revision: str = ""
+
     # Trade counts
     total_trades: int = 0
     win_count: int = 0
@@ -31,20 +45,20 @@ class DailySnapshot:
 
     # PnL
     gross_pnl: float = 0.0
-    net_pnl: float = 0.0              # after fees
-    total_fees: float = 0.0
-    best_trade_pnl: float = 0.0
-    worst_trade_pnl: float = 0.0
+    net_pnl: Optional[float] = 0.0              # after fees
+    total_fees: Optional[float] = 0.0
+    best_trade_pnl: Optional[float] = 0.0
+    worst_trade_pnl: Optional[float] = 0.0
     avg_win: float = 0.0
     avg_loss: float = 0.0
 
     # Risk
-    max_drawdown_pct: float = 0.0     # intraday peak-to-trough (cumulative PnL)
+    max_drawdown_pct: Optional[float] = 0.0     # intraday peak-to-trough (cumulative PnL)
     max_exposure: float = 0.0         # max simultaneous position value
     max_concurrent_positions: int = 0
     total_risk_deployed_pct: float = 0.0
-    profit_factor: float = 0.0        # gross wins / gross losses
-    win_rate: float = 0.0
+    profit_factor: Optional[float] = 0.0        # gross wins / gross losses
+    win_rate: Optional[float] = 0.0
     exposure_pct: float = 0.0         # % of time in position
 
     # Rolling metrics (require historical data)
@@ -124,7 +138,12 @@ class DailySnapshotBuilder:
         if date_str is None:
             date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        trades = self._load_trades(date_str)
+        # Closing outcomes can include fragments from previous days. Corrections
+        # restate the original day, so retain all observation revisions.
+        history = []
+        for path in sorted((self.data_dir / "trades").glob("trades_*.jsonl")):
+            history.extend(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+        trades = [t for t in history if event_day(t, "entry_time" if t.get("stage") == "entry" else "exit_time") == date_str]
         missed = self._load_missed(date_str)
         scores = self._load_scores(date_str)
         errors = self._load_errors(date_str)
@@ -135,101 +154,56 @@ class DailySnapshotBuilder:
             strategy_type=self.strategy_type,
         )
 
-        # --- TRADE AGGREGATES ---
-        completed = [t for t in trades if t.get("stage") == "exit" and t.get("pnl") is not None]
-        snapshot.total_trades = len(completed)
+        metrics, executions, completed = daily_accounting(history, date_str)
+        for key, value in metrics.items():
+            setattr(snapshot, key, value)
+        snapshot.completed_trades = completed
+        for target, source, digits in (
+            ("avg_entry_slippage_bps", "entry_slippage_bps", 2),
+            ("avg_exit_slippage_bps", "exit_slippage_bps", 2),
+            ("avg_entry_latency_ms", "entry_latency_ms", 1),
+            ("avg_exit_efficiency", "exit_efficiency", 4),
+        ):
+            values = [r[source] for r in executions if r.get(source) is not None]
+            setattr(snapshot, target, round(sum(values) / len(values), digits) if values else None)
 
-        if completed:
-            pnls = [t["pnl"] for t in completed]
-            fees = [t.get("fees_paid", 0) or 0 for t in completed]
-            wins = [p for p in pnls if p > 0]
-            losses = [p for p in pnls if p < 0]
+        snapshot.regime_breakdown = self._group_accounting(executions, completed, "market_regime")
+        snapshot.per_strategy_summary = self._group_accounting(
+            executions, completed, "strategy_id", self.strategy_type.upper())
+        snapshot.experiment_breakdown = self._group_accounting(executions, completed, "experiment_id")
+        snapshot.experiment_breakdown.pop("unknown", None)
 
-            snapshot.win_count = len(wins)
-            snapshot.loss_count = len(losses)
-            snapshot.breakeven_count = len([p for p in pnls if p == 0])
-            snapshot.gross_pnl = round(sum(pnls) + sum(fees), 4)  # add back fees for gross
-            snapshot.net_pnl = round(sum(pnls), 4)
-            snapshot.total_fees = round(sum(fees), 4)
-            snapshot.best_trade_pnl = round(max(pnls), 4)
-            snapshot.worst_trade_pnl = round(min(pnls), 4)
-            snapshot.avg_win = round(sum(wins) / len(wins), 4) if wins else 0
-            snapshot.avg_loss = round(sum(losses) / len(losses), 4) if losses else 0
-            snapshot.win_rate = round(len(wins) / len(completed), 4) if completed else 0
+        entries = {t["trade_id"]: t for t in history if t.get("stage") == "entry"}
+        snapshot.total_risk_deployed_pct = round(sum(
+            (t.get("sizing_context") or {}).get("target_risk_pct", 0) or 0
+            for t in entries.values() if event_day(t, "entry_time") == date_str), 6)
+        # A partial exit does not close a position. Include overnight positions.
+        from .execution_accounting import closed_lifecycles, project_executions
+        all_closed = {t["trade_id"]: t for t in closed_lifecycles(project_executions(history))}
+        position_events = []
+        for trade_id, entry in entries.items():
+            start = event_day(entry, "entry_time")
+            closing = all_closed.get(trade_id)
+            end = event_day(closing) if closing else "9999-12-31"
+            if start <= date_str <= end:
+                position_events.append((entry["entry_time"] if start == date_str else "", 1))
+                if end == date_str:
+                    position_events.append((closing["exit_time"], -1))
+        active = peak = 0
+        for _, delta in sorted(position_events, key=lambda e: (e[0], -e[1])):
+            active += delta
+            peak = max(peak, active)
+        snapshot.max_concurrent_positions = peak
 
-            gross_wins = sum(wins) if wins else 0
-            gross_losses = abs(sum(losses)) if losses else 0
-            snapshot.profit_factor = round(gross_wins / gross_losses, 4) if gross_losses > 0 else float('inf')
-
-            # Slippage averages
-            entry_slips = [t.get("entry_slippage_bps") for t in completed if t.get("entry_slippage_bps") is not None]
-            exit_slips = [t.get("exit_slippage_bps") for t in completed if t.get("exit_slippage_bps") is not None]
-            latencies = [t.get("entry_latency_ms") for t in completed if t.get("entry_latency_ms") is not None]
-
-            snapshot.avg_entry_slippage_bps = round(sum(entry_slips) / len(entry_slips), 2) if entry_slips else None
-            snapshot.avg_exit_slippage_bps = round(sum(exit_slips) / len(exit_slips), 2) if exit_slips else None
-            snapshot.avg_entry_latency_ms = round(sum(latencies) / len(latencies), 1) if latencies else None
-
-            # Regime breakdown
-            regime_data: Dict[str, dict] = {}
-            for t in completed:
-                regime = t.get("market_regime", "unknown")
-                if regime not in regime_data:
-                    regime_data[regime] = {"trades": 0, "pnl": 0, "wins": 0}
-                regime_data[regime]["trades"] += 1
-                regime_data[regime]["pnl"] += t["pnl"]
-                if t["pnl"] > 0:
-                    regime_data[regime]["wins"] += 1
-            for regime, data in regime_data.items():
-                data["pnl"] = round(data["pnl"], 4)
-                data["win_rate"] = round(data["wins"] / data["trades"], 4) if data["trades"] > 0 else 0
-            snapshot.regime_breakdown = regime_data
-
-            # Exit efficiency average
-            exit_effs = [t.get("exit_efficiency") for t in completed if t.get("exit_efficiency") is not None]
-            snapshot.avg_exit_efficiency = round(sum(exit_effs) / len(exit_effs), 4) if exit_effs else None
-
-            # Total risk deployed (sum of target_risk_pct from entry sizing_context)
-            entries = [t for t in trades if t.get("stage") == "entry"]
-            risk_sum = 0.0
-            for t in entries:
-                sc = t.get("sizing_context")
-                if sc and sc.get("target_risk_pct") is not None:
-                    risk_sum += sc["target_risk_pct"]
-            snapshot.total_risk_deployed_pct = round(risk_sum, 6)
-
-            # Max concurrent positions — track entry/exit events by timestamp
-            events: List[tuple] = []  # (timestamp_str, delta)
-            for t in trades:
-                if t.get("stage") == "entry" and t.get("entry_time"):
-                    events.append((t["entry_time"], 1))
-                elif t.get("stage") == "exit" and t.get("exit_time"):
-                    events.append((t["exit_time"], -1))
-            events.sort(key=lambda x: x[0])
-            concurrent = 0
-            peak = 0
-            for _, delta in events:
-                concurrent += delta
-                peak = max(peak, concurrent)
-            snapshot.max_concurrent_positions = peak
-
-            # Max drawdown (peak-to-trough of cumulative PnL by exit time)
-            sorted_exits = sorted(completed, key=lambda t: t.get("exit_time", ""))
-            cum_pnl = 0.0
-            peak_pnl = 0.0
-            max_dd = 0.0
-            for t in sorted_exits:
-                cum_pnl += t["pnl"]
-                if cum_pnl > peak_pnl:
-                    peak_pnl = cum_pnl
-                dd = peak_pnl - cum_pnl
-                if dd > max_dd:
-                    max_dd = dd
-            if peak_pnl > 0:
-                snapshot.max_drawdown_pct = round(max_dd / peak_pnl * 100, 4)
-            elif max_dd > 0:
-                # All losses — drawdown is 100% from zero peak
-                snapshot.max_drawdown_pct = 100.0
+        if not snapshot.costs_complete:
+            snapshot.max_drawdown_pct = None
+        else:
+            cumulative = peak_pnl = drawdown = 0.0
+            for row in executions:
+                cumulative += row["net_pnl"]
+                peak_pnl = max(peak_pnl, cumulative)
+                drawdown = max(drawdown, peak_pnl - cumulative)
+            snapshot.max_drawdown_pct = round(drawdown / peak_pnl * 100, 4) if peak_pnl else (100.0 if drawdown else 0.0)
 
         # --- MISSED OPPORTUNITIES ---
         snapshot.missed_count = len(missed)
@@ -267,30 +241,6 @@ class DailySnapshotBuilder:
         # --- ERRORS ---
         snapshot.error_count = len(errors)
 
-        # --- PER-STRATEGY SUMMARY ---
-        # Mono-strategy: one key matching strategy_type
-        snapshot.per_strategy_summary = {
-            self.strategy_type.upper(): {
-                "trades": snapshot.total_trades,
-                "win_count": snapshot.win_count,
-                "loss_count": snapshot.loss_count,
-                "gross_pnl": snapshot.gross_pnl,
-                "net_pnl": snapshot.net_pnl,
-                "win_rate": (
-                    snapshot.win_count / snapshot.total_trades * 100
-                    if snapshot.total_trades > 0 else 0
-                ),
-                "avg_win": snapshot.avg_win,
-                "avg_loss": snapshot.avg_loss,
-                "best_trade_pnl": snapshot.best_trade_pnl,
-                "worst_trade_pnl": snapshot.worst_trade_pnl,
-                "avg_entry_slippage_bps": snapshot.avg_entry_slippage_bps,
-            }
-        }
-
-        # --- EXPERIMENT BREAKDOWN ---
-        snapshot.experiment_breakdown = self._build_experiment_breakdown(completed)
-
         # --- ACTIVE EXPERIMENTS ---
         if self._experiment_registry is not None:
             try:
@@ -300,64 +250,58 @@ class DailySnapshotBuilder:
 
         return snapshot
 
-    def _build_experiment_breakdown(self, completed_trades: list) -> dict:
-        """Group completed trades by experiment_id:experiment_variant."""
-        groups: dict[str, list[dict]] = {}
-        for t in completed_trades:
-            exp_id = t.get("experiment_id") or ""
-            exp_var = t.get("experiment_variant") or ""
-            if not exp_id:
-                continue
-            key = f"{exp_id}:{exp_var}"
-            groups.setdefault(key, []).append(t)
-
-        breakdown = {}
-        for key, trades in groups.items():
-            exp_id, exp_var = key.split(":", 1)
-            wins = [t for t in trades if (t.get("pnl") or 0) > 0]
-            losses = [t for t in trades if (t.get("pnl") or 0) < 0]
-            gross_pnl = sum(t.get("pnl", 0) + t.get("fees_paid", 0) for t in trades)
-            net_pnl = sum(t.get("pnl", 0) for t in trades)
-            scores = [t.get("process_quality_score", 0) for t in trades
-                      if t.get("process_quality_score") is not None]
-            mfe_vals = [t["mfe_pct"] for t in trades if t.get("mfe_pct") is not None]
-            mae_vals = [t["mae_pct"] for t in trades if t.get("mae_pct") is not None]
-
-            breakdown[key] = {
-                "experiment_id": exp_id,
-                "experiment_variant": exp_var,
-                "trades": len(trades),
-                "win_count": len(wins),
-                "loss_count": len(losses),
-                "gross_pnl": round(gross_pnl, 2),
-                "net_pnl": round(net_pnl, 2),
-                "win_rate": round(len(wins) / len(trades), 4) if trades else 0.0,
-                "avg_win": round(
-                    sum(t["pnl"] for t in wins) / len(wins), 2
-                ) if wins else 0.0,
-                "avg_loss": round(
-                    sum(t["pnl"] for t in losses) / len(losses), 2
-                ) if losses else 0.0,
-                "avg_process_quality": round(
-                    sum(scores) / len(scores), 1
-                ) if scores else 0.0,
-                "avg_mfe_pct": round(
-                    sum(mfe_vals) / len(mfe_vals), 4
-                ) if mfe_vals else None,
-                "avg_mae_pct": round(
-                    sum(mae_vals) / len(mae_vals), 4
-                ) if mae_vals else None,
-            }
-
-        return breakdown
+    @staticmethod
+    def _group_accounting(executions, completed, field, default="unknown"):
+        def key(row):
+            value = row.get(field) or default
+            if field == "experiment_id" and value != default:
+                value += ":" + (row.get("experiment_variant") or "")
+            return value
+        result = {}
+        for group in sorted({key(r) for r in [*executions, *completed]}):
+            stats = outcome_stats([r for r in completed if key(r) == group])
+            result[group] = {**economics([r for r in executions if key(r) == group]),
+                             **stats, "trades": stats["total_trades"]}
+        return result
 
     def save(self, snapshot: DailySnapshot):
-        """Save daily snapshot as a single JSON file."""
+        """Append content-addressed revisions; retain the latest JSON for local readers."""
         daily_dir = self.data_dir / "daily"
         daily_dir.mkdir(parents=True, exist_ok=True)
+        payload = snapshot.to_dict()
+        payload.pop("snapshot_revision", None)
+        revision = hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=False).encode()).hexdigest()
+        snapshot.snapshot_revision = revision
+        payload["snapshot_revision"] = revision
         filepath = daily_dir / f"daily_{snapshot.date}.json"
-        with open(filepath, "w") as f:
-            json.dump(snapshot.to_dict(), f, indent=2, default=str)
+        revisions = filepath.with_suffix(".jsonl")
+        from filelock import FileLock
+        with FileLock(str(filepath) + ".lock"):
+            previous = json.loads(filepath.read_text(encoding="utf-8")) if filepath.exists() else {}
+            if revisions.exists():
+                content = revisions.read_bytes()
+                # A newline commits a journal record. The sidecar never exports
+                # an unterminated v2 record. Discard an interrupted append only.
+                boundary = content.rfind(b"\n") + 1
+                if boundary != len(content):
+                    with revisions.open("r+b") as stream:
+                        stream.truncate(boundary)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                records = [json.loads(line) for line in content[:boundary].splitlines() if line.strip()]
+                if records:
+                    previous = records[-1]
+            if previous.get("snapshot_revision") != revision:
+                payload["snapshot_sequence"] = int(previous.get("snapshot_sequence", 0)) + 1
+                with revisions.open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(payload, allow_nan=False) + "\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            else:
+                payload = previous
+            temporary = filepath.with_suffix(".tmp")
+            temporary.write_text(json.dumps(payload, indent=2, allow_nan=False), encoding="utf-8")
+            os.replace(temporary, filepath)
 
     def _load_jsonl(self, directory: str, prefix: str, date_str: str) -> list:
         """Load events from a JSONL file for the given date.

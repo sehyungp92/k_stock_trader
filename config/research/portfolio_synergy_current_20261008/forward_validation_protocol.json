@@ -1,0 +1,71 @@
+{
+  "books": [
+    "selected profile",
+    "cash_control from the registered nine-policy study"
+  ],
+  "completion_policy_revision": {
+    "policy": "config/research/forward_validation_policy.json",
+    "reason": "User removed fixed future-session counts from completion conditions; strategy and evidence-integrity requirements are unchanged.",
+    "revised_at_utc": "2026-10-08T09:24:49.831959+00:00"
+  },
+  "completion_requires_future_sessions": false,
+  "counting": "Consecutive eligible exchange sessions; missing feeds and failures remain reported, never silently dropped",
+  "decision": "No automatic deployment. Require positive incremental evidence versus the matched cash control, operational paper parity, acceptable observed and gap risk, and a separately documented deployment decision.",
+  "descriptive_uncertainty_method": {
+    "block_sessions": 5,
+    "interpretation": "Descriptive uncertainty under observed dependence assumptions, not a native execution rerun or a correction for all historical strategy selection",
+    "interval_percentiles": [
+      2.5,
+      97.5
+    ],
+    "method": "paired moving-block bootstrap of daily net returns",
+    "random_seed": 20261008,
+    "resamples": 10000,
+    "sampling": "Sample contiguous five-session blocks with replacement; concatenate and truncate to the observed session count; use identical date indices for both books",
+    "statistic": "Difference in compounded net return of selected and cash-control books"
+  },
+  "evaluation": [
+    "Matched session returns and marked drawdown, completed trade lifecycles and active days",
+    "Net results under baseline, separate cost/liquidity stress and combined stress",
+    "Selected-versus-control incremental net return, turnover, concentration and return per unit of committed capital/time",
+    "Descriptive block-resampling uncertainty for paired daily returns; disclose inadequate block support and repeated looks, and report inconclusive evidence without blocking report completion",
+    "For rejected opportunities, evaluate a separate shadow position lifecycle; never credit unexecuted hindsight PnL to the portfolio"
+  ],
+  "evaluation_window_policy": "Evaluate the declared available window, with no fixed minimum session count. Disclose sample size, uncertainty and every reporting endpoint; completion does not establish independent performance.",
+  "execution": "shadow_replay_or_paper_only; this file schedules nothing and sends no broker orders",
+  "fixed": [
+    "strategy configurations",
+    "candidate construction and availability rules",
+    "portfolio settings",
+    "quality-label snapshot and hyperparameters",
+    "calendar and source contracts",
+    "cost and participation scenarios"
+  ],
+  "hard_failure_conditions": [
+    "Any source-time or execution-integrity failure",
+    "Unexplained missing session coverage",
+    "Borrowing or exposure inconsistent with verified account capacity",
+    "KALCB intraday residual or unresolved terminal inventory/orders"
+  ],
+  "initial_equity_per_separate_shadow_book_krw": 100000000,
+  "management_tail": "Disable new entries after the declared evaluation end; retain up to two scheduled OLR management sessions and report any remaining position or order as unresolved",
+  "registered_at_utc": "2026-10-08T00:03:20.284831+00:00",
+  "required_observations": [
+    "all eligible candidate opportunities before portfolio selection, including core-blocked candidates",
+    "decision timestamp, immutable features and snapshot hashes, route, score, rank and score support",
+    "portfolio state, intended quantity, admitted quantity and explicit rejection or resize reason",
+    "actual available buying power, pending commitments, order acknowledgements and partial fills where paper infrastructure provides them",
+    "marked equity, cash and exposures; signal-to-order and order-to-fill timing",
+    "risk-limit breaches, data failures, stale observations and required session management"
+  ],
+  "retuning": "No retuning inside this sample. A change creates a new registered experiment and requires a fresh independent evaluation cohort.",
+  "review_triggers": {
+    "baseline_marked_drawdown_pct": 12,
+    "combined_stress_marked_drawdown_pct": 15,
+    "meaning": "Research review triggers, not newly backtested liquidation rules and not a guarantee of loss limits"
+  },
+  "selected_profile_sha256": "da118e1671ca0379b08cecce149c65706511aec90fb3642241c915d867579e1c",
+  "start": "First complete eligible KRX exchange session after registration, subject to complete authenticated contemporaneous data",
+  "status": "registered_not_started",
+  "version": "joint-portfolio-forward-research-v2"
+}

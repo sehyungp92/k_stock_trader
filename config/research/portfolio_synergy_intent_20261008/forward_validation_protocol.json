@@ -1,0 +1,58 @@
+{
+  "version": "native-preserved-portfolio-forward-research-v1",
+  "status": "registered_not_started",
+  "registered_at_utc": "2026-10-08T13:06:11.438074+00:00",
+  "profile": {
+    "path": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\config\\research\\portfolio_synergy_intent_20261008\\selected_profile.json",
+    "sha256": "93704d55a9fba6414e005c6e53691ad3552bf4b81b49ae0ac749715fcfd7405d"
+  },
+  "source_generation_hash": "06d7b60d734418366caab88158a3fbbcfa8848796a8309151943f7909abe4527",
+  "execution": "shadow_replay_or_paper_only; schedules nothing and sends no broker orders",
+  "completion_requires_future_sessions": false,
+  "live_promotion": false,
+  "evaluation_window_policy": "Use the declared available window with all eligible sessions. No fixed future-session count is a completion condition. Report sample size, dependence, every reporting endpoint and inconclusive evidence explicitly.",
+  "independence": "The 156-session selection window is reused development evidence. Independent evaluation requires observations unavailable to all upstream strategy and allocation selections; relabeling an old split is insufficient.",
+  "initial_equity_per_separate_book_krw": 100000000,
+  "books": [
+    "frozen selected portfolio",
+    "KALCB sizing 2 with native physical leverage 2",
+    "native KALCB sizing 1",
+    "native OLR",
+    "previous selected portfolio"
+  ],
+  "comparison_contract": "Identical dates, market/candidate vintages, cost and participation assumptions. Separate executable accounts; no addition of mutually infeasible trade PnL.",
+  "fixed": [
+    "native strategy settings and candidate availability rules",
+    "selected allocation settings",
+    "source and market generation",
+    "baseline, cost, participation and combined stress definitions"
+  ],
+  "observations": [
+    "every native decision and generated intent, with timestamp and immutable feature/source identity",
+    "native KALCB submission, OLR allocated quantity, reservation and rejection/resize reason",
+    "actual fills, residual orders, funding, cash and marked exposure",
+    "completed lifecycles, economically meaningful ticket counts, turnover and active sessions",
+    "all missing feeds, stale observations, execution failures and required management sessions"
+  ],
+  "shadow_labels": "Never-admitted opportunities require their own causal native exit lifecycle and explicit feasible capacity assumptions before they can train a ranker. Keep shadow outcomes separate; never credit them to the realized portfolio.",
+  "evaluation": [
+    "incremental baseline and stressed net return versus every feasible matched standalone",
+    "marked intraday DD, worst session, expected shortfall, overnight exposure and concentration",
+    "trade count, ticket-size distribution, capital-time use and active sessions",
+    "sleeve PnL, changes to KALCB opportunity retention, and return concentration",
+    "paired five-session block bootstrap with 5000 resamples and seed 20261008, disclosed as descriptive only"
+  ],
+  "review_triggers": {
+    "baseline_marked_drawdown_pct": 11.0,
+    "combined_stress_marked_drawdown_pct": 12.5,
+    "meaning": "Research review triggers, not newly simulated stop/liquidation rules or future loss guarantees."
+  },
+  "integrity_failures": [
+    "source-time or execution-ledger failure",
+    "unexplained missing eligible session",
+    "funding or admission exposure beyond verified account capacity",
+    "KALCB overnight residual or unresolved terminal positions/orders"
+  ],
+  "retuning": "A change creates a separately registered experiment. Keep the preceding profile and evidence immutable.",
+  "decision": "Implementation completion is separate from independent performance and broker readiness. No automatic deployment. Live use requires a separately documented operational decision and verified broker funding/order parity."
+}

@@ -267,12 +267,27 @@ class InstrumentationKit:
         except Exception as e:
             logger.debug(f"Instrumentation on_entry_fill error: {e}")
 
+    def on_position_reconciled(self, trade_id: str, qty: float, cost_basis: float, execution_id: str = "") -> None:
+        self._trade_logger.reconcile_open_position(trade_id, qty, cost_basis, execution_id)
+
+    def execution_cursor(self, consumer_id: str) -> int:
+        return self._trade_logger._projection.cursor(consumer_id)
+
+    def advance_execution_cursor(self, consumer_id: str, sequence: int) -> None:
+        self._trade_logger._projection.advance(consumer_id, sequence)
+
     def on_exit_fill(
         self,
         trade_id: str,
         exit_price: float,
         exit_reason: str,
         mfe_mae_context: Optional[Dict[str, Any]] = None,
+        *,
+        exited_qty: float | None = None,
+        execution_id: str | None = None,
+        fees_paid: float | None = None,
+        consumer_id: str | None = None,
+        consumer_sequence: int | None = None,
     ) -> None:
         """Record a trade exit and compute process score."""
         try:
@@ -281,6 +296,11 @@ class InstrumentationKit:
                 exit_price=exit_price,
                 exit_reason=exit_reason,
                 mfe_mae_context=mfe_mae_context,
+                exited_qty=exited_qty,
+                execution_id=execution_id,
+                fees_paid=fees_paid,
+                consumer_id=consumer_id,
+                consumer_sequence=consumer_sequence,
             )
             if trade_event:
                 # Build scorer-compatible dict

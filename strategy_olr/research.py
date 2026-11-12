@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from strategy_common.execution_session import prior_session_issue
+from kis_core.trading_calendar import get_trading_calendar
+
 import bisect
 import json
 import math
@@ -37,7 +40,7 @@ from .models import (
 
 RESEARCH_MODEL_VERSION = "olr-research-selection-v1"
 AFTERNOON_SELECTION_VERSION = "olr-afternoon-selection-v1"
-FINAL_CANDIDATE_CONFIG_HASH_VERSION = "olr-final-candidate-config-v1"
+FINAL_CANDIDATE_CONFIG_HASH_VERSION = "olr-final-candidate-config-v2"
 INTRADAY_SELECTION_CUTOFF = time(14, 30)
 INTRADAY_SELECTION_CUTOFF_LABEL = "timestamp < 14:30 KST"
 _EMPTY_ROW_DIGEST = ""
@@ -48,6 +51,45 @@ _FINAL_CONFIG_HASH_EXCLUDED_FIELDS = {
     "entry_mode",
     "exit_mode",
     "allocation_mode",
+    "allocation_equity_cap_krw",
+    # Execution sizing/history must not invalidate frozen signal candidates.
+    "capacity_entry_bars",
+    "capacity_exit_quantile",
+    "capacity_participation",
+    "capacity_min_exit_observations",
+    "capacity_min_position_pct",
+    "capacity_exit_guard",
+    "capacity_exit_guard_mode",
+    "capacity_joint_allocation",
+    "capacity_exit_priority",
+    "capacity_loss_position_pct",
+    "capacity_loss_sector_pct",
+    "capacity_loss_total_pct",
+    "capacity_loss_atr_multiple",
+    "capacity_opening_tail",
+    "capacity_weak_partial_fraction",
+    "capacity_defer_minutes",
+    "capacity_defer_min_fraction",
+    "capacity_broad_auction_history",
+    "capacity_history_scope",
+    "capacity_history_prior_strength",
+    "capacity_sparse_exit_mode",
+    "capacity_volume_exponent",
+    "capacity_session_budget_fraction",
+    "capacity_value_mode",
+    "capacity_value_strength",
+    "capacity_redistribute",
+    "capacity_redistribute_max_rank",
+    "capacity_redistribution_evidence",
+    "capacity_redistribution_max_multiplier",
+    "capacity_recycle_liquidity_only",
+    "capacity_release_minutes",
+    "capacity_release_fraction",
+    "capacity_stale_release",
+    "capacity_rotation",
+    "capacity_rotation_filter",
+    "capacity_rotation_fraction",
+    "capacity_rotation_max_rank",
     "target_gross_exposure",
     "max_position_pct",
     "rank_decay",
@@ -118,7 +160,15 @@ def build_research_snapshot(
         if not prior_rows:
             skipped[symbol] = ["missing_completed_daily_ohlcv"]
             continue
+        prior_rows = [row for row in prior_rows if _row_date(row) <= get_trading_calendar().previous_trading_day(trade_date)]
+        if not prior_rows:
+            skipped[symbol] = ["missing_previous_session"]
+            continue
         prior = prior_rows[-1]
+        reference_issue = prior_session_issue(trade_date, _row_date(prior))
+        if reference_issue:
+            skipped[symbol] = [reference_issue]
+            continue
         prior_close = _float(prior.get("close"))
         prior_volume = _float(prior.get("volume"))
         if prior_close <= 0 or prior_volume <= 0 or _float(prior.get("high"), prior_close) < _float(prior.get("low"), prior_close):
@@ -392,6 +442,12 @@ def build_afternoon_contexts(
 
     cfg = config or OLRConfig()
     effective_sector_map = normalize_sector_map(sector_map or {candidate.symbol: candidate.sector for candidate in snapshot.candidates})
+    if cfg.require_complete_feature_prefix:
+        from strategy_common.source_quality import complete_feature_bars
+        # Normalize to the existing date/symbol representation before filtering.
+        feature_rows = {(snapshot.trade_date, symbol): _bars_for_candidate(bars_by_symbol, snapshot.trade_date, symbol)
+                        for symbol in effective_sector_map}
+        bars_by_symbol, _ = complete_feature_bars(feature_rows, INTRADAY_SELECTION_CUTOFF)
     sector_panel = build_sector_intraday_panel(
         bars_by_symbol,
         effective_sector_map,
@@ -1724,12 +1780,15 @@ def _afternoon_exhaustion_score(ctx: OLRAfternoonContext) -> float:
 
 
 def _intraday_selection_bars(bars: Any, trade_date: date) -> tuple[MarketBar, ...]:
+    from strategy_common.execution_session import session_cutoff
+    opening = session_cutoff(trade_date, time(9), anchor="open")
+    cutoff = session_cutoff(trade_date, INTRADAY_SELECTION_CUTOFF)
     out: list[MarketBar] = []
     for bar in sorted(tuple(bars or ()), key=lambda item: item.timestamp):
         ts = bar.timestamp.astimezone(KST)
         if ts.date() != trade_date:
             continue
-        if ts.time() < time(9, 0) or ts.time() >= INTRADAY_SELECTION_CUTOFF:
+        if ts.time() < opening or ts.time() >= cutoff:
             continue
         if not bool(bar.is_completed):
             continue

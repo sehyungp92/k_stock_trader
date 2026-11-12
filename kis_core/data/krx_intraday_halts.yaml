@@ -1,0 +1,874 @@
+version: krx-intraday-regimes-v4-forward-20261007
+scope: ordinary equity matching; block trades excluded
+membership_source: https://kind.krx.co.kr/corpgeneral/corpList.do?method=download&searchType=13
+membership_captured_on: '2026-10-04'
+membership_latest_listing_date: '2022-11-03'
+markets:
+  KOSPI:
+  - '000100'
+  - '000270'
+  - '000660'
+  - '000720'
+  - 000810
+  - '001040'
+  - 003490
+  - '003550'
+  - '003670'
+  - '004020'
+  - '004170'
+  - 004990
+  - '005300'
+  - 005380
+  - 005490
+  - 005830
+  - 005930
+  - '006260'
+  - '006360'
+  - '006400'
+  - 009150
+  - 009540
+  - '010120'
+  - '010130'
+  - 010950
+  - '011170'
+  - 011790
+  - '012330'
+  - '012450'
+  - '015760'
+  - '017670'
+  - 018880
+  - '020560'
+  - '024110'
+  - 028050
+  - 028260
+  - '030200'
+  - '032640'
+  - 032830
+  - '034020'
+  - '034220'
+  - '034730'
+  - '035420'
+  - '035720'
+  - '036460'
+  - '036570'
+  - '042660'
+  - '042700'
+  - '047040'
+  - 047810
+  - 051900
+  - 051910
+  - '055550'
+  - '064350'
+  - '066570'
+  - 068270
+  - 069960
+  - 079550
+  - 086790
+  - 090430
+  - 096770
+  - '105560'
+  - '108320'
+  - '112610'
+  - '128940'
+  - '138930'
+  - '161390'
+  - '175330'
+  - '185750'
+  - '204320'
+  - '207940'
+  - '251270'
+  - '259960'
+  - '267250'
+  - '267260'
+  - '280360'
+  - '298040'
+  - '298050'
+  - '302440'
+  - '316140'
+  - '323410'
+  - '326030'
+  - '329180'
+  - '352820'
+  - '373220'
+  - '375500'
+  - '377300'
+  KOSDAQ:
+  - 035900
+  - '041510'
+  - 053800
+  - 058470
+  - 086520
+  - '141080'
+  - '145020'
+  - '196170'
+  - '214370'
+  - '240810'
+  - '247540'
+  - '263750'
+  - '293490'
+  - '357780'
+  - '403870'
+  - '950160'
+halts:
+- date: '2026-06-08'
+  market: KOSPI
+  halt_start: '09:03:42'
+  order_collection_start: '09:23:42'
+  matching_resumes: '09:33:42'
+  sources:
+  - data/backtests/integrity/forward-reference-20261007/2026-06-08_KOSPI.json
+- date: '2026-06-08'
+  market: KOSDAQ
+  halt_start: '14:36:52'
+  order_collection_start: '14:56:52'
+  matching_resumes: '15:06:52'
+  sources:
+  - data/backtests/integrity/forward-reference-20261007/2026-06-08_KOSDAQ.json
+- date: '2026-06-23'
+  market: KOSPI
+  halt_start: '14:33:43'
+  order_collection_start: '14:53:43'
+  matching_resumes: '15:03:43'
+  sources:
+  - data/backtests/integrity/forward-reference-20261007/2026-06-23_KOSPI.json
+- date: '2026-06-26'
+  market: KOSPI
+  halt_start: '12:10:12'
+  order_collection_start: '12:30:12'
+  matching_resumes: '12:40:12'
+  sources:
+  - data/backtests/integrity/forward-reference-20261007/2026-06-26_KOSPI.json
+- date: '2026-07-07'
+  market: KOSPI
+  halt_start: '13:51:33'
+  order_collection_start: '14:11:33'
+  matching_resumes: '14:21:33'
+  sources:
+  - data/backtests/integrity/forward-reference-20261007/2026-07-07_KOSPI.json
+- date: '2025-05-22'
+  symbols: ['207940']
+  halt_start: '07:45:00'
+  order_collection_start: '09:30:00'
+  matching_resumes: '09:40:00'
+  sources:
+  - https://kind.krx.co.kr/external/2025/05/22/000003/20250522000007/99808.htm
+  - https://global.krx.co.kr/contents/GLB/06/0604/0604010100/GLB0604010100T3.jsp
+- date: '2026-03-04'
+  market: KOSPI
+  halt_start: '11:19:12'
+  order_collection_start: '11:39:12'
+  matching_resumes: '11:49:12'
+  sources:
+  - https://kind.krx.co.kr/external/2026/03/04/000443/20260304000990/99443.htm
+  - https://kind.krx.co.kr/external/2026/03/04/000458/20260304001055/99407.htm
+- date: '2026-03-04'
+  market: KOSDAQ
+  halt_start: '11:16:33'
+  order_collection_start: '11:36:33'
+  matching_resumes: '11:46:33'
+  sources:
+  - https://kind.krx.co.kr/external/2026/03/04/000434/20260304000970/70963.htm
+  - https://kind.krx.co.kr/external/2026/03/04/000457/20260304001049/70717.htm
+- date: '2026-03-09'
+  market: KOSPI
+  halt_start: '10:31:52'
+  order_collection_start: '10:51:52'
+  matching_resumes: '11:01:52'
+  sources:
+  - https://kind.krx.co.kr/external/2026/03/09/000199/20260309000522/99443.htm
+  - https://kind.krx.co.kr/external/2026/03/09/000233/20260309000631/99407.htm
+evidence_files:
+  data/backtests/integrity/forward-reference-20261007/2026-06-08_KOSPI.json: 07d4cddafb03e0f5b62139e518d234db08de505706d2c2052b27e6f8cbb3ae95
+  data/backtests/integrity/forward-reference-20261007/2026-06-08_KOSDAQ.json: 89fc8bc1a1132c3e777b6b71a1c35769c5cf6ab6295346705dabb59b5f79151f
+  data/backtests/integrity/forward-reference-20261007/2026-06-23_KOSPI.json: d7ea76edb5c191ae1cee77007b2f05808b59f8793cd576f4fe2ab554dec7f180
+  data/backtests/integrity/forward-reference-20261007/2026-06-26_KOSPI.json: a8647e79de41188afabaedd8351fa140a5ebc025bbd8949ada905ea43707a214
+  data/backtests/integrity/forward-reference-20261007/2026-07-07_KOSPI.json: 457b91b67d71b662da728a865f1ea0a278267bcaad01349802f5fb7a7b27bb25
+  data/backtests/integrity/corrective-selection-20261005-v20/source_notices/samsung_biologics_20250522_halt.html: 72e2eb893d38ddce3dd144755cacff76d72d31f3b7cdd05b17ab3829c22620cb
+  data/backtests/integrity/corrective-selection-20261005-v20/source_notices/krx_resumption_call_auction.html: 9668e4b117ff5c1d6eae875e7258d045266684d17400836347ebf2fc35bd4d53
+  data/backtests/integrity/exchange-notices-20261004-v5/20260304000434.html: 66059ee7333d533f12d2886afbe39eca6bb6ced276404319971471269e8b362b
+  data/backtests/integrity/exchange-notices-20261004-v5/20260304000443.html: 1fa50c1b86c56f5b02a7caa8e63896f348b9e08b30d9bde0544a439efd3edfec
+  data/backtests/integrity/exchange-notices-20261004-v5/20260304000457.html: 2e937236d4c65eb4b2c79c0816ac9f4d703d39698a507b1088f22beb17dbea69
+  data/backtests/integrity/exchange-notices-20261004-v5/20260304000458.html: 927935e05f5c1300cc20f76722a3251a2de52d982e3eaf3c97a74c9d3b6be8e1
+  data/backtests/integrity/exchange-notices-20261004-v5/20260309000199.html: d52c6e33f8d736da8488ef84b895396b524940a9211a83d9d05a4ff29dc442c2
+  data/backtests/integrity/exchange-notices-20261004-v5/20260309000233.html: 7461bdfbde00e05a0f3cfb8b125a09b5504aeb235c71af3e00cc72059b7b562e
+  data/backtests/integrity/exchange-notices-20261004-v5/index.json: 73a6dc24629e4f8028115bcfd6e4d18a862bd44cbce022a7de581ec5bc9fbdd9
+  data/backtests/integrity/exchange-notices-20261004-v5/listed-companies.html: e67bc8d33c47c0013d6e31bfc62897d049ad6fadac9013261c8bc100a4380d58
+  data/backtests/integrity/exchange-notices-20261004-v5/universe-market-membership.json: 85c064606bedb0bf55f2789495ee8e7306dbd83e24f90e6300ab691e66c3addf
+  data/backtests/integrity/periodic-auction-notices-20261004/323410.html: 4890bfe0bebad8c10ae82a5949d0a59e1cd39e960124c93f70a3872764281f24
+  data/backtests/integrity/periodic-auction-notices-20261004/086520.html: 1297af9bd188e42d483863bd46701d738f6b002f2a83aeb1d251079e8839548b
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000660_2025-10-02.json: 47a9a4a4a5afab291312857c1e422697440dc928899fe39a161807b613ae1a81
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000660_2025-12-11.json: 7b9b62f40faa9f05d722efe84cec5bef720e7efa092e3dafc724ea2c31d7ae72
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000660_2025-12-19.json: fbdc7ed75d6e6f9fb0abb097b72b2816baa4112b8f84feff3003a0619e5b3cef
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/006400_2026-03-03.json: 39914f84564795b59e39ed56a18443a06ebd08c9716a759d7c7c814d95333ebb
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/042700_2025-11-13.json: c543b9ab0363faac9f818d41266ab07ebec004000cad7a34748513f1fe77844f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/042700_2026-03-12.json: d56cfe4c1096d90d6ede0469f3a8097c3ce513992d4e2e14e8fb2b6dd276952a
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/042700_2026-04-09.json: 9a4ddd0a3375f6f54eb4fcb85fd4a910a692dab699cb5cc1e93146807ace9e48
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-02-12.json: 56667a3493c3dacb581e3c6f816350c92ca344a3cffcbeac0b24f6811c675c3d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-03-05.json: c8f95014d797a5b04d453e128b151e01e4f1c494785200e19d8c946b791d7853
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-03-12.json: 00dd5847cd11805ec5e8d4e926a94b905a284e3b20822b7c6d54c517e1a3a3a4
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-04-09.json: 68922dbb505746d79d266ee802a517ca4afb5785f6095d9827e9ea93218a7811
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2025-11-13.json: 0b54cbc7bfd13659b436fa388753591cd712ca439b19b7d8ce367e6456019b38
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2026-02-12.json: 3f65c3512ff0f16f6ef35c81f800b79231155a709141fb0fad60532bebe7912e
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2026-03-12.json: 61ab21094f8193e6df627de877dd09cbbbbaeaa88b28771dc81d6402eb186ca1
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2026-04-09.json: 19ede7078060f73fb5f67c9523499e8710ea1fc85b3ca4e9ca08ec8bb3c71628
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/263750_2025-10-02.json: caabb4dd8ed78d82f92e32b1f399786adcec6b9fa315e4f80b866168cf6a88f8
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/293490_2026-04-09.json: ce82873ff22cad1233945dc41a0b4855cecb9168e152f6c3752d816a70270e56
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/377300_2026-02-12.json: 841473552921ccbe78f98ad5f469c86cbf9197b0211f52aad01a54340e0b1bfe
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2025-10-02.json: cffeff93b1aa1d944d00faf6dda5e9f7004fff4767e741b646b8ec973f5cab1e
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-02-12.json: 0eb3c360853a06d50d674191b1e3960580d0fb71ef27a18bc9f0c1a163e40462
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-03-09.json: 2fc38c0eaf5458332c84b0e7a52c32693b4b1bd12ec474da5581473645c5980a
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-04-02.json: 7e9136a3680022c6e2a3ec3d4d3d57831741d4a63a7a32a53d0deb88e29bf06d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-04-09.json: f188f03397f2efd6b1c798aa28874c8212b6162e8f5e20e76b725a26cf353cee
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/035900_2026-01-08.json: 20d6c9d201bf2df40b7b32798b1a6c7a3de48fe00eccb81c1d55446b793bb1f2
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/352820_2025-10-02.json: 69200101dffca3e19e2e59d6dcc478f6ae1d75b9837542e3beee6876922e8567
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/352820_2025-11-13.json: 3aa56b58b692c5fdd42cca6f337340273b6f524575cd7ea047b4ae3b91b7cf15
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2025-11-12.json: b627c792d8ea33bd136d8c1d80ff244ce4a6952e97ed56e97830db7e8c8a6275
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2025-11-13.json: 4d5891bb578cdfc35b756808406c634d45a7a9fd03ad1ddf102bcf8a08b9b7d9
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2026-03-12.json: 758d65b6db6549003f48202c0e60b65adae1b676f84074805ec93c6f04ff65ce
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2026-04-09.json: de5173277fb3e2ad29970b07478cb0ce1a6d8df79ebde79a03b9bc5cd71768b9
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298040_2025-11-24.json: f5dc61a6abad3083bbac093ff119d846d55d5bf4391673f28dde15176af47569
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/204320_2026-02-12.json: 00ebb633e2aef5571c314ff72725cb3900ab949a4f0146a778a33861a2c3f618
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/204320_2026-03-12.json: d62cc4714feced5f3f3c86aabd15a1da866a75f283fbc6417def5b66527024e3
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/373220_2025-10-02.json: 59c0a32cc91aaef2959b5f84f90691a5b21c92fd7758a767065189ac85817f07
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/373220_2025-11-13.json: 8130e493663a18d3fcb1cd8423ceffa017202a06d0a085688cdfd8b0538c2c6f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/373220_2026-03-12.json: 270148cfcf8ae88213e8cedd9207db897d447aedaacd0abfce176b3e858c2649
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/051910_2025-10-02.json: d013cf79ee33b738d4bd0d21dcb16259e9c5b44228607264d2b9da908af87707
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/112610_2026-04-09.json: f93d87ab632c65a0285386f0fb779da62c0160eeef58ffcbbccb206a6f3c2310
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/128940_2026-03-12.json: f790d4b9ca4e721b0327eae1b4c3beee41250dd52fceb9a164ce555a92c88d7d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/145020_2025-10-02.json: 4449e5c73a310284f3f9b4dd438675966f96ca6dc4fff765716ab8063fbd0278
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/145020_2026-03-05.json: aa3137bd27fdc3975351cd1a8ebc5ca343cd5724275948c3d53da2e91ba16414
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/141080_2026-03-05.json: a4c26299e2074526f13ae620cd05334eae13e8e97b4442138c8d792fe2c5983f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/214370_2026-03-05.json: ae44014dfd1384d6ea958fd46f71ab5dd3593d5c511539511cf8729381569a66
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/214370_2026-03-19.json: b1197fdb1001f15147e6c5727b593ffca5d2bf7fc72ec005d889fa12ae7b118a
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/214370_2026-05-07.json: 8435d3c5525b54dcabc22f3497aea06dd44f7f36a7211b66146bac1ad2f321cc
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/105560_2026-02-12.json: 8c99b2f6a8285af0dc5bfaec4da068451dbec888d6f82f82469a34406a7645cd
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2025-12-01.json: e5505ee41af9d60c71b3d4b2bdf713af32e13a1d6275877201f0945abfd3c62e
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2025-12-05.json: 27a4881b2408bf00671ab7377076955092b890cd4400b78c56a18860a32263f5
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2025-12-11.json: e8858fae09f69c527e99dac712569922bae4f6b07e84a3ffaecb4bd30a19af7b
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2026-02-12.json: 67a4720ce46a14d39a9dcb5ec24e21b56da658f4f712746961443f9404202a94
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/086790_2025-11-13.json: 9b5eb75950dfa37c13cf22819cd3f18cde775ba08a13fcfc5331928d3318ca54
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/267250_2025-12-19.json: c2bbdfc763dd428f8653b04a581dbc3c0477703246153cbe8a6d00e0e4e80632
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/034020_2026-02-12.json: a6e37947d1820b4ea69155d6981390dec2c004f4c5e03e083d9a3ad55ffa2d6e
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2025-11-13.json: bdd5e31f6edb446ca6e311d67501537bc032d41cf4756835ac84db7a1d5daed2
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2026-03-12.json: b61ff77f2362d3d545b6ed95558293909a346ef15e6525c2c6562dde81bc761e
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2026-03-26.json: cde764ecdd584b381b0f0c308f7599ca1e9a4843e4b3351870f3269daaf574dc
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2026-04-09.json: f6cfeb6e58056960340104b48419f165ca49bfc85604c01c0abf19ad11867d4a
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005490_2025-11-13.json: b9c8d757bb812fa9994b6d88f6b8471be33846f699546b3ead6e446dd29e02c7
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2025-10-31.json: 61cdabcf70b5c4f8a2bdbdf52c0311b5f6d1a5af64d689a0e9021c71a72f24f8
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2025-11-13.json: 5a6bbd273429f6a758d70774274be6389751082e7c512769cbd7995099ab0a77
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2025-11-24.json: 7b1886fb98248b5b37aa2020db466323e35a50e89fe42a7aa32f892438e4aa37
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2026-01-08.json: 93f1d7d7cf0bd81dab1beb67ae3d496e33c2795dc1d2dbcb77acef54f05bdee5
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2026-04-30.json: c6873662ebfc14487d387024d08c5deac76c37ac0b2813c4e938eb08f87637db
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/051900_2026-04-02.json: 8f8f9f93d7f912205232cee5dd752c82ed002b23c48ecf2a959d4ce6dc897454
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/004170_2025-10-02.json: d3c18d3cc98a668f7966ee14de20862294d66cfed766a524abc2c1e8f47d1b35
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/004170_2026-02-09.json: b5cb64aa188dd5a82e1d51018c1856d9771f32641fc480e7133b351f48174ff0
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/280360_2025-11-13.json: 92f72491240ae48ecaebda7855f635901ac0b6d8321d156d8fba68f327ab3c57
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/280360_2026-03-12.json: 06d3b4cfb2c8f329e5081de1fea113506658a9737ab8ae0127e4f95c8f581ecd
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/028260_2026-01-08.json: 04e74821fcdaab0caca8ce14ab5f695decf6d3bbd96b888dbc184de2e4fba79b
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/028260_2026-02-12.json: 00d772143a9a67190a6bab28ebddb89b592f814512d9ae144b1a70bcebb608e1
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/017670_2026-02-12.json: d9c537b0afe926b889f0aa9adade7fdd7ef169b5f2588dd69620ad3783504bc4
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2025-11-13.json: ebb6f6aa437d71786d33dc0ffbe0d3227f81fd6f7433af9701c91a89b6113d60
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2025-12-11.json: f5858faef92c464ba5907eee2e69f8bdd01abc428b065113a97e2141fdc75238
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-02-12.json: b2cc9ddd129bb5df3d23076afa3084252eeac30237d8ef925e4879146574fad2
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-03-05.json: 082ffd8bb978319a43e496ba28d8772c05e8df8f90be8f7402ab4bb375b83235
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-03-12.json: 268486329cbaabf8340e284419d3d3b8ccebae41065b607f45ce9bfdcca54180
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-04-09.json: 6a3add5b49bb6f6dc7479a4521b468ede32f2a573a180f4bd3f98b7a73d40cfa
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-04-30.json: 16d3083ca5dcd7387a1d08719116688a8e409284abf6a42c411673ca3cff8a6f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/032640_2025-10-10.json: 7c8efd88bf7818c294dc887b91116153ad0850c68d4cb76877aafa060c65c49d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/032640_2025-11-24.json: a06b224992493375c5707cb5474b47f4c0004f2bc48e8f18ad5ce73ff5a1677a
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000720_2026-03-03.json: 5b2e5bb4d169c80dc799068d46e0924d757b97d2a505a81ea05603f798880994
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000720_2026-04-09.json: 06d6efc70652af1bde2ffc389e02939d8072c3545c3608f50e0eaebee138f8b7
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005300_2025-10-02.json: 0c32e62c7387a567577c27d991d510c25377755326b1874bba6f8e9c3825175d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005300_2025-12-11.json: 7af93bacf5f62645cf0cc0163baa106d87cb991e70257a9b6747a935aaed9f3b
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005300_2026-04-09.json: 8795beffd9d3c2df9cc3ffa58c169655a32ee567ea85be2ccf52c67b86fe5556
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/096770_2025-11-13.json: 61c389c3248ab9cc7d9a51adc8d6f11652aae4ddf6f9f72ede98dafed0178c20
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/096770_2026-01-08.json: f292f6a3a275335e941337c045a44f52a7e38e47db3c7c74b65c0b5e8103bfbe
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010950_2026-03-09.json: 0eaa9c201ea94879ca0419d1176084ee2113a87b5f6c22922206ca93997327b6
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010950_2026-03-12.json: f97f2611e8130ef9dccd57864752fd0ebc34ffc24c4b5a168afc3e9138d96c76
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/034220_2026-02-12.json: 9928a56911c3c851a4d2d1e2fe1ade9a2a6eb6950f18b1e2de57468b27926446
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/011790_2026-04-09.json: 9298097140d79927524d133e137f0702b0302c206beccfb462dad82c8168115f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/011790_2026-04-13.json: 459d88bbb98522ddd20698c9a9142d001875abbb60716ca5b98829eab9fc5e49
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2025-11-13.json: ff03872c26c4e5f14d9a4366cfb5c52193f5af020d7303dc63092ca587707892
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2026-02-27.json: fe8a9439944792903d00cf2d1e6d4c93c617336debb77fad2f5e6601ac3e16e4
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2026-03-12.json: 51258c14912319def910794a0853d889e0b6d1aa4f637edeac7871ff030b924f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2026-03-20.json: 773ff51a4101ecb061551e635e70d2c1646063b4887971b7f6455fe9fe43b93f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/012450_2026-03-04.json: 24e3a1f45026fd56ba1eec32d63ad4c4f64334dc065371d7447828807fdaa788
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2025-12-11.json: 1a0c12f56e287ead651a64d27261f3644c3d77aa68872ac5b9a489b1adee224d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-02-12.json: 732f396aa97177f622ccb105f0d193593ef8f05d412c1b70910127bedaefdf4e
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-03-12.json: a71bd131ad35a9caae371605ac03a03f89d372fd098800f5aecdc431e1ed697d
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-04-09.json: dec20704d5b1178702ccc3f1b01c4d359b71f3f6777d98d1b33f90c85757b12f
+  data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-04-13.json: 9b4ebc4470df4048e29483d8046daa5c9dd6dc2b430244903fc240ea9a668240
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2025-10-02.json: 306499132563af384c449b7c7ca14eb33470e00dafd3ee08582ef76ab0721b0f
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2025-11-24.json: c7d26d21f0a2cb8c35cfbcc3fc5e98521ec4e538997d22957b0450ec5a53d1cb
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2026-03-12.json: 69a2abe2b747b42f8fd08c5e5ea042031edd0e02fc84d9133f9730132bc0c3ff
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2026-04-09.json: fe8ae9809a2ff2297114a27c0a23c140e258bf388ec47beee9acbba456952533
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/207940_2025-11-24.json: e19615bce50ca364aa06eeb51c3da34953ed33aa06f703511470f96ac875429b
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/207940_2025-12-01.json: e5ae33a047206d1a414f724fec35fa39686924a2449167710f196d9827ffcc79
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/196170_2026-03-05.json: 9f5e5e5d77a5cf706a7938f0c37a8abacd8e98c77dfdd8b6323e04b83230b42c
+  data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/196170_2026-03-12.json: 2848c49d1a6f90d9bc2ce0d3b5df621972cac1b3a8d20b609a9d00df34e3e6d5
+periodic_auctions:
+- symbols:
+  - '323410'
+  start: '2025-06-25'
+  end: '2025-06-27'
+  interval_minutes: 30
+  sources:
+  - https://kind.krx.co.kr/external/2025/06/24/000540/20250624001364/99428.htm
+- symbols:
+  - 086520
+  start: '2025-10-23'
+  end: '2025-10-27'
+  interval_minutes: 30
+  sources:
+  - https://kind.krx.co.kr/external/2025/10/22/000385/20251022001068/70725.htm
+closing_auctions:
+- symbol: '000660'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000660_2025-10-02.json
+- symbol: '000660'
+  date: '2025-12-11'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000660_2025-12-11.json
+- symbol: '000660'
+  date: '2025-12-19'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000660_2025-12-19.json
+- symbol: '000720'
+  date: '2026-03-03'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000720_2026-03-03.json
+- symbol: '000720'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000720_2026-04-09.json
+- symbol: 000810
+  date: '2025-12-01'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2025-12-01.json
+- symbol: 000810
+  date: '2025-12-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2025-12-05.json
+- symbol: 000810
+  date: '2025-12-11'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2025-12-11.json
+- symbol: 000810
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/000810_2026-02-12.json
+- symbol: '003550'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2025-11-13.json
+- symbol: '003550'
+  date: '2026-02-27'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2026-02-27.json
+- symbol: '003550'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2026-03-12.json
+- symbol: '003550'
+  date: '2026-03-20'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/003550_2026-03-20.json
+- symbol: '004170'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/004170_2025-10-02.json
+- symbol: '004170'
+  date: '2026-02-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/004170_2026-02-09.json
+- symbol: '005300'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005300_2025-10-02.json
+- symbol: '005300'
+  date: '2025-12-11'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005300_2025-12-11.json
+- symbol: '005300'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005300_2026-04-09.json
+- symbol: 005490
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/005490_2025-11-13.json
+- symbol: '006400'
+  date: '2026-03-03'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/006400_2026-03-03.json
+- symbol: '010130'
+  date: '2025-10-31'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2025-10-31.json
+- symbol: '010130'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2025-11-13.json
+- symbol: '010130'
+  date: '2025-11-24'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2025-11-24.json
+- symbol: '010130'
+  date: '2026-01-08'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2026-01-08.json
+- symbol: '010130'
+  date: '2026-04-30'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010130_2026-04-30.json
+- symbol: 010950
+  date: '2026-03-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010950_2026-03-09.json
+- symbol: 010950
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/010950_2026-03-12.json
+- symbol: 011790
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/011790_2026-04-09.json
+- symbol: 011790
+  date: '2026-04-13'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/011790_2026-04-13.json
+- symbol: '012450'
+  date: '2026-03-04'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/012450_2026-03-04.json
+- symbol: '017670'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/017670_2026-02-12.json
+- symbol: 018880
+  date: '2025-11-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2025-11-12.json
+- symbol: 018880
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2025-11-13.json
+- symbol: 018880
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2026-03-12.json
+- symbol: 018880
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/018880_2026-04-09.json
+- symbol: 028260
+  date: '2026-01-08'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/028260_2026-01-08.json
+- symbol: 028260
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/028260_2026-02-12.json
+- symbol: '030200'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2025-11-13.json
+- symbol: '030200'
+  date: '2025-12-11'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2025-12-11.json
+- symbol: '030200'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-02-12.json
+- symbol: '030200'
+  date: '2026-03-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-03-05.json
+- symbol: '030200'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-03-12.json
+- symbol: '030200'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-04-09.json
+- symbol: '030200'
+  date: '2026-04-30'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/030200_2026-04-30.json
+- symbol: '032640'
+  date: '2025-10-10'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/032640_2025-10-10.json
+- symbol: '032640'
+  date: '2025-11-24'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/032640_2025-11-24.json
+- symbol: '034020'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/034020_2026-02-12.json
+- symbol: '034220'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/034220_2026-02-12.json
+- symbol: 035900
+  date: '2026-01-08'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/035900_2026-01-08.json
+- symbol: '042700'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/042700_2025-11-13.json
+- symbol: '042700'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/042700_2026-03-12.json
+- symbol: '042700'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/042700_2026-04-09.json
+- symbol: 051900
+  date: '2026-04-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/051900_2026-04-02.json
+- symbol: 051910
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/051910_2025-10-02.json
+- symbol: 058470
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-02-12.json
+- symbol: 058470
+  date: '2026-03-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-03-05.json
+- symbol: 058470
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-03-12.json
+- symbol: 058470
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/058470_2026-04-09.json
+- symbol: '064350'
+  date: '2025-12-11'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2025-12-11.json
+- symbol: '064350'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-02-12.json
+- symbol: '064350'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-03-12.json
+- symbol: '064350'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-04-09.json
+- symbol: '064350'
+  date: '2026-04-13'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/064350_2026-04-13.json
+- symbol: 086790
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/086790_2025-11-13.json
+- symbol: 096770
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/096770_2025-11-13.json
+- symbol: 096770
+  date: '2026-01-08'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/096770_2026-01-08.json
+- symbol: '105560'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/105560_2026-02-12.json
+- symbol: '112610'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/112610_2026-04-09.json
+- symbol: '128940'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/128940_2026-03-12.json
+- symbol: '141080'
+  date: '2026-03-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/141080_2026-03-05.json
+- symbol: '145020'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/145020_2025-10-02.json
+- symbol: '145020'
+  date: '2026-03-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/145020_2026-03-05.json
+- symbol: '196170'
+  date: '2026-03-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/196170_2026-03-05.json
+- symbol: '196170'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/196170_2026-03-12.json
+- symbol: '204320'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/204320_2026-02-12.json
+- symbol: '204320'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/204320_2026-03-12.json
+- symbol: '207940'
+  date: '2025-11-24'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/207940_2025-11-24.json
+- symbol: '207940'
+  date: '2025-12-01'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/207940_2025-12-01.json
+- symbol: '214370'
+  date: '2026-03-05'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/214370_2026-03-05.json
+- symbol: '214370'
+  date: '2026-03-19'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/214370_2026-03-19.json
+- symbol: '214370'
+  date: '2026-05-07'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/214370_2026-05-07.json
+- symbol: '240810'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2025-11-13.json
+- symbol: '240810'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2026-02-12.json
+- symbol: '240810'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2026-03-12.json
+- symbol: '240810'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/240810_2026-04-09.json
+- symbol: '247540'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2025-10-02.json
+- symbol: '247540'
+  date: '2025-11-24'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2025-11-24.json
+- symbol: '247540'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2026-03-12.json
+- symbol: '247540'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/source-conflicts-20261004-v12/recovery/closing_events/247540_2026-04-09.json
+- symbol: '263750'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/263750_2025-10-02.json
+- symbol: '267250'
+  date: '2025-12-19'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/267250_2025-12-19.json
+- symbol: '280360'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/280360_2025-11-13.json
+- symbol: '280360'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/280360_2026-03-12.json
+- symbol: '293490'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/293490_2026-04-09.json
+- symbol: '298040'
+  date: '2025-11-24'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298040_2025-11-24.json
+- symbol: '298050'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2025-11-13.json
+- symbol: '298050'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2026-03-12.json
+- symbol: '298050'
+  date: '2026-03-26'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2026-03-26.json
+- symbol: '298050'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/298050_2026-04-09.json
+- symbol: '323410'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2025-10-02.json
+- symbol: '323410'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-02-12.json
+- symbol: '323410'
+  date: '2026-03-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-03-09.json
+- symbol: '323410'
+  date: '2026-04-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-04-02.json
+- symbol: '323410'
+  date: '2026-04-09'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/323410_2026-04-09.json
+- symbol: '352820'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/352820_2025-10-02.json
+- symbol: '352820'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/352820_2025-11-13.json
+- symbol: '373220'
+  date: '2025-10-02'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/373220_2025-10-02.json
+- symbol: '373220'
+  date: '2025-11-13'
+  matching_time: '16:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/373220_2025-11-13.json
+- symbol: '373220'
+  date: '2026-03-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/373220_2026-03-12.json
+- symbol: '377300'
+  date: '2026-02-12'
+  matching_time: '15:32:00'
+  sources:
+  - data/backtests/integrity/session-recoveries-20261004-v10/closing_events/377300_2026-02-12.json

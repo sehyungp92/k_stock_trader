@@ -18,6 +18,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
+    if args.strategy == "portfolio_synergy" and args.fixture != "synthetic":
+        parser.error("portfolio_synergy is synthetic; use --fixture synthetic for fixtures only")
+
     config = normalize_runtime_config(args.strategy, load_yaml_config(args.config))
     if args.fixture == "synthetic":
         config["capability_level"] = "synthetic"
@@ -37,7 +40,8 @@ def main(argv: list[str] | None = None) -> int:
             payload["official_performance"] = False
         print(json.dumps(payload, indent=2, default=str))
         return 0
-    result = get_backtest_runner(args.strategy)(config, {})
+    options = {"synthetic_fixture": True} if args.strategy == "portfolio_synergy" else {}
+    result = get_backtest_runner(args.strategy)(config, {}, **options)
     print(json.dumps({"strategy": args.strategy, "metrics": result.metrics, "source_fingerprint": result.source_fingerprint}, indent=2))
     return 0
 

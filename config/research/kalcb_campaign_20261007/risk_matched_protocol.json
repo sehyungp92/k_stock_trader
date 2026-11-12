@@ -1,0 +1,10 @@
+{
+  "version": "kalcb-risk-matched-selection-v1",
+  "reason": "Raw-size rankings are insufficient because quantity affects fills, liquidity exits, compounding and shared account allocation. Compare representation/selection challengers at the same declared risk reduction.",
+  "quantity_multiplier": 0.65,
+  "policies": ["cv_interaction", "cv_interaction_campaign", "cv_interaction_campaign_interactions", "cv_interaction_leadership", "cv_interaction_calibrated", "cv_interaction_stress_value"],
+  "scenarios": ["baseline", "combined"],
+  "mandatory_drawdown_ceiling_pct": {"baseline": 8, "combined": 10},
+  "selection": "Exclude execution failures. Preserve Pareto frontier in baseline/stressed net return, trades, active days and drawdown. Prefer the highest combined-stress return among candidates meeting risk targets and retaining at least the risk-matched control's baseline trade count. Disclose any remaining tradeoff or unmet objective.",
+  "scope": "Previously reused development observations. No June-July access; four complete standard audits are required for the selected research configuration. No live deployment."
+}

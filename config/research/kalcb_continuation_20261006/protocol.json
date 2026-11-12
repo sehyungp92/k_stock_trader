@@ -1,0 +1,32 @@
+{
+  "version": "kalcb-continuation-study-v1",
+  "research_only": true,
+  "study_root": "E:/CodexResearch/k_stock_trader/kalcb_continuation_20261006",
+  "control": "q_ridge_risk_strict",
+  "control_baseline": {"return_pct": 20.554709568867892, "drawdown_pct": 8.044909055999412, "trades": 305},
+  "control_combined": {"return_pct": 10.891345020717736, "drawdown_pct": 9.345963268353394, "trades": 307},
+  "phase1": {
+    "models": ["interaction", "mixture"],
+    "training": "expanding; 60 mature sessions; one-session embargo; 20-session refits",
+    "features": "existing causal context plus completed opening path and previous-session afternoon acceptance",
+    "execution": "unchanged recovered engine and core",
+    "admission": "positive baseline and combined net values; inherited 0.1% failure screen; capacity screen; at most eight names",
+    "quantities": [0, 0.25, 0.5, 1]
+  },
+  "subsequent_phases": [
+    "paired entry-confirmation and management comparisons",
+    "regenerate labels for any changed executed policy before refitting",
+    "training-window and refresh comparison on promising representation",
+    "full four-scenario audit and incremental-trade attribution",
+    "freeze before qualified unconsumed evaluation if available"
+  ],
+  "material_improvement_target": {
+    "minimum_relative_return_uplift_each_of_baseline_and_combined": 0.25,
+    "minimum_relative_trade_increase_baseline": 0.10,
+    "research_drawdown_ceiling_baseline_pct": 12,
+    "research_drawdown_ceiling_combined_pct": 14,
+    "zero_deadline_and_terminal_inventory": true,
+    "unchanged_integrity_audit": "passed"
+  },
+  "interpretation": "Research acceptance targets, not a promised result or production risk mandate. Preserve the return/frequency/drawdown frontier. Reused development history cannot establish untouched OOS performance."
+}

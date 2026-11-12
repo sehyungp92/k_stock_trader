@@ -6,8 +6,9 @@ from enum import Enum
 from types import SimpleNamespace
 from typing import Any, Mapping, Sequence
 
-from strategy_common.actions import StrategyAction
+from strategy_common.actions import StrategyAction, action_to_json_dict, action_from_json_dict
 from strategy_common.market import MarketBar
+from strategy_common.fill_lifecycle import execution_key, record_fill_delta
 
 from .action_router import DecisionRefIndex, RuntimeActionRouter
 from .coordinator import StrategyRuntimeDescriptor
@@ -32,6 +33,7 @@ class ActionCollector:
     source_artifact_hash: str = ""
     source_fingerprint: str = ""
     defer_order_memory: bool = True
+    execution_feedback_sequence: int | None = None
     _actions: list[CollectedAction] = field(default_factory=list)
 
     @property
@@ -46,6 +48,8 @@ class ActionCollector:
         metadata.setdefault("event_type", self.event_type)
         metadata.setdefault("timestamp", self.event_timestamp.isoformat())
         metadata.setdefault("provisional_order_ref", provisional)
+        if self.execution_feedback_sequence is not None:
+            metadata["execution_feedback_sequence"] = self.execution_feedback_sequence
         metadata.setdefault("source_artifact_hash", self.source_artifact_hash)
         metadata.setdefault("source_fingerprint", self.source_fingerprint)
         metadata.setdefault("batch_index", index)
@@ -87,10 +91,14 @@ class RuntimeSessionDriver:
     evidence_mode: str | None = None
     order_identity: dict[str, str] = field(default_factory=dict)
     order_metadata: dict[str, dict[str, Any]] = field(default_factory=dict)
+    pending_event_payload: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         replay_mode = str(self.mode or "").lower().strip() in {"dry_run", "replay", "offline_replay"}
         self.portfolio_context.replay_equity_accounting = replay_mode
+        if self.mode in {"paper", "live"}:
+            from .execution_feedback import restore_checkpoint
+            restore_checkpoint(self)
 
     async def handle_bar(self, bar: MarketBar) -> RuntimeEventResult:
         pending = await self.collect_bar(bar)
@@ -122,19 +130,75 @@ class RuntimeSessionDriver:
             no_action_reason=_no_action_reason_for_bar(self.descriptor, bar),
         )
 
+    async def handle_bars(self, bars: Sequence[MarketBar]) -> RuntimeEventResult:
+        """Route an explicitly completed OLR timestamp cohort as one durable event.
+
+        The feed owns the watermark. This method never waits for future bars or
+        silently batches observations across timestamps.
+        """
+        bars = tuple(bars)
+        if self.descriptor.strategy_id != 'OLR' or not bars:
+            raise ValueError('Completed nonempty OLR cohort required')
+        if (len({b.symbol for b in bars}) != len(bars)
+                or any(not b.is_completed or b.timestamp != bars[0].timestamp or b.timeframe != '5m' for b in bars)):
+            raise ValueError('Invalid completed OLR timestamp cohort')
+        for bar in bars:
+            if str(self.mode).lower() not in {'replay', 'offline_replay'}:
+                self.recorder.record_market_bar(bar)
+        pending = await self._begin_event(event_type='bar_batch', timestamp=bars[0].timestamp,
+            payload={'timestamp':bars[0].timestamp.isoformat(), 'bars':[b.to_json_dict() for b in bars]},
+            callback=lambda collector:self.descriptor.engine.on_bars(bars,
+                self.portfolio_context.portfolio_view('OLR'),collector.submit),
+            no_action_reason='completed_cohort_no_action')
+        results = await self.action_router.route_actions(pending.actions,
+            portfolio_context=self.portfolio_context,event_ref=pending.event_ref,
+            event_type=pending.event_type,event_timestamp=pending.timestamp,decision_refs=pending.decision_refs)
+        return self.finish_collected_event(pending,results)
+
+    async def handle_capacity_seed(self, bars: Sequence[MarketBar], available_at: datetime) -> RuntimeEventResult:
+        if self.descriptor.strategy_id != 'OLR':
+            raise ValueError('Capacity history belongs to OLR')
+        bars=tuple(bars)
+        def seed(collector):
+            self.descriptor.engine.seed_capacity_history(bars,available_at)
+            return []
+        pending=await self._begin_event(event_type='capacity_seed',timestamp=available_at,
+            payload={'timestamp':available_at.isoformat(),'bars':[b.to_json_dict() for b in bars]},
+            callback=seed,no_action_reason='past_auction_history_seeded')
+        return self.finish_collected_event(pending,())
+
     async def handle_fill(self, fill: object) -> RuntimeEventResult:
+        await self.resume_pending_event()
         fill = self._resolve_event_order_ref(fill, event_type="fill")
+        state = self.descriptor.engine.state
+        live_feedback = self.mode in {"paper", "live"}
+        if live_feedback and execution_key(fill) is None:
+            raise ValueError("Paper/live fills require a durable execution identity")
+        from strategy_common.fill_lifecycle import is_duplicate_fill
+        if is_duplicate_fill(_state_meta(state), fill, namespace="runtime_executions"):
+            return RuntimeEventResult(self.descriptor.strategy_id, execution_key(fill) or "", "fill",
+                _event_timestamp(fill), 0, 0, 0, 0, "duplicate_execution_ignored")
+        if live_feedback:
+            await self.portfolio_context.refresh()
+            if not self.portfolio_context.last_refresh_ok:
+                raise RuntimeError("Paper/live fill requires a fresh authoritative account snapshot")
+        record_fill_delta(_state_meta(state), fill, namespace="runtime_executions")
         pre_position = _position_view(getattr(self.descriptor.engine, "state", None), str(getattr(fill, "symbol", "")))
         self._release_router_reservation_for_event(fill, qty=int(getattr(fill, "qty", 0) or 0))
         timestamp = _event_timestamp(fill)
         strategy_id = self.descriptor.strategy_id
-        self.portfolio_context.apply_fill(
-            strategy_id,
-            str(getattr(fill, "symbol", "")),
-            str(getattr(fill, "side", "")),
-            int(getattr(fill, "qty", 0) or 0),
-            float(getattr(fill, "price", 0.0) or 0.0),
-        )
+        if live_feedback:
+            # Account snapshots may already contain this execution. Never add its
+            # delta to an allocation refreshed from the same live broker.
+            pass
+        else:
+            self.portfolio_context.apply_fill(
+                strategy_id,
+                str(getattr(fill, "symbol", "")),
+                str(getattr(fill, "side", "")),
+                int(getattr(fill, "qty", 0) or 0),
+                float(getattr(fill, "price", 0.0) or 0.0),
+            )
         fill_row = _event_stream_row("runtime_fill_event", strategy_id, "fill", fill)
         fill_row["portfolio_context_after"] = _portfolio_context_payload(self.portfolio_context, reason="fill_applied")
         self.recorder.append_jsonl("fill_events.jsonl", fill_row)
@@ -320,6 +384,7 @@ class RuntimeSessionDriver:
         no_action_reason: str,
         refresh_context: bool = True,
     ) -> PendingRuntimeEvent:
+        await self.resume_pending_event()
         event_timestamp = _ensure_aware(timestamp)
         event_ref = _event_ref(self.descriptor.strategy_id, event_type, payload)
         event_sequence = self.recorder.next_event_sequence()
@@ -362,12 +427,13 @@ class RuntimeSessionDriver:
             event_timestamp=event_timestamp,
             source_artifact_hash=self.descriptor.artifact_hash,
             source_fingerprint=getattr(self.descriptor.snapshot, "source_fingerprint", ""),
+            execution_feedback_sequence=_state_meta(self.descriptor.engine.state).get("oms_feedback_cursor"),
         )
         decisions = list(callback(collector) or [])
         decision_refs = self.action_router.record_decisions(decisions, event_ref=event_ref, event_type=event_type)
         if not decisions and not collector.actions:
             self._record_no_action(event_ref, event_type, event_timestamp, no_action_reason)
-        return PendingRuntimeEvent(
+        pending = PendingRuntimeEvent(
             strategy_id=self.descriptor.strategy_id,
             event_ref=event_ref,
             event_type=event_type,
@@ -376,6 +442,38 @@ class RuntimeSessionDriver:
             actions=collector.actions,
             decision_refs=decision_refs,
         )
+        if self.mode in {"paper", "live"}:
+            if self.pending_event_payload is not None:
+                raise RuntimeError("Pending actions must be recovered before consuming a new event")
+            self.pending_event_payload = {
+                "strategy_id": pending.strategy_id, "event_ref": pending.event_ref,
+                "event_type": pending.event_type, "timestamp": pending.timestamp.isoformat(),
+                "decision_count": len(pending.decisions), "decision_refs": asdict(pending.decision_refs),
+                "actions": [{"action": action_to_json_dict(item.action),
+                    "provisional_order_ref": item.provisional_order_ref, "batch_index": item.batch_index}
+                    for item in pending.actions],
+            }
+            from .execution_feedback import save_checkpoint
+            save_checkpoint(self)
+        return pending
+
+    async def resume_pending_event(self):
+        if not self.pending_event_payload:
+            return
+        raw = self.pending_event_payload
+        refs = raw["decision_refs"]
+        pending = PendingRuntimeEvent(raw["strategy_id"], raw["event_ref"], raw["event_type"],
+            datetime.fromisoformat(raw["timestamp"]), tuple(None for _ in range(raw["decision_count"])),
+            tuple(CollectedAction(action_from_json_dict(item["action"]), item["provisional_order_ref"], item["batch_index"])
+                for item in raw["actions"]), DecisionRefIndex(tuple(refs["refs"]), refs["action_refs"]))
+        await self.portfolio_context.refresh()
+        self.action_router.rehydrate_pending_reservations(
+            self.portfolio_context.iter_working_orders(), source="oms_positions",
+            portfolio_context=self.portfolio_context)
+        results = await self.action_router.route_actions(pending.actions, portfolio_context=self.portfolio_context,
+            event_ref=pending.event_ref, event_type=pending.event_type, event_timestamp=pending.timestamp,
+            decision_refs=pending.decision_refs)
+        self.finish_collected_event(pending, results)
 
     def finish_collected_event(
         self,
@@ -403,6 +501,15 @@ class RuntimeSessionDriver:
                 "artifact_hash": self.descriptor.artifact_hash,
             },
         )
+        if self.mode in {"paper", "live"}:
+            from .execution_feedback import save_checkpoint
+            try:
+                self.pending_event_payload = None
+                _state_meta(self.descriptor.engine.state).pop("feedback_recovery_required", None)
+                save_checkpoint(self)
+            except Exception:
+                _state_meta(self.descriptor.engine.state)["feedback_recovery_required"] = True
+                raise
         return RuntimeEventResult(
             strategy_id=self.descriptor.strategy_id,
             event_ref=event_ref,
@@ -458,6 +565,7 @@ class RuntimeSessionDriver:
                 "candidate_hash": str(action_metadata.get("candidate_hash") or ""),
                 "portfolio_policy_hash": str(action_metadata.get("portfolio_policy_hash") or ""),
             }
+
 
     def _reconcile_route_results(self, route_results: tuple[Any, ...]) -> list[Any]:
         decisions: list[Any] = []
@@ -729,6 +837,12 @@ def _trade_join_metadata(*sources: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _event_ref(strategy_id: str, event_type: str, payload: Mapping[str, Any]) -> str:
+    if event_type == "fill":
+        meta = dict(payload.get("metadata") or {})
+        identity = meta.get("execution_id") or meta.get("kis_exec_id")
+        if identity:
+            return canonical_json_hash([strategy_id, event_type, meta.get("account_id", ""),
+                meta.get("order_date", ""), meta.get("broker_order_id") or payload.get("order_id"), identity])[:24]
     return canonical_json_hash(
         {
             "strategy_id": str(strategy_id).upper().strip(),
@@ -921,3 +1035,11 @@ def _json_value(value: Any) -> Any:
     if hasattr(value, "__dict__"):
         return {str(key): _json_value(item) for key, item in vars(value).items() if not str(key).startswith("_")}
     return value
+
+
+def _state_meta(state):
+    if isinstance(state, dict):
+        return state.setdefault("meta", {})
+    if not hasattr(state, "meta"):
+        state.meta = {}
+    return state.meta

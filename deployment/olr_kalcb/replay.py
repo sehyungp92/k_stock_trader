@@ -162,6 +162,9 @@ def replay_paper_session(session_root: str | Path) -> dict[str, Any]:
         "hash_contract_passed": hash_contract_passed,
         "behavior_parity_passed": behavior_parity_passed,
         "paper_gate_passed": behavior_parity_passed,
+        "paper_gate_scope": "captured_session_behavior_parity",
+        "broker_certification": False,
+        "live_activation": False,
     }
     (root / "parity_report.json").write_text(json.dumps(report, indent=2, sort_keys=True, default=str), encoding="utf-8")
     return report

@@ -937,7 +937,7 @@ def evaluate_compiled_candidate_pool(
     outcomes = _broker_trades_to_slot_outcomes(trades, cfg)
     metrics = summarize_outcomes(outcomes, session_dates=dates, selection_counts=counts)
     _add_compiled_candidate_pool_metrics(metrics, compiled, dates, len(outcomes))
-    broker_metrics = compute_trade_metrics(trades, replay.equity_curve, initial_equity=compiled.initial_equity)
+    broker_metrics = compute_trade_metrics(trades, replay.equity_curve, timestamps=replay.timestamps, mark_coverage=replay.broker.mark_coverage or None, initial_equity=compiled.initial_equity)
     final_equity = float(replay.equity_curve[-1]) if replay.equity_curve else compiled.initial_equity
     metrics.update(
         {

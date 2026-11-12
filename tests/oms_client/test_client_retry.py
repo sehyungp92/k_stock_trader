@@ -57,6 +57,7 @@ class TestSubmitIntentRetry:
 
     def test_health_payload_ready_rejects_semantic_degraded_or_unprotected_states(self):
         healthy_no_active_stops = {
+            "broker_reconciliation_ready": True,
             "status": "ok",
             "stop_protection_status": "ok",
             "unprotected_positions_count": 0,

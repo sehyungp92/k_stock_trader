@@ -1,0 +1,16 @@
+{
+  "version": "kalcb-final-risk-selection-v3",
+  "user_direction": "Do not dismiss results that improve expected returns and lower max DD just because they do not meet the max DD threshold",
+  "supersedes": "Earlier rules making 8% baseline / 10% combined DD mandatory promotion cutoffs",
+  "drawdown_targets_pct": {"baseline": 8, "combined": 10},
+  "target_interpretation": "Preferences and comparison annotations, not rejection gates",
+  "target_profile_rule": "Choose the highest combined-stress return within 8%/10%, with baseline return as tie-breaker; disclose activity separately. The separate frequency profile already represents the activity floor. Clarified before the calibrated 65% replay completed.",
+  "retention": "Retain all completed trials and the full return/drawdown/frequency frontier. Explicitly retain higher-return/lower-drawdown candidates above the preferred targets.",
+  "finalist_profiles": [
+    "Strongest paired return/drawdown improvement over the last audited incumbent, with trade-count differences disclosed",
+    "Strongest frequency-preserving candidate with drawdown no worse than the incumbent",
+    "Best candidate within the preferred drawdown targets if distinct from the preceding profiles"
+  ],
+  "unchanged_requirements": "No invalid execution or liquidation exceptions; full standard audits for delivered configurations; no June-July optimisation; changed-management comparisons remain provisional until their value-target mismatch is addressed",
+  "incumbent": {"baseline_return_pct": 43.741041778852865, "baseline_drawdown_pct": 11.832310540, "combined_return_pct": 22.128089268598516, "combined_drawdown_pct": 13.865312405, "baseline_trades": 395, "baseline_active_days": 110}
+}

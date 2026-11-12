@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backtests.core.input_manifest import frozen_input_loader
+
 import argparse
 import bisect
 import json
@@ -394,6 +396,7 @@ def run_first30_signal_sweep(
     return payload
 
 
+@frozen_input_loader
 def prepare_first30_dataset(config: dict[str, Any]) -> KALCBFirst30Dataset:
     raw_config = dict(config)
     cfg = KALCBConfig.from_mapping(raw_config, {})
@@ -472,7 +475,13 @@ def prepare_first30_dataset(config: dict[str, Any]) -> KALCBFirst30Dataset:
     )
 
 
-def build_contexts(dataset: KALCBFirst30Dataset) -> dict[date, tuple[First30Context, ...]]:
+def build_contexts(dataset: KALCBFirst30Dataset, *, require_post_entry_bars: bool = True) -> dict[date, tuple[First30Context, ...]]:
+    """Build opening features; forecasting callers must not require future outcomes.
+
+    Historical opportunity scorers retain their outcome-coverage requirement by
+    default. Causal candidate construction passes False and handles unavailable
+    later outcomes separately, without changing the contemporaneous sector panel.
+    """
     by_day: dict[date, list[First30Context]] = {}
     cfg = KALCBConfig.from_mapping(dataset.config, {})
     for day in dataset.trading_dates:
@@ -499,7 +508,7 @@ def build_contexts(dataset: KALCBFirst30Dataset) -> dict[date, tuple[First30Cont
                 else None
             )
             post_bars = _post_entry_bars(bars, cfg)
-            if intraday is None or not post_bars:
+            if intraday is None or (require_post_entry_bars and not post_bars):
                 continue
             flow = flow_feature(dataset, symbol, day)
             sector = dataset.sector_map.get(symbol, "UNKNOWN")
@@ -1549,8 +1558,10 @@ def _post_entry_bars(bars: tuple[MarketBar, ...], config: KALCBConfig) -> tuple[
         return cached
     rows = []
     for bar in _sorted_bars(bars):
+        from strategy_common.execution_session import session_cutoff
+        day = bar.timestamp.astimezone(KST).date()
         t = bar.timestamp.astimezone(KST).time()
-        if FIRST30_END <= t <= config.flatten_time:
+        if session_cutoff(day, FIRST30_END, anchor="open") <= t <= session_cutoff(day, config.flatten_time):
             rows.append(bar)
     result = tuple(rows)
     _POST_ENTRY_BARS_CACHE[key] = result

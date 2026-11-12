@@ -23,7 +23,7 @@ def run_portfolio_synergy_backtest(config: dict[str, Any] | None = None, mutatio
         config or {},
         output_dir=Path(kwargs.get("output_dir", ".")),
         max_workers=int(kwargs.get("max_workers", 1) or 1),
-        capability_level=str(kwargs.get("capability_level", "source_artifact_portfolio_replay")),
+        synthetic_fixture=kwargs.get("synthetic_fixture") is True,
     )
     result = plugin._evaluate({**plugin.initial_mutations, **dict(mutations or {})})
     metrics = dict(result.metrics)

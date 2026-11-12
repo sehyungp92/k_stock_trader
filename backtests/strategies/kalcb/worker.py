@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from typing import Any
+from backtests.engine.contracts import execution_valid
+from backtests.engine.evaluation_identity import request_identity
 
 from backtests.auto.shared.types import ScoredCandidate
 from backtests.core.replay_bundle import EventReplayBundle
@@ -39,6 +41,8 @@ def score_candidate(args) -> ScoredCandidate:
     mutations.update(candidate_mutations or {})
     result = run_kalcb_backtest(_worker_config, mutations, replay_bundle=_worker_replay_bundle)
     metrics = result.metrics
+    if not execution_valid(metrics, expected_request=request_identity(_worker_config, mutations)):
+        return ScoredCandidate(name=name, score=0.0, rejected=True, reject_reason="execution_audit_unverified_or_failed", metrics=metrics)
     reject = kalcb_reject_reason(_worker_phase, metrics, _worker_hard_rejects)
     if reject:
         return ScoredCandidate(name=name, score=0.0, rejected=True, reject_reason=reject, metrics=metrics)

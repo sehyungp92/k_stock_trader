@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from .phase_state import PhaseState
 from .types import Experiment, GreedyResult, GreedyRound, ScoredCandidate
+from backtests.engine.contracts import CONTRACT_VERSIONS, execution_valid
 
 DEFAULT_AUTO_WORKERS = 3
 DEFAULT_POOL_HEARTBEAT_SECONDS = 150.0
@@ -168,9 +169,11 @@ class CachedBatchEvaluator:
         self._reject_on_timeout = bool(reject_on_timeout)
         self._progress_callback = None
         for key, result in (seed_results or {}).items():
+            if not execution_valid(result.metrics, expected_mutations=key):
+                continue
             self._cache[self._cache_key(key)] = clone_scored_candidate(result)
             if self._metrics_cache is not None and result.metrics:
-                self._metrics_cache[key] = dict(result.metrics)
+                self._metrics_cache[self._cache_key(key)] = dict(result.metrics)
 
     def __call__(self, candidates: list[Experiment], current_mutations: dict[str, Any]) -> list[ScoredCandidate]:
         results: list[ScoredCandidate | None] = [None] * len(candidates)
@@ -182,7 +185,7 @@ class CachedBatchEvaluator:
             merged.update(candidate.mutations)
             key = mutation_signature(merged)
             cached = self._cache.get(self._cache_key(key))
-            if cached:
+            if cached and execution_valid(cached.metrics, expected_mutations=key):
                 results[index] = clone_scored_candidate(cached, name=candidate.name)
                 continue
             key_to_indexes.setdefault(key, []).append(index)
@@ -221,9 +224,12 @@ class CachedBatchEvaluator:
                     raise RuntimeError("Batch evaluator returned the wrong number of results")
                 for key, prototype, scored_result in zip(chunk_keys, chunk, scored, strict=True):
                     template = clone_scored_candidate(scored_result, name=prototype.name)
+                    if not template.rejected and not execution_valid(template.metrics, expected_mutations=key):
+                        template = ScoredCandidate(prototype.name, 0.0, rejected=True,
+                            reject_reason="execution_audit_unverified_or_failed", metrics=template.metrics)
                     self._cache[self._cache_key(key)] = template
                     if self._metrics_cache is not None and scored_result.metrics:
-                        self._metrics_cache[key] = dict(scored_result.metrics)
+                        self._metrics_cache[self._cache_key(key)] = dict(template.metrics)
                     for index in key_to_indexes.get(key, []):
                         results[index] = clone_scored_candidate(template, name=candidates[index].name)
                 self._emit({"event": "chunk_complete", "chunk_size": len(chunk)})
@@ -242,7 +248,7 @@ class CachedBatchEvaluator:
             setter(callback)
 
     def _cache_key(self, key: str) -> str:
-        return f"{self._signature_prefix}:{key}" if self._signature_prefix else key
+        return f"{':'.join(CONTRACT_VERSIONS)}:{self._signature_prefix}:{key}"
 
     def _emit(self, payload: dict[str, Any]) -> None:
         if callable(self._progress_callback):

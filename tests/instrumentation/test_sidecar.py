@@ -50,6 +50,21 @@ def test_relay_url_normalizes_events_endpoint(tmp_path, monkeypatch):
     assert already_normalized.relay_url == "https://relay.example.com/events"
 
 
+def test_unknown_costs_block_export_without_skipping_following_records(tmp_path, monkeypatch):
+    monkeypatch.delenv("RELAY_URL", raising=False)
+    path = tmp_path / "trades" / "trades_2026-01-05.jsonl"
+    path.parent.mkdir()
+    path.write_text("\n".join(json.dumps(row) for row in (
+        {"trade_id": "unknown", "stage": "exit", "pnl_basis": "gross_costs_unknown", "fees_paid": None},
+        {"trade_id": "later", "stage": "exit", "fees_paid": 0.0})), encoding="utf-8")
+    sidecar = Sidecar(_make_config(tmp_path))
+    assert sidecar._read_unsent_events(path, "trade") == []
+    assert sidecar.watermarks.get(str(path), 0) == 0
+    sidecar.accepts_unknown_costs = True
+    events = sidecar._read_unsent_events(path, "trade")
+    assert [json.loads(event["payload"])["trade_id"] for event in events] == ["unknown", "later"]
+
+
 def test_read_unsent_events_streams_jsonl_with_watermark(tmp_path, monkeypatch):
     """JSONL backlogs should stream from disk and resume after the saved watermark."""
     monkeypatch.delenv("RELAY_URL", raising=False)
@@ -128,14 +143,17 @@ def test_trade_forwarding_skips_entry_stage_and_validates_completed_trade(tmp_pa
         trade_id="trade-1",
         exit_price=71000.0,
         exit_reason="SIGNAL",
+        fees_paid=0.0,  # Explicitly known costs under the legacy consumer contract.
     )
 
     trade_files = sorted((tmp_path / "trades").glob("trades_*.jsonl"))
     sidecar = Sidecar(config)
 
+    assert sidecar._read_unsent_events(trade_files[0], "trade") == []
+    sidecar.accepts_execution_accounting = True
     events = sidecar._read_unsent_events(trade_files[0], "trade")
 
     assert len(events) == 1
     payload = json.loads(events[0]["payload"])
     assert payload["stage"] == "exit"
-    AssistantTradeEvent.model_validate(payload)
+    __import__("schemas.execution_accounting", fromlist=["ExecutionObservation"]).ExecutionObservation.model_validate(payload)

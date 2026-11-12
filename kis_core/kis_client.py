@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import json
+import math
 import os
 import random
 import re
@@ -171,6 +172,7 @@ PAPER_TR_ID_MAP: Dict[str, str] = {
     'TTTC8434R': 'VTTC8434R',  # Account balance
     'TTTC8908R': 'VTTC8908R',  # Stock balance
     'TTTC8001R': 'VTTC8001R',  # Buyable amount
+    'TTTC0081R': 'VTTC0081R',  # Cumulative order execution history
     # Order inquiry APIs
     'TTTC8036R': 'VTTC8036R',  # Order list
     'CTSC9115R': 'VTSC9115R',  # Order history
@@ -463,6 +465,7 @@ class KoreaInvestAPI:
         is_post_request: bool = False,
         use_hash: bool = True,
         retry_on_failure: Optional[bool] = None,
+        tr_cont: str = "",
     ) -> Optional[APIResponse]:
         """
         Core method for API requests with rate limiting, retry, and circuit breaker.
@@ -486,7 +489,8 @@ class KoreaInvestAPI:
         # --- Check GET response cache ---
         cache_key = None
         if not is_post_request:
-            cache_key = (api_url, tr_id, tuple(sorted(params.items())) if params else ())
+            cache_key = (self.using_url, self.account_num, self.is_paper_trading,
+                         api_url, tr_id, tr_cont, tuple(sorted(params.items())) if params else ())
             with _cache_lock:
                 cached = _response_cache.get(cache_key)
                 if cached:
@@ -552,6 +556,8 @@ class KoreaInvestAPI:
 
                 headers["tr_id"] = tr_id_used
                 headers["custtype"] = self.custtype
+                if tr_cont:
+                    headers["tr_cont"] = tr_cont
 
                 if is_post_request:
                     json_body = json.dumps(params)
@@ -1126,8 +1132,10 @@ class KoreaInvestAPI:
         all_output1: List[Dict] = []
         ctx_fk, ctx_nk = '', ''
         tot_evlu_amt = 0
+        cursors = set()
+        continuation = ""
 
-        while True:
+        for _ in range(100):
             params = {
                 'CANO': self.account_num,
                 'ACNT_PRDT_CD': '01',
@@ -1142,29 +1150,41 @@ class KoreaInvestAPI:
                 'CTX_AREA_NK100': ctx_nk,
             }
 
-            result = self._url_fetch(url, tr_id, params)
+            result = self._url_fetch(url, tr_id, params, tr_cont=continuation)
             if not result or not result.is_ok():
-                break
+                raise RuntimeError("Account balance query failed; snapshot incomplete")
 
             body = result.get_body()
 
-            if hasattr(body, 'output1') and body.output1:
+            if not isinstance(getattr(body, 'output1', None), list):
+                raise RuntimeError("Account holdings response is missing")
+            if body.output1:
                 all_output1.extend(body.output1)
 
             if hasattr(body, 'output2') and body.output2 and tot_evlu_amt == 0:
                 try:
-                    tot_evlu_amt = int(body.output2[0].get('tot_evlu_amt', 0))
+                    tot_evlu_amt = int(body.output2[0]['tot_evlu_amt'])
                 except (ValueError, TypeError, IndexError, KeyError):
-                    pass
+                    raise RuntimeError("Account equity response is invalid") from None
+            elif not continuation:
+                raise RuntimeError("Account equity response is missing")
 
             if not fetch_all:
                 break
 
+            if getattr(result.get_header(), 'tr_cont', '') not in {'M', 'F'}:
+                break
+
             ctx_fk = getattr(body, 'ctx_area_fk100', '').strip()
             ctx_nk = getattr(body, 'ctx_area_nk100', '').strip()
-            if not ctx_fk and not ctx_nk:
-                break
+            cursor = (ctx_fk, ctx_nk)
+            if not any(cursor) or cursor in cursors:
+                raise RuntimeError("Account balance pagination is incomplete")
+            cursors.add(cursor)
+            continuation = "N"
             time.sleep(0.05)
+        else:
+            raise RuntimeError("Account balance exceeds pagination bound")
 
         if not all_output1:
             return tot_evlu_amt, pd.DataFrame(columns=columns)
@@ -1177,10 +1197,17 @@ class KoreaInvestAPI:
 
         for col in target:
             if col not in df.columns:
-                return tot_evlu_amt, pd.DataFrame(columns=columns)
+                raise RuntimeError("Account holdings response is incomplete")
 
         df = df[target]
         df[target[2:]] = df[target[2:]].apply(pd.to_numeric, errors='coerce')
+        quantities = df['hldg_qty']
+        if (quantities.isna().any() or (quantities < 0).any()
+                or (quantities % 1 != 0).any()
+                or df.loc[quantities > 0, 'pchs_avg_pric'].isna().any()
+                or (df.loc[quantities > 0, 'pchs_avg_pric'] <= 0).any()
+                or not all(math.isfinite(float(x)) for x in df.loc[quantities > 0, 'pchs_avg_pric'])):
+            raise RuntimeError("Account holdings quantities or cost basis are invalid")
         df.rename(columns=dict(zip(target, columns)), inplace=True)
         df = df[df['보유수량'].notna() & (df['보유수량'] != 0)]
         df.reset_index(drop=True, inplace=True)
@@ -1204,8 +1231,8 @@ class KoreaInvestAPI:
         result = self._url_fetch(url, tr_id, params)
         if result and result.is_ok():
             try:
-                return int(result.get_body().output.get('ord_psbl_cash', 0))
-            except (ValueError, AttributeError, TypeError):
+                return int(result.get_body().output['ord_psbl_cash'])
+            except (ValueError, AttributeError, TypeError, KeyError):
                 pass
         return None
 
@@ -1325,6 +1352,22 @@ class KoreaInvestAPI:
 
     def get_orders(self, prd_code: str = '01') -> Optional[pd.DataFrame]:
         """Get pending orders."""
+        if getattr(self, "is_paper_trading", False) is True:
+            # inquire-psbl-rvsecncl is unavailable in KIS paper. The supported
+            # daily execution endpoint includes unfilled orders and pagination.
+            today = datetime.now(_get_kst()).strftime("%Y%m%d")
+            frame = self.get_execution_orders(today, today, prd_code=prd_code)
+            if frame.empty:
+                return None
+            remaining = pd.to_numeric(frame['rmn_qty'], errors='raise')
+            if remaining.isna().any() or (remaining < 0).any() or (remaining % 1 != 0).any():
+                raise RuntimeError("Invalid remaining quantity in paper order history")
+            frame = frame.loc[remaining > 0].copy()
+            if frame.empty:
+                return None
+            frame['psbl_qty'] = remaining.loc[remaining > 0]
+            frame.set_index('odno', inplace=True)
+            return self._rename_order_columns(frame)
         url = "/uapi/domestic-stock/v1/trading/inquire-psbl-rvsecncl"
         tr_id = "TTTC8036R"
         params = {
@@ -1336,15 +1379,71 @@ class KoreaInvestAPI:
             "INQR_DVSN_2": '0',
         }
 
-        result = self._url_fetch(url, tr_id, params)
-        if result and result.is_ok() and result.get_body().output:
-            df = pd.DataFrame(result.get_body().output)
-            df.set_index('odno', inplace=True)
-            cols = ['pdno', 'ord_qty', 'ord_unpr', 'ord_tmd', 'ord_gno_brno', 'orgn_odno', 'psbl_qty']
-            names = ['종목코드', '주문수량', '주문가격', '시간', '주문점', '원주문번호', '주문가능수량']
-            df = df[cols]
-            return df.rename(columns=dict(zip(cols, names)))
-        return None
+        rows, cursors = [], set()
+        continuation = ""
+        for _ in range(100):
+            result = self._url_fetch(url, tr_id, params, tr_cont=continuation)
+            if result is None or not result.is_ok():
+                raise RuntimeError("Working orders query failed; snapshot incomplete")
+            body = result.get_body()
+            if not isinstance(getattr(body, 'output', None), list):
+                raise RuntimeError("Working orders response is missing")
+            rows.extend(body.output)
+            if getattr(result.get_header(), 'tr_cont', '') not in {'M', 'F'}:
+                break
+            cursor = (str(getattr(body, 'ctx_area_fk100', '')).strip(),
+                      str(getattr(body, 'ctx_area_nk100', '')).strip())
+            if not any(cursor) or cursor in cursors:
+                raise RuntimeError("Working orders pagination is incomplete")
+            cursors.add(cursor)
+            params['CTX_AREA_FK100'], params['CTX_AREA_NK100'] = cursor
+            continuation = "N"
+        else:
+            raise RuntimeError("Working orders exceed pagination bound")
+        if not rows:
+            return None  # Successfully observed empty account; failures raise.
+        df = pd.DataFrame(rows)
+        df.set_index('odno', inplace=True)
+        return self._rename_order_columns(df)
+
+    @staticmethod
+    def _rename_order_columns(df):
+        # Preserve side, date and order type for reconciliation identity checks.
+        return df.rename(columns=dict(zip(
+            ['pdno', 'ord_qty', 'ord_unpr', 'ord_tmd', 'ord_gno_brno', 'orgn_odno', 'psbl_qty'],
+            ['종목코드', '주문수량', '주문가격', '시간', '주문점', '원주문번호', '주문가능수량'])))
+
+    def get_execution_orders(self, start_date: str, end_date: str, prd_code: str = "01") -> pd.DataFrame:
+        """Read complete cumulative order executions, including completed orders.
+
+        KIS inquire-daily-ccld: tot_ccld_qty and tot_ccld_amt are execution
+        quantities/notional. ord_unpr is a submitted price, never a fill price.
+        Failed or truncated pagination raises rather than reporting an empty book.
+        """
+        params = {"CANO": self.account_num, "ACNT_PRDT_CD": prd_code,
+            "INQR_STRT_DT": start_date, "INQR_END_DT": end_date,
+            "SLL_BUY_DVSN_CD": "00", "CCLD_DVSN": "00", "INQR_DVSN": "01",
+            "INQR_DVSN_3": "00", "PDNO": "", "ORD_GNO_BRNO": "", "ODNO": "",
+            "INQR_DVSN_1": "", "CTX_AREA_FK100": "", "CTX_AREA_NK100": "",
+            "EXCG_ID_DVSN_CD": "KRX"}
+        rows, cursors = [], set()
+        continuation = ""
+        for _ in range(100):
+            result = self._url_fetch("/uapi/domestic-stock/v1/trading/inquire-daily-ccld",
+                "TTTC0081R", params, tr_cont=continuation)
+            if result is None or not result.is_ok():
+                raise RuntimeError("Execution history query failed")
+            body = result.get_body()
+            rows.extend(body.output1)
+            if getattr(result.get_header(), "tr_cont", "") not in {"M", "F"}:
+                return pd.DataFrame(rows)
+            cursor = (str(body.ctx_area_fk100).strip(), str(body.ctx_area_nk100).strip())
+            if cursor in cursors or not any(cursor):
+                raise RuntimeError("Execution history pagination is incomplete")
+            cursors.add(cursor)
+            params["CTX_AREA_FK100"], params["CTX_AREA_NK100"] = cursor
+            continuation = "N"
+        raise RuntimeError("Execution history exceeds pagination bound")
 
     def order_stock(
         self,

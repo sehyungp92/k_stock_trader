@@ -17,6 +17,7 @@ from strategy_common.actions import (
     SubmitPartialExit,
     SubmitProtectiveStop,
     action_to_json_dict,
+    action_from_json_dict,
 )
 from strategy_common.events import DecisionEvent
 from strategy_common.oms_adapter import action_to_intent
@@ -63,6 +64,35 @@ class RuntimeActionRouter:
     rehydrated_reservations_count: int = 0
     rehydrated_pending_notional: float = 0.0
     rehydrated_source_hash: str = ""
+    _action_outbox: Any = field(default=None, init=False, repr=False)
+
+    def _outbox(self):
+        if self.dry_run:
+            return None
+        if self._action_outbox is None:
+            from .action_outbox import ActionOutbox
+            self._action_outbox = ActionOutbox(self.recorder.paths.root / "action_outbox.sqlite3")
+        return self._action_outbox
+
+    async def _recover_submission(self, identity, saved):
+        from .action_outbox import restore_intent
+        payload, template, result = saved
+        if result is None:
+            intent = restore_intent(payload)
+            response = await self.oms_client.submit_intent(intent)
+            status = getattr(getattr(response, "status", None), "name", "")
+            if status in {"PENDING", "DEFERRED"}:
+                raise RuntimeError("OMS action outcome remains uncertain; pending action retained")
+            accepted = status not in {"REJECTED", "CANCELLED"}
+            final_ref = (getattr(response, "order_id", None) or getattr(response, "intent_id", None)) if accepted else None
+            result = {**template, "final_order_ref": final_ref, "accepted": bool(final_ref),
+                "oms_status": status, "oms_message": getattr(response, "message", ""),
+                "intent_id": getattr(response, "intent_id", None), "broker_order_id": getattr(response, "order_id", None),
+                "resource_conflict_type": getattr(response, "resource_conflict_type", None)}
+            self._outbox().finish(identity, result)
+        data = dict(result)
+        data["routed_action"] = action_from_json_dict(data["routed_action"])
+        return RoutedActionResult(**data)
 
     def record_decisions(
         self,
@@ -272,6 +302,11 @@ class RuntimeActionRouter:
         portfolio_context: PortfolioContextProvider | None,
         reservations: "_BatchReservations",
     ) -> "RoutedActionResult":
+        outbox = self._outbox()
+        recovery_id = str(prepared.metadata.get("provisional_order_ref") or prepared.action_ref)
+        saved = outbox.get(recovery_id) if outbox else None
+        if saved:
+            return await self._recover_submission(recovery_id, saved)
         action_payload = action_to_json_dict(prepared.action)
         self.recorder.append_jsonl(
             "strategy_actions.jsonl",
@@ -365,8 +400,18 @@ class RuntimeActionRouter:
         )
         intent_payload["portfolio_decision_ref"] = portfolio_record["portfolio_decision_ref"]
         self.recorder.append_jsonl("oms_intents.jsonl", intent_payload)
+        if outbox:
+            outbox.prepare(recovery_id, intent, {
+                "action_ref": prepared.action_ref, "provisional_order_ref": str(prepared.metadata.get("provisional_order_ref") or ""),
+                "final_order_ref": None, "portfolio_decision": decision.decision, "portfolio_reason_code": decision.reason_code,
+                "accepted": False, "blocked": False, "resized": decision.decision == "resized",
+                "routed_action": routed_payload, "routed_action_payload": routed_payload,
+                "portfolio_decision_ref": portfolio_record["portfolio_decision_ref"],
+            })
         result = await self.oms_client.submit_intent(intent)
         status = getattr(result, "status", None)
+        if outbox and status in {IntentStatus.PENDING, IntentStatus.DEFERRED}:
+            raise RuntimeError("OMS action outcome remains uncertain; pending action retained")
         self.recorder.append_jsonl(
             "order_events.jsonl",
             _intent_result_record(result, intent_payload=intent_payload, dry_run=self.dry_run),
@@ -411,6 +456,10 @@ class RuntimeActionRouter:
             reservation_id = self._remember_pending_reservation(result, portfolio_item, decision)
             if reservation_id is not None:
                 reservations.pending_reservation_ids.add(reservation_id)
+        if outbox:
+            saved_result = {name: getattr(result, name) for name in result.__dataclass_fields__}
+            saved_result["routed_action"] = action_to_json_dict(result.routed_action)
+            outbox.finish(recovery_id, saved_result)
         return result
 
     def _export_missed_action(

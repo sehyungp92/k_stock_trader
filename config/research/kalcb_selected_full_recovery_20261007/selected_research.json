@@ -1,0 +1,358 @@
+{
+  "status": "qualified_research_only",
+  "live_enabled": false,
+  "primary_profile": "selected_full",
+  "date_range": {
+    "start": "2025-08-07",
+    "end": "2026-03-31",
+    "sessions": 156
+  },
+  "initial_equity_krw": 100000000,
+  "training_coverage": {
+    "start": "2025-05-12",
+    "end": "2026-03-31"
+  },
+  "june_july_2026_used": false,
+  "drawdown_preferences": {
+    "baseline": 8,
+    "combined": 10,
+    "hard_rejection_thresholds": false
+  },
+  "selection_basis": "Highest unchanged declared research score among physically valid finite development trials; retain Pareto alternatives",
+  "score": "100 + .5*B_return + S_return - 1.5*(B_DD+S_DD) + .02*min(trades) + .05*min(active)",
+  "profiles": {
+    "selected_full": {
+      "recipe": {
+        "key": "mature125_late__support_capped__1p0",
+        "mutations": {
+          "management": "mature125_late",
+          "admission": "support_capped",
+          "size": 1.0
+        },
+        "metrics": {
+          "physical_valid": true,
+          "audit_status": "unverified",
+          "research_only": true,
+          "official_metric_basis": "SimBroker.equity_curve_bar_level_mtm",
+          "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+          "source_fingerprint": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23",
+          "feature_manifest_hash": "58bb548e6ded557112c56a72efd98f03203c9155f952e2c3e5af828e6d408c34",
+          "candidate_snapshot_hash": "a3fdaabd68495bcb6815e13ebfdad05a9f205e6a802610b90e66b678969ee116",
+          "end_open_position_count": 0,
+          "baseline_return": 66.68034447729273,
+          "baseline_dd": 7.677898842364282,
+          "baseline_trades": 348,
+          "baseline_active": 99,
+          "combined_return": 40.31047745537346,
+          "combined_dd": 8.90409397574704,
+          "combined_trades": 349,
+          "combined_active": 99,
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 16.0,
+          "invalid_order_rejection_count": 0.0
+        },
+        "score": 160.68766046685283,
+        "plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase5\\cases\\mature125_late__support_capped__1p0\\plan.json",
+        "policy": {
+          "name": "cv_interaction_calibrated_quantity_locked_quantity_locked",
+          "directory": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\release_policies_support_capped"
+        },
+        "scenarios": {
+          "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase5\\cases\\mature125_late__support_capped__1p0\\baseline\\result.json",
+          "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase5\\cases\\mature125_late__support_capped__1p0\\combined\\result.json"
+        },
+        "result_hashes": {
+          "baseline": "b0577fd607bc14fc346664e53fad19c9050df037b816c294699cf552f5a5fbfc",
+          "combined": "6cf73e12941c7df68e0c8423bb6b6149a5ebf80c91e156c3d515678aa1252f66"
+        },
+        "code": "C:\\Users\\sehyu\\.codex\\tmp\\kalcb_selected_full_execution_20261007\\code_v6",
+        "qualification_evidence": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\qualification_release"
+      },
+      "results": {
+        "baseline": {
+          "return_pct": 66.68034447729273,
+          "drawdown_pct": 7.677898842364282,
+          "trades": 348,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "9a0ac08677d17d52e2f52f659c9b966b1d1979541dd12dad38d03e07115401a9"
+        },
+        "participation": {
+          "return_pct": 58.75267941558968,
+          "drawdown_pct": 7.760636264755588,
+          "trades": 347,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "9a0ac08677d17d52e2f52f659c9b966b1d1979541dd12dad38d03e07115401a9"
+        },
+        "cost": {
+          "return_pct": 45.63127316580777,
+          "drawdown_pct": 8.77033002064828,
+          "trades": 349,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "9a0ac08677d17d52e2f52f659c9b966b1d1979541dd12dad38d03e07115401a9"
+        },
+        "combined": {
+          "return_pct": 40.31047745537346,
+          "drawdown_pct": 8.90409397574704,
+          "trades": 349,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "9a0ac08677d17d52e2f52f659c9b966b1d1979541dd12dad38d03e07115401a9"
+        }
+      },
+      "result_paths": {
+        "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth_full_release\\cv_interaction_calibrated_quantity_locked_quantity_locked_baseline\\result.json",
+        "participation": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth_full_release\\cv_interaction_calibrated_quantity_locked_quantity_locked_participation\\result.json",
+        "cost": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth_full_release\\cv_interaction_calibrated_quantity_locked_quantity_locked_cost\\result.json",
+        "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth_full_release\\cv_interaction_calibrated_quantity_locked_quantity_locked_combined\\result.json"
+      },
+      "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\audit_growth_full_release\\manifest.json",
+      "audit_manifest_sha256": "701c02af944a79f9a53ecdcb4003d39e4b939cc664362340fc49c3da8152dd83",
+      "source_generation_hash": "9a0ac08677d17d52e2f52f659c9b966b1d1979541dd12dad38d03e07115401a9"
+    },
+    "lower_drawdown_95": {
+      "recipe": {
+        "key": "mature125_late__support_capped__0p95",
+        "mutations": {
+          "management": "mature125_late",
+          "admission": "support_capped",
+          "size": 0.95
+        },
+        "metrics": {
+          "physical_valid": true,
+          "audit_status": "unverified",
+          "research_only": true,
+          "official_metric_basis": "SimBroker.equity_curve_bar_level_mtm",
+          "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+          "source_fingerprint": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23",
+          "feature_manifest_hash": "58bb548e6ded557112c56a72efd98f03203c9155f952e2c3e5af828e6d408c34",
+          "candidate_snapshot_hash": "a3fdaabd68495bcb6815e13ebfdad05a9f205e6a802610b90e66b678969ee116",
+          "end_open_position_count": 0,
+          "baseline_return": 63.64535792605712,
+          "baseline_dd": 7.427626635392843,
+          "baseline_trades": 346,
+          "baseline_active": 99,
+          "combined_return": 37.01334814139536,
+          "combined_dd": 8.525452847648266,
+          "combined_trades": 348,
+          "combined_active": 99,
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 12.0,
+          "invalid_order_rejection_count": 0.0
+        },
+        "score": 156.77640787986223,
+        "plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\size_sensitivity\\cases\\mature125_late__support_capped__0p95\\plan.json",
+        "policy": {
+          "directory": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase2\\policies_support_capped",
+          "name": "cv_interaction_calibrated_quantity_locked_quantity_locked"
+        },
+        "scenarios": {
+          "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\size_sensitivity\\cases\\mature125_late__support_capped__0p95\\baseline\\result.json",
+          "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\size_sensitivity\\cases\\mature125_late__support_capped__0p95\\combined\\result.json"
+        },
+        "result_hashes": {
+          "baseline": "903f932c034d37f0ed057e508938fafcb6f7cb7dd2aeb0d10da670ccec9a9600",
+          "combined": "b61a502898482c8084401e897f2036c22465ec1201beb765cfa6d2d4513282a3"
+        },
+        "code": "C:/Users/sehyu/.codex/tmp/kalcb_selected_full_execution_20261007/code_v3",
+        "qualification_evidence": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\qualification_size"
+      },
+      "results": {
+        "baseline": {
+          "return_pct": 63.64535792605712,
+          "drawdown_pct": 7.427626635392843,
+          "trades": 346,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        },
+        "participation": {
+          "return_pct": 54.627544681967045,
+          "drawdown_pct": 7.599363841964624,
+          "trades": 346,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        },
+        "cost": {
+          "return_pct": 42.82271254252548,
+          "drawdown_pct": 8.493904836422207,
+          "trades": 348,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        },
+        "combined": {
+          "return_pct": 37.01334814139536,
+          "drawdown_pct": 8.525452847648266,
+          "trades": 348,
+          "active_days": 99,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        }
+      },
+      "result_paths": {
+        "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth95\\cv_interaction_calibrated_quantity_locked_quantity_locked_baseline\\result.json",
+        "participation": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth95\\cv_interaction_calibrated_quantity_locked_quantity_locked_participation\\result.json",
+        "cost": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth95\\cv_interaction_calibrated_quantity_locked_quantity_locked_cost\\result.json",
+        "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\growth95\\cv_interaction_calibrated_quantity_locked_quantity_locked_combined\\result.json"
+      },
+      "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\audit_growth95\\manifest.json",
+      "audit_manifest_sha256": "bcbfc2e4d36e355a6b68135d20987678f8322320185da70d5693c3dd4e18d4cd",
+      "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+    },
+    "management_only": {
+      "recipe": {
+        "key": "mature125_late__control__1p0",
+        "mutations": {
+          "management": "mature125_late",
+          "admission": "control",
+          "size": 1.0
+        },
+        "metrics": {
+          "physical_valid": true,
+          "audit_status": "unverified",
+          "research_only": true,
+          "official_metric_basis": "SimBroker.equity_curve_bar_level_mtm",
+          "primary_promotion_basis": "SimBroker.equity_curve_bar_level_mtm",
+          "source_fingerprint": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23",
+          "feature_manifest_hash": "58bb548e6ded557112c56a72efd98f03203c9155f952e2c3e5af828e6d408c34",
+          "candidate_snapshot_hash": "11276721392a89d22eb01394751cd53828be20a774a1b56270bd3bfc818fc90f",
+          "end_open_position_count": 0,
+          "baseline_return": 63.058859231985444,
+          "baseline_dd": 7.555355809089629,
+          "baseline_trades": 311,
+          "baseline_active": 95,
+          "combined_return": 39.099580600383966,
+          "combined_dd": 8.07537754654873,
+          "combined_trades": 312,
+          "combined_active": 95,
+          "same_bar_fill_count": 0.0,
+          "forced_replay_close_count": 0.0,
+          "rejected_order_count": 9.0,
+          "invalid_order_rejection_count": 0.0
+        },
+        "score": 158.15291018291916,
+        "plan": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase3\\cases\\mature125_late__control__1p0\\plan.json",
+        "policy": {
+          "directory": "E:\\CodexResearch\\k_stock_trader\\kalcb_calibrated_optimisation_20261007\\allocation_v2\\policies_quantity_locked",
+          "name": "cv_interaction_calibrated_quantity_locked"
+        },
+        "scenarios": {
+          "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase3\\cases\\mature125_late__control__1p0\\baseline\\result.json",
+          "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\phase3\\cases\\mature125_late__control__1p0\\combined\\result.json"
+        },
+        "result_hashes": {
+          "baseline": "e7dcb18b4dbff27d463e36aad4d41ae701978ac4363f5326a6c530038d9841e6",
+          "combined": "1bd5394a14c08f2cb510a5878743b1af728cb9cd94fa1bd57573d536e2991a09"
+        },
+        "code": "C:\\Users\\sehyu\\.codex\\tmp\\kalcb_selected_full_execution_20261007\\code_v3",
+        "qualification_evidence": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\qualification_v1"
+      },
+      "results": {
+        "baseline": {
+          "return_pct": 63.058859231985444,
+          "drawdown_pct": 7.555355809089629,
+          "trades": 311,
+          "active_days": 95,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        },
+        "participation": {
+          "return_pct": 60.23895538022286,
+          "drawdown_pct": 7.360217603455585,
+          "trades": 310,
+          "active_days": 95,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        },
+        "cost": {
+          "return_pct": 44.24171445197938,
+          "drawdown_pct": 8.198175352392104,
+          "trades": 312,
+          "active_days": 95,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        },
+        "combined": {
+          "return_pct": 39.099580600383966,
+          "drawdown_pct": 8.07537754654873,
+          "trades": 312,
+          "active_days": 95,
+          "sessions": 156,
+          "audit_status": "passed",
+          "execution_validity_pass": true,
+          "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+        }
+      },
+      "result_paths": {
+        "baseline": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\management_only\\cv_interaction_calibrated_quantity_locked_baseline\\result.json",
+        "participation": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\management_only\\cv_interaction_calibrated_quantity_locked_participation\\result.json",
+        "cost": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\management_only\\cv_interaction_calibrated_quantity_locked_cost\\result.json",
+        "combined": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\final_audited\\management_only\\cv_interaction_calibrated_quantity_locked_combined\\result.json"
+      },
+      "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\audit_management_only\\manifest.json",
+      "audit_manifest_sha256": "0c04c852434cd0df904f02a97a55f46fe8bed00bdc0b4311b376fbad8ddd209b",
+      "source_generation_hash": "4bb81abed0ff76338cebb875bea93a4423a1dcda00af4489d4660cd87696bd23"
+    }
+  },
+  "trial_ledger": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\combined_screening_ledger.json",
+  "trial_count": 17,
+  "statistical_status": "Reused development; positive audited stress results do not establish higher future expected returns. Incremental bootstrap intervals include zero.",
+  "selector_target": "Original past-only action-value predictor retained as a proxy; complete changed-management refits were implemented, tested and not selected.",
+  "refit_verification": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\refit_mature125_late\\verification.json",
+  "tests": {
+    "passed": 101,
+    "log": "E:\\CodexResearch\\k_stock_trader\\kalcb_selected_full_optimisation_20261007\\release_tests_pass.log",
+    "sha256": "a7878061165c631d01c3c9228839f3048fbed9c926d870799f627d4547b9f098"
+  },
+  "source_receipt": {
+    "code": "C:\\Users\\sehyu\\.codex\\tmp\\kalcb_selected_full_execution_20261007\\code_v6",
+    "source_generation_hash": "9a0ac08677d17d52e2f52f659c9b966b1d1979541dd12dad38d03e07115401a9",
+    "economic_parent": "code_v3",
+    "refit_parent": "code_v4",
+    "change": "Restore an enabled protective stop after cancelling an entry remainder during late trend extension. Existing selected plans have exit_hard_stop_enabled=false, so the changed condition is inactive. Final promoted research profile still requires exact native replay and full four-scenario qualification on this source.",
+    "files": {
+      "strategy_kalcb/config.py": "115c8b0aed1c31034d8b8d8149b095ab1cc38601f456ea43d5bed472229f6a08",
+      "strategy_kalcb/core/logic.py": "8a384250f252ef143e2677e5a3360bb17c10a1995f6b528e529b6c5141a5250f",
+      "backtests/strategies/kalcb/value_calibration.py": "a6dfdf6c32d564466f5de2caf6e74d86b18895a697c19b2a25e0f8a1b82ac25c",
+      "scripts/kalcb_management_refit.py": "cacd408b6c7c095915aec3cad2eecf93a55fd8defde9000e9daa6725053c87f1",
+      "scripts/kalcb_quantity_calibration.py": "6b9f8164f7383dd628cdff71a5eed3cf3fc086cd59687e6f6d286e4fa453ea83",
+      "scripts/kalcb_core_preserving_policy.py": "578f935d5febf49c4e57682ca923e9a6c180e5cae9142dc597b0a8938d9d9021"
+    }
+  },
+  "figure": "C:\\Users\\sehyu\\Documents\\Other\\Projects\\k_stock_trader\\docs\\research\\kalcb_selected_full_recovery_20261007.png",
+  "environment": {
+    "python": "3.12.6",
+    "numpy": "1.26.4",
+    "scikit-learn": "1.8.0",
+    "pandas": "2.3.3",
+    "pytest": "9.0.2"
+  }
+}

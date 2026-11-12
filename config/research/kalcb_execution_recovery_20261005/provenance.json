@@ -1,0 +1,13 @@
+{
+  "scope": "Frozen candidate research; no untouched OOS or promotion claim",
+  "source_generation_hash": "b21d261c97ac95bc79b883e55e10ba68af9f4dee58899a95efad8fa8a80a356b",
+  "manifest_hash": "6a5ea7741fb020caf157946bb514465b6ac1aa1474df888fd75970968220ace6",
+  "database_sha256": "aee68fcd6b73af5c69d53faa0a2c2e66e698c212b63c90060f854a607769a1da",
+  "reference": "E:\\CodexResearch\\k_stock_trader\\kalcb_delta_20261005\\replays\\r3_reproduce\\result.json",
+  "reference_sha256": "45484ec121ccb28fbc44483ea1ed977ca4b583fcf0b5c3e3f4be1ea9b8b27c28",
+  "audit_manifest": "E:\\CodexResearch\\k_stock_trader\\kalcb_execution_recovery_20261005\\audit_generation_v2\\manifest.json",
+  "audit_manifest_hash": "fa4e9ad84149e6ed2e6d8e1bfb3638a165de6eb8584151ad17caa2a3678e2ea2",
+  "research_audit_status": "passed",
+  "alpha_validation": "past-only HGB and ridge failed; no promotion",
+  "study_summary": "E:\\CodexResearch\\k_stock_trader\\kalcb_execution_recovery_20261005\\study_summary.json"
+}

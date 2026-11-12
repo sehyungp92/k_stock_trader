@@ -1,20 +1,49 @@
 {
   "schema_version": "olr_kalcb_source_shared_replay_v1",
   "initial_equity": 100000000.0,
+  "capacity_scenario": {"name": "research-baseline", "participation": 0.01},
+  "input_manifest_path": "data/backtests/integrity/2026-10-05-capacity-model-v17/manifest.json",
+  "market_inputs": {
+    "data_root": "data/kis_intraday_parquet",
+    "daily_data_root": "data/krx_daily_parquet",
+    "universe": "config/universe_103.yaml",
+    "sector_map_path": "config/olr/sector_map.yaml",
+    "timeframe": "5m",
+    "snapshot_end": "20260512",
+    "snapshot_end_overrides": {
+      "036460": "20260513"
+    },
+    "session_replacement_bundle": "data/backtests/integrity/recovery-20261003-retained-endpoint-v1/recovery.json",
+    "anchored_session_recovery": "data/backtests/integrity/source-residuals-20261004-v13/recovery/bundle.json",
+    "intraday_supplements": {
+      "036460": [
+        {
+          "date": "2025-05-12",
+          "path": "data/backtests/integrity/recovery-20261003-036460-first-session/036460_5m_20250512_20250512.parquet",
+          "provenance": "data/backtests/integrity/recovery-20261003-036460-first-session/provenance.json"
+        }
+      ]
+    },
+    "train_start": "2025-05-12",
+    "train_end": "2026-03-31",
+    "holdout_start": "2026-04-01",
+    "data_end": "2026-05-12",
+    "session_resolution_report": "data/backtests/integrity/source-residuals-20261004-v13/recovery/report.json"
+  },
   "kalcb": {
     "optimization_config": "config/optimization/kalcb.yaml",
     "optimized_result": "data/backtests/output/kalcb/round_3/optimized_config.json",
     "candidate_snapshot_root": "data/backtests/output/kalcb/round_3/paper_live_parity_inputs/daily_snapshots",
     "market_bar_digest": "data/backtests/output/kalcb/round_3/paper_live_parity_inputs/replay_market_bar_digest.json",
     "expected": {
-      "net_return_pct": 2.5812635258674423,
-      "trades": 204,
-      "trade_hash": "1da79a7d36b34c4e204f237c67d71e7bc259426c5db2e47135b7da0078ac587c"
+      "net_return_pct": 2.583427246872278,
+      "trades": 205,
+      "basis": "recovered_round_3_legacy_baseline_requires_corrected_requalification"
     }
   },
   "olr": {
     "optimization_config": "config/optimization/olr.yaml",
-    "optimized_result": "data/backtests/output/olr/round_5/optimized_config.json",
+    "optimized_result": "data/backtests/output/olr/archive/2026-10-05-before-fully-repaired-control/round_5/optimized_config.json",
     "candidate_snapshot_root": "data/strategy/olr/candidate_snapshots/b072faa32122f142",
     "candidate_config_hash": "b072faa32122f142269b0a3c5c20808913f6309728e121f3dd83741c37e7324e",
     "daily_data_root": "data/krx_daily_parquet",
@@ -27,5 +56,5 @@
     }
   },
   "cache_dir": "data/backtests/cache/shared_replay",
-  "output": "data/backtests/output/olr_kalcb/shared_capital_replay.json"
+  "output": "data/backtests/output/portfolio_synergy/shared_replay/shared_capital_replay.json"
 }

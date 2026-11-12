@@ -1,0 +1,156 @@
+{
+  "version": "portfolio-synergy-current-research-v1",
+  "recipe": "active_block_duplicates",
+  "status": "research_selected_full_native_audits_passed",
+  "live_deployment_enabled": false,
+  "operational_integration_status": "native_research_replay; live coordinator funding and ranking parity remain to be qualified",
+  "independent_validation_required": true,
+  "scope": "reused_development_only",
+  "selection_rule": "Highest fixed research score among 12 physically valid registered policy recipes",
+  "selection_score": 211.7237728029254,
+  "settings": {
+    "policy": {
+      "max_gross_notional": 200000000,
+      "max_symbol_notional": 50000000.0,
+      "max_sector_notional": 120000000.0,
+      "notional_cap_mode": "equity_scaled",
+      "notional_cap_reference_equity": 100000000,
+      "funding_mode": "native_buying_power",
+      "same_symbol_policy": "block",
+      "strategy_priority": [
+        "KALCB",
+        "OLR"
+      ]
+    },
+    "quality": true,
+    "decision_rank": true
+  },
+  "initial_equity_krw": 100000000,
+  "development_start": "2025-08-07",
+  "development_end": "2026-03-31",
+  "exchange_sessions": 156,
+  "native_strategy_leverage_limits": {
+    "KALCB": 2.0,
+    "OLR": 1.0
+  },
+  "quality_model": {
+    "minimum_strategy_labels": 20,
+    "prior_weight": 20,
+    "uncertainty_penalty": 0.25,
+    "strictly_earlier_session_labels": true,
+    "refit_or_label_refresh_authorized": false,
+    "frozen_labels_file": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\inputs\\files\\research\\portfolio_current\\quality_labels.json",
+    "frozen_labels_file_sha256": "4841f72faef2c8160049f5c7f8a43478d87e7f48efa38e55451069a11e987182",
+    "interpretation": "Heuristic cohort ranking; not a calibrated counterfactual marginal-value model"
+  },
+  "cost_assumptions": {
+    "commission_bps_per_side": 2,
+    "sell_tax_bps": 20,
+    "baseline_slippage_bps_per_side": {
+      "KALCB": 3,
+      "OLR": 5
+    },
+    "stressed_additional_slippage_bps_per_side": 10,
+    "baseline_participation": 0.01,
+    "stressed_participation": 0.005,
+    "liquidity_model": "causal_bar_participation_research_scenario"
+  },
+  "risk_interpretation": "Entry admission caps, not guaranteed drawdown bounds. No replacement of existing positions. Overnight cash was non-negative in all five qualification scenarios.",
+  "frozen_study": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\study.json",
+  "frozen_study_sha256": "c81dbd7442cf36b75eb5d86c9d9544c4b5c4d88c21044e4be768f7d3accd2ba7",
+  "replay_source_generation_hash": "45848a9f6bcfe08cb2663d7b125c1ddb20268745387f5c80be0e7bcebdaf4692",
+  "selection_artifact": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\screening_selection.json",
+  "selection_artifact_sha256": "3a9eddb6dcbaccdc2619724950665709784f1648f992fe5fc3d67229993a88e4",
+  "qualification_artifact": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\qualification.json",
+  "qualification_artifact_sha256": "210d306c6ebee8666d261b4c151fd651e34054165c8848d8afe4b9e4e495bf83",
+  "diagnostics_artifact": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\delivery_diagnostics.json",
+  "diagnostics_artifact_sha256": "8ad07dd5092e4c700f30f973a3125654c4bc3b467bbdd20ae14ae295dbac3be1",
+  "qualified_cases": {
+    "baseline": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\baseline",
+      "result_sha256": "3a6b9097ed97bad867a20600c9af797f26e9b66134bda45fc0714d67ab38eb74",
+      "audit_sha256": "8bb795c14d1975a5fe0fa292a5b52ea37f06c1b607e2e654f6bd0f4e333cd78e",
+      "audit_status": "passed",
+      "return_pct": 116.26002370530979,
+      "drawdown_pct": 11.877191789196809,
+      "trades": 522,
+      "active_days": 131,
+      "trades_per_21_sessions": 70.26923076923077,
+      "strategy_counts": {
+        "KALCB": 352,
+        "OLR": 170
+      },
+      "unique_blocked_orders": 76,
+      "unique_resized_orders": 51
+    },
+    "participation": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\participation",
+      "result_sha256": "43cfb247df1020387382e8b5b20c71da1781a71123b413eaa985deb181a36254",
+      "audit_sha256": "9351f028e9d6125396c899143107c81eb19799604d41471aebd5b04a39cba096",
+      "audit_status": "passed",
+      "return_pct": 110.3536507684216,
+      "drawdown_pct": 11.262095096793475,
+      "trades": 521,
+      "active_days": 130,
+      "trades_per_21_sessions": 70.13461538461539,
+      "strategy_counts": {
+        "KALCB": 350,
+        "OLR": 171
+      },
+      "unique_blocked_orders": 71,
+      "unique_resized_orders": 46
+    },
+    "combined": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\combined",
+      "result_sha256": "b7aacfe89a2686ad7b7a63bb3c38a725e3a34ebbd89cf1bfb16eb74de8e96b51",
+      "audit_sha256": "7f86f52f906ea4a3e60ff074a367e4e691eb3c5fcc12667e51c5361d35316d6d",
+      "audit_status": "passed",
+      "return_pct": 76.87702901076565,
+      "drawdown_pct": 12.696268969082025,
+      "trades": 522,
+      "active_days": 131,
+      "trades_per_21_sessions": 70.26923076923077,
+      "strategy_counts": {
+        "KALCB": 354,
+        "OLR": 168
+      },
+      "unique_blocked_orders": 80,
+      "unique_resized_orders": 55
+    },
+    "combined_no_upward_compounding": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\combined_no_upward_compounding",
+      "result_sha256": "63bd7fa39339ff94068958dd65ccf3cc0e01a9cfa4c68bf614a1973a48bb41f5",
+      "audit_sha256": "5b4fdfe90fbeb818ca8133d2945b4ea44eabc603497f79cab35c594b7ee4b8bc",
+      "audit_status": "passed",
+      "return_pct": 66.78944704895606,
+      "drawdown_pct": 10.1521475160107,
+      "trades": 520,
+      "active_days": 131,
+      "trades_per_21_sessions": 70.0,
+      "strategy_counts": {
+        "KALCB": 353,
+        "OLR": 167
+      },
+      "unique_blocked_orders": 86,
+      "unique_resized_orders": 60
+    },
+    "cost": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\qualified\\active_block_duplicates\\cost",
+      "result_sha256": "c0baf316ac2c17fbc574548fad07f8fe4c10fc2cf5633f44f3137dca574b049d",
+      "audit_sha256": "8a41513b0957272ccd846dd601abf28fe4af4c708a75de2772f5d18559707d93",
+      "audit_status": "passed",
+      "return_pct": 87.8833748678989,
+      "drawdown_pct": 12.06089563524386,
+      "trades": 522,
+      "active_days": 131,
+      "trades_per_21_sessions": 70.26923076923077,
+      "strategy_counts": {
+        "KALCB": 353,
+        "OLR": 169
+      },
+      "unique_blocked_orders": 93,
+      "unique_resized_orders": 74
+    }
+  },
+  "replay_command": "python -B -u \"E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\inputs\\files\\scripts\\portfolio_synergy_study.py\" replay --study \"E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_reoptimisation_20261007\\finalist_ablation\\study.json\" --recipe active_block_duplicates --scenario baseline --output <new-output-directory> --full-audit"
+}

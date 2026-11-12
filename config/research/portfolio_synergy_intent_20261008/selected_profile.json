@@ -1,0 +1,221 @@
+{
+  "version": "portfolio-intent-research-profile-v1",
+  "status": "research_selected_full_native_audits_passed",
+  "scope": "reused_development_only",
+  "live_deployment_enabled": false,
+  "independent_performance_established": false,
+  "completion_requires_future_sessions": false,
+  "recipe": "native_kalcb_olr20_sector2",
+  "settings": {
+    "policy": {
+      "max_gross_notional": 200000000,
+      "max_symbol_notional": 100000000.0,
+      "max_sector_notional": 200000000,
+      "notional_cap_mode": "equity_scaled",
+      "notional_cap_reference_equity": 100000000,
+      "funding_mode": "native_buying_power",
+      "same_symbol_policy": "aggregate",
+      "strategy_priority": [
+        "KALCB",
+        "OLR"
+      ]
+    },
+    "quality": false,
+    "decision_rank": false,
+    "allocation": {
+      "olr_budget_fraction": 0.2,
+      "kalcb_sizing_fraction": 2.0,
+      "olr_sizing_fraction": 0.2,
+      "preserve_kalcb_submission": true
+    }
+  },
+  "initial_equity_krw": 100000000,
+  "evaluation_window": {
+    "start": "2025-08-07",
+    "end": "2026-03-31"
+  },
+  "source_generation_hash": "06d7b60d734418366caab88158a3fbbcfa8848796a8309151943f7909abe4527",
+  "study": {
+    "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\study.json",
+    "sha256": "b2006864f9a82da5e553acda92496725e818f618f0015ff5e7663f634e60768b"
+  },
+  "manifest": {
+    "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\inputs\\manifest.json",
+    "sha256": "36ad0d0e2aeed5da73ad73f4ac9bebc01b08ce08de9f7901a892af90b03edeaa"
+  },
+  "registration": {
+    "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\registration.json",
+    "sha256": "e33a2c0b4bdc0dcd06312ccab30122dad190b84c54f97113d7550058e4f3eb2f"
+  },
+  "selection": {
+    "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\finalist.json",
+    "sha256": "12711ae6b623343bf13211318519abad915088f920753c1ce0fa48a72544f935"
+  },
+  "reference_challenge": null,
+  "prior_study": {
+    "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v5\\study.json",
+    "sha256": "f546951689f517443df4ba4f03815310c781819882ea0952b8ff7d871aaadb69",
+    "finalist_sha256": "abffe514a439c9947cb744bf1ca02007204fc26ab92f0e991689b08e0e894c36"
+  },
+  "qualified_cases": {
+    "baseline": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_baseline",
+      "evidence": {
+        "result.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_baseline\\result.json",
+          "sha256": "343a5b66d8a0b38c201b059bf1c1641d387ccb8e1e1f468936247eb55b310d1c"
+        },
+        "execution_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_baseline\\execution_audit.json",
+          "sha256": "35ed4f9c27289d0c039b5f56e82ba38fda34756e4b9379ac62dd16ef07aaa6ea"
+        },
+        "completion.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_baseline\\completion.json",
+          "sha256": "1d98d63b411dded652c6c37e798ebd08aeba173f9a3adf0a5780dc2276ffd53c"
+        },
+        "request.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_baseline\\request.json",
+          "sha256": "63f861c6a562319642e4d0c068d191c993a2e5768f11af035ad99d9beafb6d7c"
+        },
+        "allocation_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_baseline\\allocation_audit.json",
+          "sha256": "848864e6828d32dbf8750089a637cfef202f1cdd8649c2ce0aef18fb921cbbbb"
+        }
+      },
+      "metrics": {
+        "return_pct": 128.94006304792276,
+        "drawdown_pct": 9.119176621286734,
+        "trades": 529,
+        "active_days": 132,
+        "strategy_counts": {
+          "KALCB": 365,
+          "OLR": 164
+        },
+        "trades_per_21_sessions": 71.21153846153847
+      }
+    },
+    "combined": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_combined",
+      "evidence": {
+        "result.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_combined\\result.json",
+          "sha256": "49fe116c6e43cdac4ede8434e059da7785131469755ed5211a5d1219e62a674e"
+        },
+        "execution_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_combined\\execution_audit.json",
+          "sha256": "1f1d23b5b13736f0f60e5054cd66c12dc876dac145c4af240fd2e5a5906a84fa"
+        },
+        "completion.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_combined\\completion.json",
+          "sha256": "f4bbdcff0f139fe116b4f1c1a0ba3c5c269d73f27af5e7ab85f5fb4b4e0d88fa"
+        },
+        "request.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_combined\\request.json",
+          "sha256": "18d127717b7834b89bfb9deed16fb63bf170320585aa62bb804c4655e2c0b91b"
+        },
+        "allocation_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_combined\\allocation_audit.json",
+          "sha256": "d81b0fd339d003304d1b07c1a3d0910ae49dd29e4bba4865b712c4cf2b4ac599"
+        }
+      },
+      "metrics": {
+        "return_pct": 78.14924608918585,
+        "drawdown_pct": 10.80992764497532,
+        "trades": 531,
+        "active_days": 132,
+        "strategy_counts": {
+          "KALCB": 367,
+          "OLR": 164
+        },
+        "trades_per_21_sessions": 71.48076923076923
+      }
+    },
+    "cost": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_cost",
+      "evidence": {
+        "result.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_cost\\result.json",
+          "sha256": "b97f85eeba7fdbab6a8b5d9cf6a2209489f3d55a8e1d8b7586f37179bd9ca1df"
+        },
+        "execution_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_cost\\execution_audit.json",
+          "sha256": "50d1487867401c0020be1398bd866fb092a68b2eab25b6bd167959f523b95abb"
+        },
+        "completion.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_cost\\completion.json",
+          "sha256": "543c6235ebcd40be3282809624a0fd6a88e1be42674083caaf75b4905f774b4a"
+        },
+        "request.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_cost\\request.json",
+          "sha256": "ace90df21fd430653c30da89983dc182e3928750cd32d98086fb97687481a968"
+        },
+        "allocation_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_cost\\allocation_audit.json",
+          "sha256": "06067ae05602e35e88096fe7384f830a9031b3086235a60e2b8fdac1742003ad"
+        }
+      },
+      "metrics": {
+        "return_pct": 94.16682742214242,
+        "drawdown_pct": 10.536276288855902,
+        "trades": 528,
+        "active_days": 132,
+        "strategy_counts": {
+          "KALCB": 363,
+          "OLR": 165
+        },
+        "trades_per_21_sessions": 71.07692307692308
+      }
+    },
+    "participation": {
+      "output": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_participation",
+      "evidence": {
+        "result.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_participation\\result.json",
+          "sha256": "d714315349f194eef65b77cbe7d44338d2523959839c026b73fb3809a484e2cb"
+        },
+        "execution_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_participation\\execution_audit.json",
+          "sha256": "55563d8515dc05d792bafcbe304b1068a3a73c650241c6383790a5e7907e7644"
+        },
+        "completion.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_participation\\completion.json",
+          "sha256": "c19cbfb62f6f5fb39e266e1d0b388736c8f03db03336356b1011215ca4ec0a1d"
+        },
+        "request.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_participation\\request.json",
+          "sha256": "722fc7af733ae7adb2ccbc5f09bb1e9e862a60ff600a36c2d9b518c823e2705b"
+        },
+        "allocation_audit.json": {
+          "path": "E:\\CodexResearch\\k_stock_trader\\portfolio_synergy_allocation_20261008\\runtime_v6\\qualified\\native_kalcb_olr20_sector2_participation\\allocation_audit.json",
+          "sha256": "17817cf0c605b3a8518a6a470c7f221a6fd12f51426548ce94be099d45d1d5e5"
+        }
+      },
+      "metrics": {
+        "return_pct": 97.94029914627642,
+        "drawdown_pct": 8.851942364891183,
+        "trades": 526,
+        "active_days": 132,
+        "strategy_counts": {
+          "KALCB": 367,
+          "OLR": 159
+        },
+        "trades_per_21_sessions": 70.8076923076923
+      }
+    }
+  },
+  "selection_rule": {
+    "scope": "reused_development_only",
+    "baseline_max_dd_pct": 11.0,
+    "combined_max_dd_pct": 12.5,
+    "frequency_floor": "at least native KALCB baseline and stressed trade frequency",
+    "return_floor": "beat every feasible registered standalone sizing reference in each scenario",
+    "objective": "highest combined-stress return among risk-feasible non-dominated portfolios",
+    "near_return_band_pct_points": 1.0,
+    "tie_break": "within 1 percentage point of top stressed return, prefer higher minimum trade count, then lower maximum DD",
+    "qualification": "repeat finalist baseline/combined with full independent source and execution qualification",
+    "independent_validation": false,
+    "live_activation": false
+  },
+  "risk_interpretation": "Entry exposure budgets and empirical development drawdown gates; not guaranteed loss limits.",
+  "operational_scope": "Native research replay. Broker/live parity has not been established for this allocator."
+}

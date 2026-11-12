@@ -34,7 +34,8 @@ from strategy_kalcb.models import EntryType, KALCBDailyCandidate, KALCBDailySnap
 def test_kalcb_synthetic_backtest_runs_through_shared_core():
     result = run_kalcb_backtest({"capability_level": "synthetic"}, {})
 
-    assert result.metrics["total_trades"] >= 1
+    assert len(result.replay_result.broker.fills) >= 1
+    assert result.metrics["end_open_position_count"] >= 1
     assert result.metrics["same_bar_fill_count"] == 0
     assert result.metrics["strategy_core_version"] == KALCB_CORE_VERSION
     assert result.metrics["live_parity_fill_timing"] == "next_5m_open"
@@ -84,7 +85,8 @@ def test_kalcb_frontier_shadows_nonselected_symbols_without_breaking_ws_cap():
     assert result.metrics["active_symbol_max"] == 1
     assert result.metrics["frontier_symbol_max"] == 2
     assert result.metrics["selected_universe_fraction"] <= result.metrics["frontier_universe_fraction"]
-    assert result.metrics["frontier_shadow_nonselected_trade_count"] >= 1
+    # The short fixture has no executable exit: terminal marks cannot fabricate trades.
+    assert result.metrics["frontier_shadow_nonselected_trade_count"] == 0
     assert result.metrics["frontier_rotation_promotion_count"] == 0
 
 
@@ -285,8 +287,8 @@ def test_kalcb_replay_snapshot_research_excludes_trade_date_daily_rows(tmp_path)
     )
 
     candidate = snapshot.candidates[0]
-    assert candidate.metadata["prior_day_date"] == (trade_date - timedelta(days=1)).isoformat()
-    assert candidate.metadata["research_as_of_date"] == (trade_date - timedelta(days=1)).isoformat()
+    assert candidate.metadata["prior_day_date"] == "2026-01-02"
+    assert candidate.metadata["research_as_of_date"] == "2026-01-02"
     assert candidate.metadata["research_lookahead_policy"] == "strict_prior_daily_rows_only"
     assert candidate.prior_day_close != 54_000
     assert snapshot.source_fingerprint == "unit-full-replay-source"

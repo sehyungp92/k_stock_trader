@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from backtests.core.input_manifest import frozen_research_loader, parquet_input, read_input_bytes
+
+import hashlib
+from io import BytesIO
+
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -49,6 +54,7 @@ class KALCBReplayWindow:
     holdout_start: date
 
 
+@frozen_research_loader
 def load_kalcb_real_replay_bundle(config: dict[str, Any] | None = None, mutations: dict[str, Any] | None = None) -> EventReplayBundle:
     raw_config = dict(config or {})
     raw_mutations = dict(mutations or {})
@@ -292,7 +298,7 @@ def _resolve_symbols(
             if not maybe_path.exists() and not maybe_path.is_absolute():
                 maybe_path = Path("config") / raw
             if maybe_path.exists() and maybe_path.suffix.lower() in {".yaml", ".yml"}:
-                payload = yaml.safe_load(maybe_path.read_text(encoding="utf-8")) or {}
+                payload = yaml.safe_load(read_input_bytes(maybe_path).decode("utf-8")) or {}
                 values = (payload.get("symbols") or payload.get("universe")) if isinstance(payload, dict) else payload
                 requested = [str(item).zfill(6) for item in (values or [])]
             elif raw.endswith((".yaml", ".yml")):
@@ -341,6 +347,7 @@ def _resolve_replay_window(
     cache_key = stable_signature(
         {
             "data_root": str(data_root),
+            "input_manifest": fingerprint_paths(path for symbol in symbols for path in _intraday_paths_for_symbol(data_root, symbol, timeframe, data_snapshot_end=data_snapshot_end)),
             "timeframe": timeframe,
             "symbols": symbols,
             "holdout_days": int(config.get("holdout_days", 21)),
@@ -358,7 +365,7 @@ def _resolve_replay_window(
                 timeframe,
                 data_snapshot_end=data_snapshot_end,
             ):
-                frame = pd.read_parquet(path, columns=["timestamp"])
+                frame = pd.read_parquet(parquet_input(path), columns=["timestamp"])
                 if frame.empty:
                     continue
                 min_date = frame["timestamp"].min().date()
@@ -367,6 +374,10 @@ def _resolve_replay_window(
                 latest = max_date if latest is None or max_date > latest else latest
         if earliest is None or latest is None:
             raise FileNotFoundError(f"No {timeframe} parquet data found under {data_root}")
+        from backtests.core.shared_market_inputs import market_input_contract
+        contract = market_input_contract()
+        if contract:
+            latest = min(latest, date.fromisoformat(contract["data_end"]))
         holdout_start = latest - timedelta(days=int(config.get("holdout_days", 21)))
         cached = KALCBReplayWindow(earliest, latest, earliest, holdout_start - timedelta(days=1), holdout_start)
         _WINDOW_CACHE[cache_key] = cached
@@ -455,6 +466,10 @@ def _intraday_paths_for_symbol(
     *,
     data_snapshot_end: date | None = None,
 ) -> list[Path]:
+    from backtests.core.shared_market_inputs import selected_intraday_paths
+    selected = selected_intraday_paths(data_root, symbol, timeframe)
+    if selected is not None:
+        return selected
     paths = sorted(Path(data_root).glob(f"{symbol}/{symbol}_{timeframe}_*.parquet"))
     if data_snapshot_end is None:
         return paths
@@ -487,7 +502,7 @@ def _resolve_config_path(raw: str) -> Path:
 def _load_sector_map_from_path(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
-    payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    payload = yaml.safe_load(read_input_bytes(path).decode("utf-8")) or {}
     if not isinstance(payload, dict):
         return {}
     raw = payload.get("sector_map", payload)
@@ -502,9 +517,12 @@ def _load_symbol_frame(
     *,
     data_snapshot_end: date | None = None,
 ) -> pd.DataFrame:
+    source_paths = _intraday_paths_for_symbol(data_root, symbol, timeframe, data_snapshot_end=data_snapshot_end)
+    source_identity = fingerprint_paths(source_paths, root=data_root)
     key = stable_signature(
         {
             "data_root": str(data_root),
+            "input_manifest": source_identity,
             "symbol": symbol,
             "timeframe": timeframe,
             "end": end.isoformat(),
@@ -521,7 +539,7 @@ def _load_symbol_frame(
         timeframe,
         data_snapshot_end=data_snapshot_end,
     ):
-        frame = pd.read_parquet(path, columns=["timestamp", "open", "high", "low", "close", "volume"])
+        frame = pd.read_parquet(parquet_input(path), columns=["timestamp", "open", "high", "low", "close", "volume"])
         frame = frame[frame["timestamp"].dt.date <= end]
         if not frame.empty:
             frames.append(frame)
@@ -531,12 +549,14 @@ def _load_symbol_frame(
         out = pd.concat(frames, ignore_index=True)
         out = out.drop_duplicates(subset=["timestamp"], keep="last")
         out = out.sort_values("timestamp").reset_index(drop=True)
+    if fingerprint_paths(source_paths, root=data_root) != source_identity:
+        raise ValueError("Research input changed while loading")
     _FRAME_CACHE[key] = out
     return out
 
 
 def _daily_rows_from_frame(symbol: str, frame: pd.DataFrame) -> list[dict[str, Any]]:
-    key = stable_signature({"symbol": symbol, "rows": len(frame), "first": _frame_boundary(frame, "min"), "last": _frame_boundary(frame, "max")})
+    key = stable_signature({"symbol": symbol, "content": hashlib.sha256(pd.util.hash_pandas_object(frame, index=True).values.tobytes()).hexdigest()})
     cached = _DAILY_ROWS_CACHE.get(key)
     if cached is not None:
         return cached
@@ -651,8 +671,6 @@ def _events_from_frames(
         for row in sliced.itertuples(index=False):
             ts = row.timestamp.to_pydatetime() if hasattr(row.timestamp, "to_pydatetime") else row.timestamp
             day = ts.date()
-            if symbol not in active_by_date.get(day, set()):
-                continue
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=KST)
             bar = MarketBar(

@@ -183,6 +183,75 @@ def consolidate_signals(candidates: List[Candidate]) -> List[Candidate]:
     return consolidated
 
 
+async def _reconcile_pending_entry_allocations(oms, position_manager, today):
+    """Continue quantity reconciliation after the entry window and cancel request."""
+    positions = await oms.get_all_positions()
+    if positions is None:
+        return
+    for symbol in set(position_manager.pending_orders) | set(position_manager.positions):
+        remote = positions.get(symbol)
+        allocation = remote.allocations.get(STRATEGY_ID) if remote else None
+        if allocation is None or allocation.qty <= 0:
+            continue
+        local = position_manager.get_position(symbol)
+        if local is None:
+            pending = position_manager.pending_orders.get(symbol)
+            if pending:
+                position_manager.add_position(PCIMPosition(symbol=symbol, entry_date=today,
+                    entry_price=allocation.cost_basis, qty=allocation.qty, atr_at_entry=pending["atr"]))
+        elif allocation.qty > local.remaining_qty:
+            local.qty += allocation.qty - local.remaining_qty
+            local.remaining_qty = allocation.qty
+            local.status = "OPEN"
+            if allocation.cost_basis > 0:
+                local.entry_price = allocation.cost_basis
+
+
+async def _record_pcim_exit_executions(oms, position_manager, instr):
+    if instr is None:
+        return
+    reader = getattr(oms, "get_execution_feedback", None)
+    if not callable(reader):
+        logger.warning("PCIM realized telemetry unavailable: OMS execution feedback is missing")
+        return
+    consumer_id = "PCIM:realized-executions"
+    cursor = instr.execution_cursor(consumer_id)
+    while True:
+        rows = await reader(STRATEGY_ID, cursor)
+        for row in rows:
+            if row.get("kind") == "order" and row.get("side") == "BUY":
+                pending = position_manager.pending_orders.get(row["symbol"])
+                detail = row.get("metadata") or {}
+                if (pending and detail.get("intent_id") == pending.get("intent_id")
+                        and row.get("status") in {"FILLED", "CANCELLED", "CANCELED", "REJECTED", "EXPIRED"}):
+                    position_manager.clear_pending(row["symbol"])
+            if row.get("kind") == "fill" and row.get("side") == "SELL":
+                pos = position_manager.get_position(row["symbol"])
+                meta = row.get("metadata") or {}
+                executed_day = datetime.fromisoformat(row["timestamp"]).date()
+                if pos and executed_day >= pos.entry_date and meta.get("price_provenance") in {"execution", "broker_cumulative_vwap_delta"}:
+                    trade_id = f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}"
+                    before = meta.get("previous_allocation") or {}
+                    if before.get("qty") and before.get("cost_basis"):
+                        instr.on_position_reconciled(trade_id, int(before["qty"]), float(before["cost_basis"]), str(meta.get("execution_id") or meta["kis_exec_id"]))
+                    instr.on_exit_fill(
+                        trade_id=trade_id,
+                        exit_price=float(row["price"]), exit_reason=str(row.get("reason") or "oms_execution"),
+                        exited_qty=int(row["qty"]), execution_id=str(meta.get("execution_id") or meta["kis_exec_id"]),
+                        fees_paid=None,  # Entry/exit total costs are not supplied by this feed.
+                        consumer_id=consumer_id, consumer_sequence=int(row["sequence"]),
+                    )
+                    if instr.execution_cursor(consumer_id) < int(row["sequence"]):
+                        raise RuntimeError("PCIM execution telemetry was not durably committed")
+                else:
+                    raise RuntimeError("PCIM exit needs trade/observed-price reconciliation before telemetry acknowledgment")
+            instr.advance_execution_cursor(consumer_id, int(row["sequence"]))
+            position_manager.execution_feedback_cursor = int(row["sequence"])
+        if len(rows) < 500:
+            break
+        cursor = instr.execution_cursor(consumer_id)
+
+
 async def _cancel_and_handle_partial_fills(
     entry_submitted: Dict[str, int],
     position_manager: PositionManager,
@@ -215,10 +284,15 @@ async def _cancel_and_handle_partial_fills(
         oms_pos = await oms.get_position(symbol)
         actual_qty = oms_pos.get_allocation(STRATEGY_ID) if oms_pos else pos.remaining_qty
 
-        if actual_qty < intended_qty:
-            # Update position to reflect actual fill
-            pos.qty = actual_qty
+        if actual_qty > 0:
+            acquired_delta = max(0, actual_qty - pos.remaining_qty)
+            pos.qty += acquired_delta
             pos.remaining_qty = actual_qty
+            allocation = getattr(oms_pos, "allocations", {}).get(STRATEGY_ID) if oms_pos else None
+            if allocation is not None and allocation.cost_basis > 0:
+                pos.entry_price = allocation.cost_basis
+
+        if 0 < actual_qty < intended_qty:
 
             fill_pct = actual_qty / intended_qty if intended_qty > 0 else 0
             logger.info(f"{symbol}: Partial fill {fill_pct:.0%} ({actual_qty}/{intended_qty})")
@@ -792,7 +866,14 @@ async def run_pcim():
                 alloc_obj = oms_pos.allocations.get(STRATEGY_ID) if oms_pos else None
                 if alloc_qty > 0:
                     _fill_confirmed_at = _time.time()
-                    pending = position_manager.clear_pending(symbol)
+                    pending = position_manager.pending_orders.get(symbol)
+                    current = position_manager.get_position(symbol)
+                    if pending and current is not None and current.status == "OPEN":
+                        current.qty += max(0, alloc_qty - current.remaining_qty)
+                        current.remaining_qty = alloc_qty
+                        if alloc_obj and alloc_obj.cost_basis > 0:
+                            current.entry_price = alloc_obj.cost_basis
+                        continue
                     if pending:
                         avg_price = alloc_obj.cost_basis if alloc_obj else 0.0
                         position_manager.add_position(PCIMPosition(
@@ -1126,6 +1207,8 @@ async def run_pcim():
         # PENDING EXIT CONFIRMATION
         # =================================================================
         if now.time() >= time(10, 0):
+            await _reconcile_pending_entry_allocations(oms, position_manager, today)
+            await _record_pcim_exit_executions(oms, position_manager, instr)
             for pos in list(position_manager.get_open_positions()):
                 if not pos.pending_exit_type:
                     continue
@@ -1145,11 +1228,7 @@ async def run_pcim():
                                 min_adverse_price=_mae_prices.pop(pos.symbol, float('inf')),
                             )
                             exit_reason = "stop" if exit_type == "STOP" else "time_exit"
-                            instr.on_exit_fill(
-                                trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                exit_price=pos.pending_exit_price, exit_reason=exit_reason,
-                                mfe_mae_context=mfe_mae,
-                            )
+                            pass  # Execution telemetry is emitted from OMS feedback.
                         else:
                             _mfe_prices.pop(pos.symbol, None)
                             _mae_prices.pop(pos.symbol, None)
@@ -1175,11 +1254,7 @@ async def run_pcim():
                                     max_fav_price=_mfe_prices.get(pos.symbol, 0),
                                     min_adverse_price=_mae_prices.get(pos.symbol, float('inf')),
                                 )
-                                instr.on_exit_fill(
-                                    trade_id=f"PCIM:{pos.symbol}:{pos.entry_date.strftime('%Y%m%d')}",
-                                    exit_price=pos.pending_exit_price, exit_reason="take_profit",
-                                    mfe_mae_context=mfe_mae,
-                                )
+                                pass  # Execution telemetry is emitted from OMS feedback.
                             pos.tp_done = True
                             position_manager.reduce_position(pos.symbol, actual_sold)
                             position_manager.clear_pending_exit(pos.symbol)

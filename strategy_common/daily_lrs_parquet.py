@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backtests.core.input_manifest import parquet_input, read_input_bytes
+
 import argparse
 import hashlib
 import json
@@ -150,7 +152,7 @@ def load_sector_map(root: str | Path) -> dict[str, str]:
     path = Path(root) / "tables" / "sector_map.parquet"
     if not path.exists():
         return {}
-    frame = pd.read_parquet(path)
+    frame = pd.read_parquet(parquet_input(path))
     if frame.empty:
         return {}
     return {str(row.ticker).zfill(6): str(row.sector) for row in frame.itertuples(index=False)}
@@ -165,7 +167,7 @@ def available_daily_symbols(root: str | Path) -> list[str]:
 
 def load_manifest(root: str | Path) -> dict[str, Any]:
     path = Path(root) / "manifest.json"
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    return json.loads(read_input_bytes(path).decode("utf-8")) if path.exists() else {}
 
 
 def _read_table(
@@ -290,10 +292,10 @@ def _load_group_or_table(root: str | Path, table: str, key_col: str, key: str | 
         key_text = str(key).zfill(6) if key_col == "ticker" else str(key)
         files = sorted((base / table / key_text).glob(f"{key_text}_{file_label}_*.parquet"))
         if files:
-            return pd.concat((pd.read_parquet(path) for path in files), ignore_index=True)
+            return pd.concat((pd.read_parquet(parquet_input(path)) for path in files), ignore_index=True)
         return pd.DataFrame(columns=TABLE_COLUMNS[table])
     path = base / "tables" / f"{table}.parquet"
-    return pd.read_parquet(path) if path.exists() else pd.DataFrame(columns=TABLE_COLUMNS[table])
+    return pd.read_parquet(parquet_input(path)) if path.exists() else pd.DataFrame(columns=TABLE_COLUMNS[table])
 
 
 def _filter_dates(frame: pd.DataFrame, start: date | None, end: date | None) -> pd.DataFrame:

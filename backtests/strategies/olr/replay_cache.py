@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from backtests.core.input_manifest import frozen_input_loader, frozen_research_loader, parquet_input, read_input_bytes
+
+from dataclasses import asdict, replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from backtests.auto.shared.cache_keys import build_cache_key, stable_signature
+from backtests.auto.shared.cache_keys import build_cache_key, stable_signature, fingerprint_tree, fingerprint_paths
 from backtests.core.replay_bundle import EventReplayBundle
+from backtests.engine.replay import candidate_management_bars
 from strategy_common.market import MarketBar
 from strategy_common.sector_daily import SECTOR_DAILY_VERSION
 from strategy_olr.artifact_store import OLRArtifactStore
@@ -56,6 +59,7 @@ _EXECUTION_ONLY_CONFIG_FIELDS = {
     "exit_mode",
     "allocation_mode",
     "target_gross_exposure",
+    "allocation_equity_cap_krw",
     "max_position_pct",
     "rank_decay",
     "min_selected",
@@ -73,6 +77,7 @@ _EXECUTION_ONLY_CONFIG_FIELDS = {
 }
 
 
+@frozen_research_loader
 def load_olr_real_replay_bundle(
     config: dict[str, Any] | None = None,
     mutations: dict[str, Any] | None = None,
@@ -102,7 +107,7 @@ def load_olr_real_replay_bundle(
             "artifact_root": str(raw_config.get("artifact_root", "data/strategy/olr")),
             "core_version": OLR_CORE_VERSION,
             "sector_daily_version": SECTOR_DAILY_VERSION,
-            "bar_scope": "stage2_candidates_plus_train_only_auction_exit_recovery",
+            "bar_scope": "stage2_candidates_and_active_management_v2",
         },
     )
     cached = _BUNDLE_CACHE.get(bundle_key)
@@ -185,6 +190,31 @@ def warm_olr_real_replay_cache(config: dict[str, Any] | None = None, mutations: 
     load_olr_real_replay_bundle(config, mutations)
 
 
+@frozen_research_loader
+def load_olr_declared_window_bundle(config, mutations=None):
+    """Explicit native-study window; never apply the optimizer's implicit split."""
+    raw, mutations = dict(config), dict(mutations or {})
+    window = raw.get("date_range") or {}
+    if set(window) != {"start", "end"} or not all(window.values()):
+        raise ValueError("Declared OLR research requires explicit start and end")
+    cfg = OLRConfig.from_mapping(raw, mutations)
+    dataset = prepare_research_sweep_dataset(raw, holdout_days=int(raw.get("holdout_days", 42)),
+        expected_universe_size=int(cfg.complete_universe_size or DEFAULT_EXPECTED_UNIVERSE_SIZE), include_holdout=True)
+    if dataset.train_start.isoformat() != window["start"] or dataset.train_end.isoformat() != window["end"]:
+        raise ValueError("OLR builder changed the declared study window")
+    snapshots = _load_or_build_stage2_snapshots(dataset, cfg, mutations, list(dataset.trading_dates),
+        _stage1_config_hash(cfg, mutations), _candidate_config_hash(cfg, mutations), raw)
+    # The native account supplies the full common management feed. These rows
+    # identify source-bound candidates only; future outcome labels are not needed.
+    bars = tuple(bar for key in sorted(dataset.bars_by_key) for bar in dataset.bars_by_key[key])
+    bundle = compile_olr_replay_bundle(bars, snapshots, source_fingerprint=dataset.source_fingerprint,
+                                     data_root=dataset.data_root, config=raw)
+    bundle.metadata.update(capability_level="real_replay", declared_window=window,
+                           candidate_basis="current_research_builders")
+    return bundle
+
+
+@frozen_input_loader
 def warm_olr_stage1_replay_cache(config: dict[str, Any] | None = None, mutations: dict[str, Any] | None = None) -> None:
     raw_config = dict(config or {})
     raw_mutations = dict(mutations or {})
@@ -205,8 +235,16 @@ def olr_candidate_bundle_changes(mutations: dict[str, Any] | None) -> bool:
 
 
 def _load_dataset(training_config: dict[str, Any], cfg: OLRConfig) -> OLRResearchSweepDataset:
+    def identity():
+        return stable_signature([
+            fingerprint_tree(Path(training_config.get("data_root", "data/kis_intraday_parquet"))),
+            fingerprint_tree(Path(training_config.get("daily_data_root", "data/krx_daily_parquet"))),
+            fingerprint_paths([Path("kis_core/data/krx_holidays.yaml"), Path(__file__), Path("strategy_olr/research.py")]),
+        ])
+    manifest = identity()
     key = build_cache_key(
         "olr.research_dataset",
+        source_fingerprint=manifest,
         extra={
             "config": _dataset_cache_config(training_config),
             "expected_universe_size": int(cfg.complete_universe_size or DEFAULT_EXPECTED_UNIVERSE_SIZE),
@@ -214,13 +252,40 @@ def _load_dataset(training_config: dict[str, Any], cfg: OLRConfig) -> OLRResearc
     )
     cached = _DATASET_CACHE.get(key)
     if cached is not None:
-        return cached
+        return replace(cached, config=dict(training_config))
+    from backtests.core.input_manifest import active_manifest
+    generation = active_manifest()
+    disk = None
+    if generation and training_config.get("corrective_study_hash"):
+        disk = generation.path.parent / "derived_artifacts" / "olr_datasets" / (key + ".pkl")
+        import hashlib
+        import pickle
+        if disk.exists() and disk.with_suffix(".sha256").exists():
+            with disk.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                if digest != disk.with_suffix(".sha256").read_text(encoding="ascii"):
+                    raise ValueError("OLR prepared dataset bytes changed")
+                stream.seek(0)
+                dataset = pickle.load(stream)
+            _DATASET_CACHE[key] = dataset
+            return replace(dataset, config=dict(training_config))
     dataset = prepare_research_sweep_dataset(
         training_config,
         holdout_days=int(training_config.get("holdout_days", 42) or 42),
         expected_universe_size=int(cfg.complete_universe_size or DEFAULT_EXPECTED_UNIVERSE_SIZE),
         include_holdout=False,
     )
+    if identity() != manifest:
+        raise ValueError("Research inputs changed while loading")
+    if disk is not None:
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        temporary = disk.with_suffix(".tmp")
+        with temporary.open("wb") as stream:
+            pickle.dump(dataset, stream, protocol=pickle.HIGHEST_PROTOCOL)
+        with temporary.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        temporary.replace(disk)
+        disk.with_suffix(".sha256").write_text(digest, encoding="ascii")
     _DATASET_CACHE[key] = dataset
     return dataset
 
@@ -242,6 +307,7 @@ def _dataset_cache_config(config: dict[str, Any]) -> dict[str, Any]:
             "train_start",
             "train_end",
             "initial_equity",
+            "require_complete_feature_prefix",
         )
         if key in config
     }
@@ -274,6 +340,12 @@ def _load_or_build_stage2_snapshots(
     if missing:
         stage1 = _stage1_snapshots(dataset, mutations, stage1_config_hash, raw_config)
         contexts = _afternoon_contexts(dataset, stage1, stage1_config_hash)
+        exclusions = []
+        if cfg.require_complete_feature_prefix:
+            from datetime import time
+            from strategy_common.source_quality import complete_feature_bars
+            _, exclusions = complete_feature_bars({(day, symbol): dataset.bars_by_key.get((day, symbol), ())
+                for day in dataset.trading_dates for symbol in dataset.requested_symbols}, time(14, 30))
         for trade_date in eligible_dates:
             if trade_date in snapshots:
                 continue
@@ -291,6 +363,11 @@ def _load_or_build_stage2_snapshots(
                     "holdout_excluded": True,
                 }
             )
+            if cfg.require_complete_feature_prefix:
+                from strategy_common.source_quality import POLICY
+                selected.metadata.update(feature_prefix_policy=POLICY,
+                    feature_prefix_exclusions=[item.split(":")[0] for item in exclusions
+                                               if item.endswith(":" + trade_date.isoformat())])
             store.save_snapshot(selected)
             snapshots[trade_date] = selected
     return dict(sorted(snapshots.items()))
@@ -417,21 +494,14 @@ def _filtered_training_bars_for_snapshots(
 ) -> tuple[tuple[MarketBar, ...], dict[str, Any]]:
     dates = tuple(sorted(dataset.trading_dates))
     selected_pairs = _all_snapshot_candidate_pairs(snapshots)
-    needed: set[tuple[date, str]] = set()
-    for day, symbol in selected_pairs:
-        needed.add((day, symbol))
-        for followup_day in _official_followup_session_dates(dates, day):
-            needed.add((followup_day, symbol))
-    bars: list[MarketBar] = []
-    for key in sorted(needed):
-        bars.extend(dataset.bars_by_key.get(key, ()))
-    ordered = tuple(sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol)))
+    ordered = candidate_management_bars(dataset.bars_by_key, snapshots, dates)
+    needed = {(bar.timestamp.date(), bar.symbol) for bar in ordered}
     bar_scope = {
         "selected_pairs": [(day.isoformat(), symbol) for day, symbol in sorted(selected_pairs)],
         "needed_pairs": [(day.isoformat(), symbol) for day, symbol in sorted(needed)],
         "bar_count": len(ordered),
         "auction_exit_recovery_sessions": _OFFICIAL_AUCTION_EXIT_RECOVERY_SESSIONS,
-        "scope": "all_stage2_candidates_trade_date_plus_train_only_auction_exit_recovery",
+        "scope": "stage2_candidates_and_active_management_v2",
     }
     return ordered, bar_scope
 

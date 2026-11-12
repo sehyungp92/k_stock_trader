@@ -56,6 +56,7 @@ class OLRSymbolState:
     pending_exit_metadata: dict[str, Any] = field(default_factory=dict)
     session_bars: list[Any] = field(default_factory=list)
     position: OLRPositionState | None = None
+    entry_history: dict[str, OLRPositionState] = field(default_factory=dict)
     entry_attempted: bool = False
     exit_attempted_dates: set[date] = field(default_factory=set)
     last_decision_code: str = ""
@@ -64,8 +65,6 @@ class OLRSymbolState:
     def reset_for_session(self, session_date: date, candidate: OLRDailyCandidate | None) -> None:
         self.session_date = session_date
         self.candidate = candidate
-        self.pending_entry_order_id = ""
-        self.pending_entry_metadata.clear()
         self.session_bars.clear()
         self.last_decision_code = ""
         self.last_decision_details.clear()
@@ -81,6 +80,7 @@ class OLRState:
     source_fingerprint: str = ""
     session_date: date | None = None
     order_roles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    order_history: dict[str, dict[str, Any]] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
 
     def symbol_state(self, symbol: str) -> OLRSymbolState:

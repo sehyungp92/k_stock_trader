@@ -1,0 +1,723 @@
+{
+  "version": "portfolio-native-budget-research-profile-v1",
+  "status": "research_selected_full_native_audits_passed",
+  "scope": "reused_development_only",
+  "live_deployment_enabled": false,
+  "independent_performance_established": false,
+  "completion_requires_future_sessions": false,
+  "recipe": "k075_o075_r1_risk20",
+  "settings": {
+    "policy": {
+      "max_gross_notional": 50000000.0,
+      "max_symbol_notional": 25000000.0,
+      "max_sector_notional": 50000000.0,
+      "notional_cap_mode": "equity_scaled",
+      "notional_cap_reference_equity": 25000000,
+      "funding_mode": "native_buying_power",
+      "same_symbol_policy": "aggregate",
+      "strategy_priority": [
+        "KALCB",
+        "OLR"
+      ]
+    },
+    "quality": false,
+    "decision_rank": false,
+    "olr_capacity": {
+      "capacity_joint_allocation": true,
+      "capacity_exit_quantile": 0.5,
+      "capacity_redistribute": true,
+      "capacity_redistribution_evidence": "entry",
+      "capacity_redistribution_max_multiplier": 1.5,
+      "capacity_recycle_liquidity_only": true
+    },
+    "native_budget": {
+      "kalcb_sizing_fraction": 0.75,
+      "olr_fraction": 0.75,
+      "max_kalcb_stop_risk_fraction": 0.02
+    }
+  },
+  "initial_equity_krw": 25000000,
+  "evaluation_window": {
+    "start": "2025-08-07",
+    "end": "2026-03-31"
+  },
+  "source_generation_hash": "bb711f099e59664d6315234292a413f9a38fa817db11e653f8a1fed972b2b49b",
+  "study": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\study.json",
+    "sha256": "b88a0d38c8da13f9ea028966903b7115acbb00efaeaa24a0d3afa98b0bf3a755"
+  },
+  "manifest": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\inputs\\manifest.json",
+    "sha256": "b9429514101945b3444f69ae606f0ad91a41c0e45487558c015d8bd8990efdcf"
+  },
+  "registration": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\registration.json",
+    "sha256": "5c6f8acfe32c22bf70c7ff18688de1a49e53963887e60419b81fba1d45ea993f"
+  },
+  "selection": {
+    "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\finalist.json",
+    "sha256": "b6b3975b87d8f34c45bd1b89bda0831a9e30219fbcff3278957ab6b93de791e6"
+  },
+  "reference_challenge": null,
+  "prior_study": null,
+  "qualified_cases": {
+    "baseline": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline",
+      "evidence": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline\\result.json",
+          "sha256": "83a74ed4915e52ee635c4a26d27a238f33cde378cef0f7e1b08e7759ef4c7a76"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline\\execution_audit.json",
+          "sha256": "3d58b4b552a66dcea71eabb0fb48e8e9a68dc71acd77ceaec5cad762b323b9a1"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline\\completion.json",
+          "sha256": "a16e959cc851774ab5aa0ec583d6bf82e39aeaf9bf775d6b2d3df10899feb1f9"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline\\request.json",
+          "sha256": "dc0e2e76af17b4251f9898d2009c22017ffe96cdd39291181bc602a6ae14271a"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_baseline\\allocation_audit.json",
+          "sha256": "d3070eb6da79252b5335193c054884ace23c28d4cc5c2f98a177d9c40523d485"
+        }
+      },
+      "metrics": {
+        "return_pct": 146.4461583499175,
+        "drawdown_pct": 8.734164703009526,
+        "trades": 524,
+        "active_days": 131,
+        "strategy_counts": {
+          "KALCB": 359,
+          "OLR": 165
+        },
+        "trades_per_21_sessions": 70.53846153846153
+      }
+    },
+    "combined": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined",
+      "evidence": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined\\result.json",
+          "sha256": "78c079e74bc18a9f7b53427531671543c8e2ec586b2db119fd23d5d8fecb2ea8"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined\\execution_audit.json",
+          "sha256": "fa9971910da015629ccb997f2e2754101e606e792a17fbbb2dcaf41ba74bbb8a"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined\\completion.json",
+          "sha256": "1c47392099bd1e0db512096b9ddd7e864a4cc4b5a5e9b437f4129a14912bf79e"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined\\request.json",
+          "sha256": "70c175756f9e93088e3612a9eba26ef5386318415a4c523f44fb0ae9813c77e8"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_combined\\allocation_audit.json",
+          "sha256": "6cbfea96843eed9cac5d6a57201a0741c8dfdc0473e748c5e081f6f8c84fa33a"
+        }
+      },
+      "metrics": {
+        "return_pct": 92.55255157326341,
+        "drawdown_pct": 11.668453665243417,
+        "trades": 523,
+        "active_days": 132,
+        "strategy_counts": {
+          "KALCB": 359,
+          "OLR": 164
+        },
+        "trades_per_21_sessions": 70.40384615384616
+      }
+    },
+    "cost": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_cost",
+      "evidence": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_cost\\result.json",
+          "sha256": "05fe9e430b5eebbc45dc47434660ebe07c4fccc1991147a8ff205c6c250c0c7a"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_cost\\execution_audit.json",
+          "sha256": "9d7949e0c3d447b19803a0452abe44c74cf691c86c1966b91848f8184902640b"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_cost\\completion.json",
+          "sha256": "a69d5c652de06a2c7caecb3aeaf6b52138b22bcb08b326bb641d274a0526eb8f"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_cost\\request.json",
+          "sha256": "0f4e0ab9219a5fac28103c5e68ce33c694d55d62df17138d68954c22215c0d94"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_cost\\allocation_audit.json",
+          "sha256": "c740a704448a19173cbbaad4aeae3b3c2f6dcabc9e2f6509727787652c5b6c40"
+        }
+      },
+      "metrics": {
+        "return_pct": 102.91666259763205,
+        "drawdown_pct": 10.08614633969669,
+        "trades": 518,
+        "active_days": 131,
+        "strategy_counts": {
+          "KALCB": 358,
+          "OLR": 160
+        },
+        "trades_per_21_sessions": 69.73076923076923
+      }
+    },
+    "participation": {
+      "output": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_participation",
+      "evidence": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_participation\\result.json",
+          "sha256": "7862719dc4fc28e08b0c4bfcac8940266f12f368f868224e763f499955c7566a"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_participation\\execution_audit.json",
+          "sha256": "30bebc56b7f9a113787b8ee2748a23df7655c5f254a59d8ee1c33473792e0ef0"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_participation\\completion.json",
+          "sha256": "1442193f4d7e25d4c1935bf5526939047b18c59a3a64b02d41e70fe09aca6e47"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_participation\\request.json",
+          "sha256": "50ca212aaf5d1626f4cfa5c156f882f1ec3f9019249a37d5bed374b6e993939b"
+        },
+        "allocation_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge\\qualified\\k075_o075_r1_risk20_participation\\allocation_audit.json",
+          "sha256": "a2274a7343a3b9f1b87590b92a33b5dceef2688a8093fd2f6285ab608fe955a6"
+        }
+      },
+      "metrics": {
+        "return_pct": 125.96196376142869,
+        "drawdown_pct": 9.64576670845151,
+        "trades": 522,
+        "active_days": 132,
+        "strategy_counts": {
+          "KALCB": 358,
+          "OLR": 164
+        },
+        "trades_per_21_sessions": 70.26923076923077
+      }
+    }
+  },
+  "selection_rule": {
+    "baseline_max_dd_pct": 11.0,
+    "combined_max_dd_pct": 12.5,
+    "frequency_floors": [
+      351,
+      352
+    ],
+    "stress_return_tie_band_pp": 1.0,
+    "rule": "Beat best matched standalone feasible in BOTH risk scenarios in each return; meet native KALCB economic entry frequency; Pareto filter; maximize stressed return; within 1pp prefer minimum scenario frequency, then lower maximum drawdown.",
+    "independent_performance_established": false,
+    "upward_extension": "Only if no base-grid candidate passes or winning K=1 lies on risk-feasible boundary with both scenarios retaining native frequency. Then register K=1.25/1.5/1.75; gates unchanged.",
+    "risk_challenge": "On selected budget only, test aggregate planned KALCB stop-risk caps 2%, 2.5%, 3% of current NAV; same selection gates.",
+    "robustness": "Selected account at 20/22.5/25/27.5/30m; no upward compounding; separate cost/participation; OLR auction adverse15bp and nonfill50%; overnight10/20% gap exposure diagnostics. Stress tests do not establish true auction liquidity or guaranteed losses."
+  },
+  "risk_interpretation": "Entry exposure budgets and empirical development drawdown gates; not guaranteed loss limits.",
+  "operational_scope": "Native research replay. Broker/live parity has not been established for this allocator.",
+  "native_comparison_evidence": {
+    "lineage": {
+      "priority_protocol": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\priority_challenge_protocol.json",
+        "sha256": "0421d5114113ea051b70a6c0d9c6d9c0ee7934ba4a71e8c5dd248d929964c6ef"
+      },
+      "reference_study": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\study.json",
+        "sha256": "3aee73f94bcef4ad8fec87676aced5751389b71a5390bc068537a74012d51359"
+      },
+      "registration": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\risk_challenge\\registration.json",
+        "sha256": "2d0bff3a2472f0a09fb0d4f381e660f7302e594f6805dc257a9d510aa2e789b8"
+      },
+      "study": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\risk_challenge\\study.json",
+        "sha256": "12a092cc6583f51cd442e91cf184e442c897f5ec04d3c071e7930038e818c7ee"
+      },
+      "selection": {
+        "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\risk_challenge\\finalist.json",
+        "sha256": "58c818503acb3fd16c51dfc4e7addc20d3a738fe90eee549104593ff43688d2f"
+      },
+      "earlier_ancestors": [
+        {
+          "registration": {
+            "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\risk_challenge\\registration.json",
+            "sha256": "2d0bff3a2472f0a09fb0d4f381e660f7302e594f6805dc257a9d510aa2e789b8"
+          },
+          "study": {
+            "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\study.json",
+            "sha256": "3aee73f94bcef4ad8fec87676aced5751389b71a5390bc068537a74012d51359"
+          },
+          "selection": {
+            "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\finalist.json",
+            "sha256": "98dd2e5f638b74ca71795173afd7cc864cc5ce9105661a48de4627382df6d430"
+          },
+          "path_hashes": {
+            "baseline": {
+              "trades.json": "1af7500a561b3d5dbdeee81978ac70064a21c8969cd50f95713903e369b5b57c",
+              "daily.json": "a77bf4ea8f0aeef6ffe6e3adb8482884b1b33e7ba5ab90f737429e2716c2191e",
+              "equity.json": "5d783eef415c2e7c0c0d25cb8d00cfe77cdc52192f0f85c42708d190955eeedc"
+            },
+            "combined": {
+              "trades.json": "6fc04863355f6097d78f27daa9dfca63ac8779fde2c0d7eacf04d5ee95be63dd",
+              "daily.json": "321c8809cc35c4c0d38452d53603b1c29d49917632a74f4791d61102e396b241",
+              "equity.json": "3dc1a7c73f1659cecab32cedc282f71966c6c0d177eb8b20c7ac3f1b7deebb89"
+            }
+          }
+        }
+      ]
+    },
+    "bridge": {
+      "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\bridge.json",
+      "sha256": "4448647291e744fd01b4a4ac04f673dd23b54d57f3f98abce98d5e50d8c32268"
+    },
+    "standalone_controls": {
+      "control_k050_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_baseline\\result.json",
+          "sha256": "8cda821a6c7f97d63b26490c36da7046b9d36b865b9e700106787f6cd60df196"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_baseline\\request.json",
+          "sha256": "77db1eecd1ca8609ffdf6b5c955a2f135fcdc8597145ea33586a43bd09354eb4"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_baseline\\execution_audit.json",
+          "sha256": "228d5c79ca2c435fcf3dac931d21e008abd00a33d1012df47ee2b6400ee3ad91"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_baseline\\completion.json",
+          "sha256": "315b3c6847f9eed5a408d5f44420b65aaad103704c6982d246d97566c0de2aaa"
+        }
+      },
+      "control_k050_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_combined\\result.json",
+          "sha256": "edab56f15ec3fa4c1a84565da73e5ff0f77c690a9cf7a24f7c973ae540b5b1ba"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_combined\\request.json",
+          "sha256": "79af23569988b0d0a81cd57528605892bb06f47701c8240571ff95ae22110e18"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_combined\\execution_audit.json",
+          "sha256": "3561156df5346f55ffdfe6fb2e807095e44c76fe4218300fbde644c845bb31d4"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k050_combined\\completion.json",
+          "sha256": "412300e42dd8094360b0db59dc985bb999ba6eef2a99821df87d275017a4622e"
+        }
+      },
+      "control_k075_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_baseline\\result.json",
+          "sha256": "9529f93bb98d7262919ad3e687081dced0b65957f13acd183626b11de10dd327"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_baseline\\request.json",
+          "sha256": "53838769dc66f244156a20274558d25cf567da29df9ea2a387aa0cb6dd5d74ee"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_baseline\\execution_audit.json",
+          "sha256": "7b5ea96ddf74f1d8082b68474bfd86a81564c8a5dab0fc999c0dd0fb6728d803"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_baseline\\completion.json",
+          "sha256": "3bfb8b7c3877aefd8f010f0042abbc4c17d3e5ebb61fedd888d475890743b206"
+        }
+      },
+      "control_k075_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_combined\\result.json",
+          "sha256": "2f3b7966686c7d0ad989ad1c82320a6797bde48621ed2e908cf1b8737dc21418"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_combined\\request.json",
+          "sha256": "b39d9106defb7a7cec295e153e5d184370cab12d725db46c1a83601b5bb64fa0"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_combined\\execution_audit.json",
+          "sha256": "f831240949dcbc0c35a085f6990737424d529b921b886ea0177279f1bf00d2ef"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k075_combined\\completion.json",
+          "sha256": "f61bb6ab65710b523f05424625af33f0a917443c6c900a7afd80e6da335af007"
+        }
+      },
+      "control_k100_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_baseline\\result.json",
+          "sha256": "9ee68c99f4ec32809f9bae12b15f6d8a514df10446b3db8f6771569ce143c06e"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_baseline\\request.json",
+          "sha256": "b6aaff6ef249c22126e21be2474a6fca64fe9d2b9dc2dab74bae2540650529d1"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_baseline\\execution_audit.json",
+          "sha256": "7824eb320ec6390e7d2690003b8bf1b874ed3a323b143e421754051bd97e2900"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_baseline\\completion.json",
+          "sha256": "30e1c2681c42f340db369fd65c6b21a1577594117e9468bea04b49680b26e5ad"
+        }
+      },
+      "control_k100_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_combined\\result.json",
+          "sha256": "ec2c066ff3d46c49277b307f44f3ebcca3f6d77edb71ea29c5b8de3d7cd06dc6"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_combined\\request.json",
+          "sha256": "c0ad57261dcfbea295f8be39b2ae59f3d3715950513a955499c8d2db7190b4cb"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_combined\\execution_audit.json",
+          "sha256": "8bbfedcabe69671f99510ce7bd4a260aa2826a0aad866809ed93e39f018815b1"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k100_combined\\completion.json",
+          "sha256": "f33787636d2a755db3de1d6e50db308befb9e975f6f4bd73ea09a54085410319"
+        }
+      },
+      "control_k200_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_baseline\\result.json",
+          "sha256": "f9c7566a57780716a956c47a8c46a57c29d270d65d6799bc96eef5f16c14b0a4"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_baseline\\request.json",
+          "sha256": "85fe42c2789769b69a9c15cbe9e11dd081c4136419b9b6c9e9cd8297a02e5260"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_baseline\\execution_audit.json",
+          "sha256": "8675ac848b0104e64de5ce7884ebd7a06f12a4de1ad4c360f2e88db132350675"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_baseline\\completion.json",
+          "sha256": "b52abe106c60a40e7e8c444689df695b91e4c61811731e8ed8ada92ab2dee9d9"
+        }
+      },
+      "control_k200_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_combined\\result.json",
+          "sha256": "e846ed294896e49ac1f60f1d7fb25028ca08e4beafeb7e7812495cde9ace8ec3"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_combined\\request.json",
+          "sha256": "fe3e2c91270cccf52e36de64cc6e6b3d9c1a8f17614a69b1ec4ff34963ad7b66"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_combined\\execution_audit.json",
+          "sha256": "4b9a55f5778c560302782477b55bdc5ca5e19d1cac4e830b5f835f59fc08fd78"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_k200_combined\\completion.json",
+          "sha256": "c700852f0764015380994353336227235d2da02faa1131e4effca810e8cadd12"
+        }
+      },
+      "control_o035_r0_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_baseline\\result.json",
+          "sha256": "acaec0daa718b49cc355f2c4102d69b2a36b8358f294959fe8b52f13ab9e55cc"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_baseline\\request.json",
+          "sha256": "9986e811cc99f5d346f21443dd0bc68f90c784576f4e55fc0d4e66404657a0ca"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_baseline\\execution_audit.json",
+          "sha256": "31cd6a6119822de2d0208928029936d752adb8666991e7a3b08cba5e4cf84d4b"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_baseline\\completion.json",
+          "sha256": "2741e41339bf85111197abec426665fca07b303dd3b379bf2fd3b2b3cbe69ce4"
+        }
+      },
+      "control_o035_r0_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_combined\\result.json",
+          "sha256": "d074606dc4da7561769a01b10828bec560978c74d1bda7bc0c5f63d34bb84eee"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_combined\\request.json",
+          "sha256": "b50965712ef6555def34d7415f0396e6c7e1ba51bb3eedb2a400a3294516c046"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_combined\\execution_audit.json",
+          "sha256": "09cdacbfe730ac19ff498067942b994c48870963f951a52093720b398c9ec676"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r0_combined\\completion.json",
+          "sha256": "768bc00995d8d214724f96b7bfc383f8d3957c63add781890fcaa86095e10d76"
+        }
+      },
+      "control_o035_r1_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_baseline\\result.json",
+          "sha256": "9ca95f6f32a4fddfc907828815c5961237108604a2c0cc235fac6074b4cfeff8"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_baseline\\request.json",
+          "sha256": "68f9d1e427c085c3862d7136c3acac8b25bc73f64b65c45b7942aeadbffdd9e9"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_baseline\\execution_audit.json",
+          "sha256": "6be8a644b1fe721fdb3ea4cd347eb7c4ae42c1bfaf32c485f0e4814f99cacb7d"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_baseline\\completion.json",
+          "sha256": "215f6a8610d3f9f7f6e327de6bd2702636389d95833edbb732fa352f13c7685b"
+        }
+      },
+      "control_o035_r1_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_combined\\result.json",
+          "sha256": "fcb09f9d3eaf349a89253d0474a8154fea7ce5aa5a8f8a280886fde769a8dc1a"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_combined\\request.json",
+          "sha256": "0dfd6813ed092abe6ac7457256ceeffa395c3a5601aaf4d1e7b635d795f4f23a"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_combined\\execution_audit.json",
+          "sha256": "ed7439366c3a5d7561e22df4a54e1bf520c68b045d1768542dd4d171ff19cfb5"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o035_r1_combined\\completion.json",
+          "sha256": "17f53852deb6403be73f8032e6ce055111457e5167adada059e0da0d73bf3ec1"
+        }
+      },
+      "control_o050_r0_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_baseline\\result.json",
+          "sha256": "ac7c7d1462b54561562b8bd4aacdf0d1505fae1b26d4eb98e98ec9669f1c72e3"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_baseline\\request.json",
+          "sha256": "e177bae3f2127a5199191c5baf2fc0a117077e75d52e47d40136163332b01812"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_baseline\\execution_audit.json",
+          "sha256": "40a79b19de7afcdc1f2446bbe387135ef35cfc0790e8a82d95d8815d63be42fc"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_baseline\\completion.json",
+          "sha256": "740ea0323c0482f02fef2269153fb2b820cde87b263f1cdcdab37f0d65da50c0"
+        }
+      },
+      "control_o050_r0_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_combined\\result.json",
+          "sha256": "a6b16a16c6244657bf49b9fb25f4c85e0a6c45fd89c7a05c5499dc135746a32e"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_combined\\request.json",
+          "sha256": "a6e3fbc28da8b73792e01c3fda00d2c864ffe16313f7d616debe6ad66915247d"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_combined\\execution_audit.json",
+          "sha256": "7e8865af4aefdfdad25144f6754a44aa7cb0361112af97c106e45d03ed121767"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r0_combined\\completion.json",
+          "sha256": "fc5046cb31869e5dac328c7f3974c09e9faa5cb6be76cc7c223d1983cc204e4b"
+        }
+      },
+      "control_o050_r1_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_baseline\\result.json",
+          "sha256": "07d510955fa4253a2ef5f740a210345cab52b88bdf00545fddfa16ffaa848062"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_baseline\\request.json",
+          "sha256": "17b89afe814038b6aa75cd87662a057c6f7346de314e8acda4840060a587671a"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_baseline\\execution_audit.json",
+          "sha256": "1df38a01f1b93534ba8773122201ba86e39dce33d60513660105c7a6c858b731"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_baseline\\completion.json",
+          "sha256": "3d5461d06e8cbcab9b51d99048bf9bce49d0ce9c355c71cae9d34b942ae3ddc9"
+        }
+      },
+      "control_o050_r1_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_combined\\result.json",
+          "sha256": "bffd2d3aff185c102d18af39c9ca8e95ce7ec4e3089bd5fbd643f625caee86ab"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_combined\\request.json",
+          "sha256": "439179de52d170992e5fb63599f360ca45781b3a24f3a446edd07de008e47dff"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_combined\\execution_audit.json",
+          "sha256": "aaad90ce3cc9ab93b65dc5a746a04649ceaf19c9f4a843e17e6f478da6495122"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o050_r1_combined\\completion.json",
+          "sha256": "d00852250351bab3afa9ce628e24174dd73fbba25c136b1fc1267da0acde815b"
+        }
+      },
+      "control_o075_r0_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_baseline\\result.json",
+          "sha256": "f211e233f1de985328df9ae828c0ed6a9ae2b82e6e8e9ea7cc4fd2e54b92c80c"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_baseline\\request.json",
+          "sha256": "18557968ac65f33ac55e07dab18731443d6b47fb4a7f85459932070485d4ef19"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_baseline\\execution_audit.json",
+          "sha256": "0f93f10aca2fd4e12a7059ec67f16f0e6b7a315d875f246ae9a487a841b2b333"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_baseline\\completion.json",
+          "sha256": "e4cc8f7838e3476063d7d0b74a7dd7a2a45642f8f3b77ac3f756a8a06755b831"
+        }
+      },
+      "control_o075_r0_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_combined\\result.json",
+          "sha256": "9cb0d07d9f652c7bc966e7f54aaf5bcd9a2b1f35974d889bfd3b24b3722403d6"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_combined\\request.json",
+          "sha256": "f6787f29960e778e1e90d820b1da52fe854e90d6a36f0eb5e6bfdd60889e5b10"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_combined\\execution_audit.json",
+          "sha256": "d9f936a2dedf872648dd47dc16e7225a2c08eaf41c215650f9d716d38fb7ff62"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r0_combined\\completion.json",
+          "sha256": "c8b0a22005c7be951a3fe130c6757c990e51a0297cc827b9170ece72f31ca820"
+        }
+      },
+      "control_o075_r1_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_baseline\\result.json",
+          "sha256": "7309afa9257e3d602affaacabc19eeaee1de44d307d31b61cf54962a48b15f8c"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_baseline\\request.json",
+          "sha256": "772529382dcd105725c6b7cba0b278d7e37cb34c98b87e970b110ede89e0e7d4"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_baseline\\execution_audit.json",
+          "sha256": "a869eb540d297d6ab03eb6534ed14a0addb82c50cf880a612d3053f648cb5714"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_baseline\\completion.json",
+          "sha256": "a83105b22f44e96acbeafb6a3cc8fd6ffb36d01f06ce71fac66cc784098731d5"
+        }
+      },
+      "control_o075_r1_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_combined\\result.json",
+          "sha256": "91d29fa4cd15ee5dec6895ad55432fe53c97c902ccd7a8a7cc456d0b36341416"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_combined\\request.json",
+          "sha256": "ab097776aa8156c03b8f1cf223235e0e06fcab384bc1dfd5c4f3697d3c2a251b"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_combined\\execution_audit.json",
+          "sha256": "782b12a5621d6004e591159c15fed5d2bb4a05ec716d69543a71db0886c1628f"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o075_r1_combined\\completion.json",
+          "sha256": "151e944a8311881abe339271dae05e5228945117704b32f8e627d810da98e028"
+        }
+      },
+      "control_o100_r0_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_baseline\\result.json",
+          "sha256": "0d618bbad6fac4951775e9ddeeb311397e6fe603a2bc852d3cc37933d2459a29"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_baseline\\request.json",
+          "sha256": "63d99e8b60ca4895c23ff947ccc0936e22dce0f3ebd6561e4947ea0a45b8df86"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_baseline\\execution_audit.json",
+          "sha256": "76fd94a423f360b484317e83c07eaf83c4095501ddfc2de7580d5c1f62c6c5c0"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_baseline\\completion.json",
+          "sha256": "1da9593a779bd7bdbfe7487ca95cc6b42bf6820e05f9d06edea2aba140595f7e"
+        }
+      },
+      "control_o100_r0_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_combined\\result.json",
+          "sha256": "63ca9789a4c376f9a9cf2e6782546ccb015ba119945c22da3faa2aaac031903b"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_combined\\request.json",
+          "sha256": "799555cc4de36bfff3843f6cf0c0aedc955d7f92fc34f65723b3cd28e507a105"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_combined\\execution_audit.json",
+          "sha256": "1176b4bb080f2543858185f54dcb2f830da0f8dadfbcd9d7fa7155f10370ea93"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r0_combined\\completion.json",
+          "sha256": "cd98904fc45374047e8e6f002425de2cb9aa7d055e171f91c8fce49c00577b0d"
+        }
+      },
+      "control_o100_r1_baseline": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_baseline\\result.json",
+          "sha256": "25f04719452b928e83bf5c211a0a1daa7b8efafbe2f43424100611ee356b5503"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_baseline\\request.json",
+          "sha256": "d1e425f78a25eb55d8d3e83f05352b2c9c6a9abcaa2179482a1177700d731d30"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_baseline\\execution_audit.json",
+          "sha256": "ea15fc6e6c5d27d6feeb3a7ca8636697677b6468497d1c56aa8a616bf29eb73e"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_baseline\\completion.json",
+          "sha256": "1f831d3bafd46ef104b0d61ad9723f5e68328450a6dc5d5d8bdee07306939558"
+        }
+      },
+      "control_o100_r1_combined": {
+        "result.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_combined\\result.json",
+          "sha256": "8f7a914f4785c176486de0314be11b337d847b1c031a5c2bf6502e9cedc4ec97"
+        },
+        "request.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_combined\\request.json",
+          "sha256": "76c02c713cdc3da946109293e7e5b6b080508c076fb58e094a749cab1cbd121e"
+        },
+        "execution_audit.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_combined\\execution_audit.json",
+          "sha256": "fcbfda54302d9d7b9f718be04eda98591f116a453d95e50610c327a2dd98f90c"
+        },
+        "completion.json": {
+          "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\cases\\control_o100_r1_combined\\completion.json",
+          "sha256": "35f40e6ae98a1bbb9115e9b87f587cf83fcfaefc3d4b43412b95bee05c3dc441"
+        }
+      }
+    },
+    "reference_study": {
+      "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\study.json",
+      "sha256": "3aee73f94bcef4ad8fec87676aced5751389b71a5390bc068537a74012d51359"
+    },
+    "reference_registration": {
+      "path": "C:\\Users\\sehyu\\.codex\\research\\portfolio_native_budget_20261009\\generation_3\\registration.json",
+      "sha256": "9ca9bae6496d75455a213e6491d3c2401537a0fbe57c17c6a86335a7390037dc"
+    }
+  }
+}

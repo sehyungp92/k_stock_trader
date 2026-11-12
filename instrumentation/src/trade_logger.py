@@ -10,6 +10,7 @@ errors directory, and never propagate back to the trading hot path.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import traceback
 import uuid
@@ -22,6 +23,7 @@ from .event_metadata import create_event_metadata
 from .lineage import LineageContext
 from .market_snapshot import MarketSnapshotService
 from .session import classify_session_type
+from .trade_projection import TradeProjection
 
 
 @dataclass
@@ -107,6 +109,13 @@ class TradeEvent:
     pnl: Optional[float] = None
     pnl_pct: Optional[float] = None
     fees_paid: Optional[float] = None
+    execution_id: str = ""
+    remaining_qty: float | None = None
+    pnl_basis: str = ""
+    cost_revision: int = 0
+    cost_source_ref: str = ""
+    lifetime_acquired_qty: float = 0.0
+    cumulative_exited_qty: float = 0.0
 
     # --- Signal ---
     entry_signal: str = ""
@@ -181,7 +190,7 @@ class TradeEvent:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         # Coerce None → 0.0/\"\" for fields the assistant schema types as non-Optional
-        for key in ("atr_at_entry", "fees_paid", "entry_slippage_bps",
+        for key in ("atr_at_entry", "entry_slippage_bps",
                      "exit_slippage_bps", "entry_latency_ms", "drawdown_pct"):
             if d.get(key) is None:
                 d[key] = 0.0
@@ -201,9 +210,13 @@ class TradeLogger:
         self.bot_id: str = config.get("bot_id", "k_stock_trader")
         self.data_dir: Path = Path(config.get("data_dir", "instrumentation/data"))
         self.data_source_id: str = config.get("data_source_id", "kis_rest")
+        self._config = {**config, "bot_id": self.bot_id}
         self.snapshot_service = snapshot_service
         self._lineage = lineage or config.get("lineage")
         self._open_trades: Dict[str, TradeEvent] = {}
+        self._projection = TradeProjection(self.data_dir)
+        self._open_trades = {key: TradeEvent(**value) for key, value in self._projection.open_trades().items()}
+        self._exit_executions = set()
 
         try:
             (self.data_dir / "trades").mkdir(parents=True, exist_ok=True)
@@ -284,7 +297,7 @@ class TradeLogger:
                     exchange_timestamp=exch_ts,
                     data_source_id=self.data_source_id,
                     bar_id=bar_id,
-                    schema_version="trade_event_v2",
+                    schema_version="trade_event_v2" if fees_paid is not None else "trade_execution_v3",
                     lineage=effective_lineage,
                     strategy_id=sid or None,
                     family_id=family_id,
@@ -359,37 +372,88 @@ class TradeLogger:
                 trade.param_set_id = param_set_id
             trade.execution_timeline = execution_timeline
             trade.session_type = classify_session_type(datetime.now(timezone.utc))
+            trade.lifetime_acquired_qty = float(position_size)
 
             self._open_trades[trade_id] = trade
-            self._write_event(trade)
+            try:
+                self._write_event(trade)
+            finally:
+                self._open_trades = {key: TradeEvent(**value) for key, value in self._projection.open_trades().items()}
             return trade
 
         except Exception as e:
             self._write_error("log_entry", trade_id, e)
             return TradeEvent(trade_id=trade_id, event_metadata={}, entry_snapshot={})
 
+    def reconcile_open_position(self, trade_id: str, qty: float, cost_basis: float, execution_id: str = "") -> None:
+        """Refresh the open cost basis from the OMS allocation preceding an execution."""
+        if execution_id and self._projection.execution(trade_id, execution_id):
+            return
+        trade = self._open_trades.get(trade_id)
+        if trade is None or qty <= 0 or cost_basis <= 0:
+            return
+        refreshed = deepcopy(trade)
+        if qty < trade.position_size:
+            raise ValueError("Allocation reconciliation cannot silently discard an exit")
+        refreshed.lifetime_acquired_qty = (trade.lifetime_acquired_qty or trade.position_size) + float(qty) - trade.position_size
+        refreshed.position_size = float(qty)
+        refreshed.entry_price = float(cost_basis)
+        refreshed.position_size_quote = float(qty) * float(cost_basis)
+        with self._projection.connect() as db:
+            db.execute("INSERT INTO open_trades VALUES(?,?) ON CONFLICT(trade_id) DO UPDATE SET payload=excluded.payload",
+                       (trade_id, json.dumps(asdict(refreshed), default=str)))
+        self._open_trades[trade_id] = refreshed
+
     def log_exit(
         self,
         trade_id: str,
         exit_price: float,
         exit_reason: str,
-        fees_paid: float = 0.0,
+        fees_paid: float | None = None,
         exchange_timestamp: Optional[datetime] = None,
         expected_exit_price: Optional[float] = None,
         exit_latency_ms: Optional[int] = None,
         mfe_mae_context: Optional[Dict[str, Any]] = None,
         lineage: LineageContext | Mapping[str, Any] | None = None,
         join_keys: Optional[Mapping[str, Any]] = None,
+        exited_qty: float | None = None,
+        execution_id: str | None = None,
+        consumer_id: str | None = None,
+        consumer_sequence: int | None = None,
     ) -> Optional[TradeEvent]:
         """Record a trade exit event. Returns updated TradeEvent or None on error."""
         try:
-            trade = self._open_trades.pop(trade_id, None)
+            processed = getattr(self, "_exit_executions", set())
+            key = (trade_id, execution_id)
+            prior = self._projection.execution(trade_id, execution_id) if execution_id else None
+            if prior:
+                if (float(prior["exit_price"]) != float(exit_price) or
+                    (exited_qty is not None and float(prior["position_size"]) != float(exited_qty)) or prior.get("fees_paid") != fees_paid):
+                    raise ValueError("Exit execution identity collision")
+                self._projection.advance(consumer_id, consumer_sequence) if consumer_id else None
+                return None
+            original = self._open_trades.get(trade_id)
+            trade = deepcopy(original)
             if trade is None:
                 self._write_error(
                     "log_exit", trade_id,
                     Exception(f"No open trade found for trade_id={trade_id}"),
                 )
                 return None
+
+            qty = trade.position_size if exited_qty is None else float(exited_qty)
+            if qty <= 0 or qty > trade.position_size:
+                raise ValueError("Exited quantity exceeds the remaining open trade")
+            if exited_qty is not None and not execution_id:
+                raise ValueError("Partial execution telemetry requires an execution identity")
+            remaining = original.position_size - qty
+            trade.position_size = qty
+            trade.position_size_quote = qty * trade.entry_price
+            trade.remaining_qty = remaining
+            trade.execution_id = execution_id or ""
+            trade.lifetime_acquired_qty = original.lifetime_acquired_qty or original.position_size
+            trade.cumulative_exited_qty = original.cumulative_exited_qty + qty
+            trade.pnl_basis = "net_with_supplied_costs" if fees_paid is not None else "gross_costs_unknown"
 
             now = datetime.now(timezone.utc)
             exch_ts = exchange_timestamp or now
@@ -403,7 +467,7 @@ class TradeLogger:
                 pass
 
             # Compute PnL (always LONG for KRX equity)
-            pnl = (exit_price - trade.entry_price) * trade.position_size - fees_paid
+            pnl = (exit_price - trade.entry_price) * trade.position_size - (fees_paid or 0.0)
             pnl_pct = (
                 (exit_price - trade.entry_price) / trade.entry_price * 100
                 if trade.entry_price > 0 else 0.0
@@ -421,12 +485,12 @@ class TradeLogger:
                 effective_lineage = lineage or self._lineage or _trade_lineage_mapping(trade)
                 trade.event_metadata = create_event_metadata(
                     bot_id=self.bot_id,
-                    event_type="trade",
-                    payload_key=f"{trade_id}_exit",
+                    event_type="trade_execution",
+                    payload_key=f"{trade_id}_exit_{execution_id or 'full_close'}",
                     exchange_timestamp=exch_ts,
                     data_source_id=self.data_source_id,
                     bar_id=trade.bar_id or None,
-                    schema_version="trade_event_v2",
+                    schema_version="trade_execution_v3",
                     lineage=effective_lineage,
                     strategy_id=trade.strategy_id or None,
                     family_id=trade.family_id or None,
@@ -449,8 +513,8 @@ class TradeLogger:
             trade.pnl_pct = round(pnl_pct, 4)
             trade.fees_paid = fees_paid
             trade.gross_pnl = round((exit_price - trade.entry_price) * trade.position_size, 4)
-            trade.net_pnl = round(pnl, 4)
-            trade.realized_pnl_krw = round(pnl, 4)
+            trade.net_pnl = round(pnl, 4) if fees_paid is not None else None
+            trade.realized_pnl_krw = trade.net_pnl
             trade.expected_exit_price = expected_exit_price
             trade.exit_slippage_bps = exit_slippage_bps
             trade.exit_latency_ms = exit_latency_ms
@@ -467,8 +531,23 @@ class TradeLogger:
                     trade.exit_efficiency = round(trade.pnl_pct / trade.mfe_pct, 4)
 
             trade.stage = "exit"
+            trade.event_type = "trade_execution"
+            trade.schema_version = "trade_execution_v3"
 
-            self._write_event(trade)
+            committed = self._write_event(trade, consumer_id=consumer_id, consumer_sequence=consumer_sequence)
+            if not committed:
+                self._open_trades = {key: TradeEvent(**value) for key, value in self._projection.open_trades().items()}
+                return None
+            if execution_id:
+                processed.add(key)
+                self._exit_executions = processed
+            if remaining:
+                original.position_size = remaining
+                original.position_size_quote = remaining * original.entry_price
+                original.lifetime_acquired_qty = trade.lifetime_acquired_qty
+                original.cumulative_exited_qty = trade.cumulative_exited_qty
+            else:
+                self._open_trades.pop(trade_id, None)
             return trade
 
         except Exception as e:
@@ -478,15 +557,37 @@ class TradeLogger:
     def get_open_trades(self) -> Dict[str, TradeEvent]:
         return dict(self._open_trades)
 
-    def _write_event(self, trade: TradeEvent) -> None:
-        """Append trade event to daily JSONL file."""
+    def reconcile_execution_costs(self, trade_id, execution_id, fees_paid, *, source_ref):
+        changed = self._projection.reconcile_costs(trade_id, execution_id, fees_paid, source_ref=source_ref)
+        # Retry restatement even after an interrupted export of an already committed correction.
+        self._projection.export()
+        from .daily_snapshot import DailySnapshotBuilder
+        from .execution_accounting import event_day
+        with self._projection.connect() as db:
+            records = [json.loads(row[0]) for row in db.execute("SELECT payload FROM events WHERE trade_id=?", (trade_id,))]
+        builder = DailySnapshotBuilder(self._config)
+        for day in sorted({event_day(row) for row in records if row.get("stage") == "exit"}):
+            builder.save(builder.build(day))
+        return changed
+
+    def _write_event(self, trade: TradeEvent, *, consumer_id=None, consumer_sequence=None) -> None:
+        """Commit the projection first. JSONL is an atomically rebuildable export."""
+        remaining = deepcopy(self._open_trades.get(trade.trade_id))
+        if trade.stage == "exit":
+            if remaining and trade.remaining_qty:
+                remaining.position_size = trade.remaining_qty
+                remaining.position_size_quote = remaining.position_size * remaining.entry_price
+                remaining.lifetime_acquired_qty = trade.lifetime_acquired_qty
+                remaining.cumulative_exited_qty = trade.cumulative_exited_qty
+            else:
+                remaining = None
+        committed = self._projection.commit(trade.to_dict(), asdict(remaining) if remaining else None,
+                                consumer=consumer_id, sequence=consumer_sequence)
         try:
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            filepath = self.data_dir / "trades" / f"trades_{today}.jsonl"
-            with open(filepath, "a", encoding="utf-8") as f:
-                f.write(json.dumps(trade.to_dict(), default=str) + "\n")
-        except Exception:
-            pass
+            self._projection.export()
+        except Exception as exc:
+            self._write_error("export_pending", trade.trade_id, exc)
+        return committed
 
     def _write_error(self, method: str, trade_id: str, error: Exception) -> None:
         """Log instrumentation errors without crashing."""

@@ -1,0 +1,13 @@
+{
+  "version": "kalcb-final-risk-selection-v2",
+  "declared_before": "Risk-matched representation comparisons and volatility sizing results",
+  "clarification": "The primary frequency floor is the last audited strategy the user asked to improve: 395 baseline trades and 110 active days. The risk-matched 65% control happens to have 399 trades because fills change; those four extra trades are not a separate user-imposed minimum.",
+  "baseline_trade_floor": 395,
+  "baseline_active_day_floor": 110,
+  "baseline_max_drawdown_pct": 8,
+  "combined_max_drawdown_pct": 10,
+  "primary_objective": "Highest combined-stress net return among execution-valid, risk-compliant candidates preserving those frequency floors; retain the best-return alternative if it differs",
+  "volatility_target_comparison": [0.006, 0.008],
+  "volatility_reason": "A risk target must be assessed across a small declared risk range. Both use identical 20-session estimation, 65% warm-up, quarter-size floor and full-size ceiling; no additional search of the target is planned.",
+  "scope": "All trials are chronological development on reused observations. Full standard audits, complete trial disclosure and June-July exclusion remain mandatory."
+}

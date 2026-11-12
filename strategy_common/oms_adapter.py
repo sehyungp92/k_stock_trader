@@ -26,6 +26,8 @@ def action_to_intent(action: StrategyAction) -> Intent:
             risk_stop = _float_or_none(action.metadata.get("stop_price"))
         if risk_stop is None:
             risk_stop = action.stop_price
+        if action.metadata.get("hard_stop_enabled") is False:
+            risk_stop = None
         entry_px = action.limit_price
         if entry_px is None and execution_style == "SYNTHETIC_STOP":
             entry_px = _float_or_none(action.metadata.get("entry_trigger_price")) or action.stop_price
@@ -157,6 +159,10 @@ def _expiry_epoch(metadata: dict) -> float | None:
 def _causal_metadata(action: StrategyAction) -> dict:
     source = dict(getattr(action, "metadata", {}) or {})
     keys = (
+        "account_id",
+        "execution_feedback_sequence",
+        "provisional_order_ref",
+        "event_ref",
         "action_ref",
         "source_artifact_hash",
         "source_fingerprint",

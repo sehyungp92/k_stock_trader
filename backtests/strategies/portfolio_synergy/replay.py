@@ -23,8 +23,8 @@ PORTFOLIO_SYNTHETIC_LEDGER_SEED = "217d5dd5cdf943ca9aaf7d01c598b112ed4282d86c26e
 DEFAULT_SOURCE_PATHS = {
     "kalcb_optimized_config": Path("data/backtests/output/kalcb/round_3/optimized_config.json"),
     "kalcb_run_summary": Path("data/backtests/output/kalcb/round_3/run_summary.json"),
-    "olr_optimized_config": Path("data/backtests/output/olr/round_5/optimized_config.json"),
-    "olr_run_summary": Path("data/backtests/output/olr/round_5/run_summary.json"),
+    "olr_optimized_config": Path("data/backtests/output/olr/archive/2026-10-05-before-fully-repaired-control/round_5/optimized_config.json"),
+    "olr_run_summary": Path("data/backtests/output/olr/archive/2026-10-05-before-fully-repaired-control/round_5/run_summary.json"),
 }
 
 SYMBOL_SECTORS: tuple[tuple[str, str], ...] = (
@@ -75,7 +75,7 @@ class TradeOpportunity:
     symbol_confirmed: bool
     conflict: bool
     exit_reason: str
-    source_trade: bool = True
+    source_trade: bool = False
     shadow_family: str = ""
 
 
@@ -95,7 +95,9 @@ class PortfolioReplayResult:
     blocked: tuple[dict[str, Any], ...]
 
 
-def load_portfolio_bundle(config: dict[str, Any] | None = None, *, root: Path | None = None) -> PortfolioBundle:
+def load_portfolio_bundle(config: dict[str, Any] | None = None, *, root: Path | None = None, synthetic_fixture: bool = False) -> PortfolioBundle:
+    if not synthetic_fixture:
+        raise ValueError("Generated portfolio data requires explicit synthetic_fixture=True")
     config = dict(config or {})
     root = Path(root or Path.cwd())
     paths = _source_paths(config, root)
@@ -146,7 +148,10 @@ def evaluate_portfolio(
     *,
     bundle: PortfolioBundle,
     candidate_snapshot_hash: str = "",
+    synthetic_fixture: bool = False,
 ) -> PortfolioReplayResult:
+    if not synthetic_fixture:
+        raise ValueError("Synthetic portfolio evaluation is not historical evidence")
     config = build_effective_config(mutations)
     initial_equity = float(config["portfolio.initial_equity"])
     reference_risk_pct = float(config["portfolio.reference_risk_pct"])
@@ -872,7 +877,7 @@ def _metrics(
     metric_contract = {
         "primary_promotion_metric": "official_mtm_net_return_pct",
         "primary_promotion_value": return_pct,
-        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "primary_promotion_basis": "synthetic",
         "official_metrics": ("official_mtm_net_return_pct", "max_drawdown_pct", "profit_factor", "total_trades"),
         "proxy_metrics": ("entries_blocked_by_portfolio", "positive_alpha_block_rate", "blocked_avg_r"),
         "same_bar_fill_count": 0.0,
@@ -891,10 +896,10 @@ def _metrics(
             "initial_equity": initial_equity,
             "fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
             "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
-            "capability_level": "source_artifact_portfolio_replay",
-            "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
+            "capability_level": "synthetic",
+            "replay_mode": "synthetic",
             "primary_promotion_metric": "official_mtm_net_return_pct",
-            "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+            "primary_promotion_basis": "synthetic",
         },
         "live_backtest_parity_alignment": {
             "status": "pass",
@@ -920,7 +925,7 @@ def _metrics(
         "net_return_pct": return_pct,
         "net_return_pct_basis": "portfolio_completed_trade_mtm_proxy_over_initial_equity",
         "official_mtm_net_return_pct": return_pct,
-        "official_metric_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "official_metric_basis": "synthetic",
         "max_drawdown_pct": max_drawdown_pct,
         "official_mtm_max_drawdown_pct": max_drawdown_pct,
         "profit_factor": profit_factor,
@@ -958,7 +963,7 @@ def _metrics(
         "block_reason_counts": block_reasons,
         "source_paths": bundle.source_paths,
         "source_strategy_optimized_rounds": {"kalcb": 3, "olr": 5},
-        "portfolio_replay_scope": "source-fingerprinted completed-trade arbitration/sizing evidence; source strategy official replays are not rerun in the inner loop",
+        "portfolio_replay_scope": "Generated synthetic fixture; no historical executions or performance evidence",
         "live_backtest_parity_alignment": "pass",
         "live_backtest_parity_scope": "portfolio_arbitration_layer_uses_live_known_source_trade_fields_only",
         "live_backtest_parity_pending": "full KALCB/OLR source replay plus paper/live portfolio OMS parity before production promotion",
@@ -969,20 +974,22 @@ def _metrics(
         "parity_offline_only_fields": "net_r,mae_r,mfe_r,pnl_cash,weighted_r,blocked_avg_r,accepted_avg_r",
         "promotion_status": "research_only",
         "artifact_promotion_policy": "research_only_until_full_source_replay_and_paper_live_parity",
-        "audit_status": "train_only_source_artifact_proxy_holdout_excluded",
+        "audit_status": "synthetic",
         "audit_pass": False,
+        "historical_promotion_prohibited": True,
+        "official_performance": False,
         "official_replay_pass": False,
         "primary_promotion_metric": "official_mtm_net_return_pct",
         "primary_promotion_value": return_pct,
-        "primary_promotion_basis": "source_fingerprinted_portfolio_completed_trade_mtm_proxy_train_only",
+        "primary_promotion_basis": "synthetic",
         "metric_contract": metric_contract,
         "execution_contract": metric_contract["execution_contract"],
         "cost_policy": {"source_costs_preserved": True, "portfolio_cost_stress_bps": float(config.get("portfolio.cost_stress_bps", 0.0) or 0.0)},
         "risk_basis": "mark_to_market_proxy_from_trade_mae_path",
         "live_parity_fill_timing": "source_strategy_fill_contracts_preserved_completed_trade_replay",
         "auction_mode": "kalcb_next_5m_open_plus_olr_resting_close_auction",
-        "replay_mode": "source_fingerprinted_completed_trade_portfolio_arbitration",
-        "capability_level": "source_artifact_portfolio_replay",
+        "replay_mode": "synthetic",
+        "capability_level": "synthetic",
     }
 
 

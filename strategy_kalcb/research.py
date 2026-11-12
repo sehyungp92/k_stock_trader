@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from strategy_common.execution_session import prior_session_issue
+from kis_core.trading_calendar import get_trading_calendar
+
 import json
 import bisect
 from dataclasses import replace
@@ -96,12 +99,21 @@ def build_research_snapshot(
     foreign_flow_rows_by_symbol = {str(symbol).zfill(6): rows for symbol, rows in dict(daily_foreign_flow_by_symbol or {}).items()}
     institutional_flow_rows_by_symbol = {str(symbol).zfill(6): rows for symbol, rows in dict(daily_institutional_flow_by_symbol or {}).items()}
     symbols: dict[str, KALCBResearchSymbol] = {}
+    skipped: dict[str, list[str]] = {}
     for raw_symbol, raw_rows in daily_by_symbol.items():
         symbol = str(raw_symbol).zfill(6)
         prior_rows = _recent_prior_rows(raw_rows, trade_date, _MAX_RESEARCH_DAILY_HISTORY)
         if not prior_rows:
             continue
+        prior_rows = [row for row in prior_rows if _row_date(row) <= get_trading_calendar().previous_trading_day(trade_date)]
+        if not prior_rows:
+            skipped[symbol] = ["missing_previous_session"]
+            continue
         prior = prior_rows[-1]
+        reference_issue = prior_session_issue(trade_date, _row_date(prior))
+        if reference_issue:
+            skipped[symbol] = [reference_issue]
+            continue
         prior_close = _float(prior.get("close"))
         prior_volume = _float(prior.get("volume"))
         if prior_close <= 0 or prior_volume <= 0:
@@ -154,6 +166,7 @@ def build_research_snapshot(
         metadata={
             "research_model_version": RESEARCH_MODEL_VERSION,
             "requested_symbol_count": len(daily_by_symbol),
+            "skipped_symbols": skipped,
             "sector_map_size": len(sectors),
             "sector_daily_version": SECTOR_DAILY_VERSION,
             "research_config_hash": _research_config_fingerprint(cfg),

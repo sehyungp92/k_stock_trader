@@ -36,7 +36,7 @@ from scripts import run_olr_kalcb_runtime_session as operator
 
 def test_resource_plan_models_candidate_surfaces_by_phase_without_false_ws_conflict():
     trade_date = date(2026, 2, 2)
-    kalcb_cfg = KALCBConfig.from_mapping({"kalcb.session.ws_budget": 8})
+    kalcb_cfg = KALCBConfig.from_mapping({"kalcb.session.ws_budget": 8, "kalcb.frontier.size": 104})
     olr_cfg = OLRConfig()
     kalcb = _kalcb_snapshot(trade_date, kalcb_cfg, count=104, active_count=8)
     olr_stage1 = _olr_snapshot(trade_date, OLR_STAGE1_ARTIFACT_STAGE, olr_cfg, count=30)

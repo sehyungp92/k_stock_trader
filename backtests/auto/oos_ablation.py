@@ -674,7 +674,8 @@ def clean_metric_row(metrics: dict[str, Any]) -> dict[str, Any]:
 
 
 def _audit_hygiene_pass(metrics: dict[str, Any]) -> bool:
-    return all(
+    from backtests.engine.contracts import execution_valid
+    return execution_valid(metrics) and all(
         _num(metrics.get(key)) == 0.0
         for key in (
             "same_bar_fill_count",

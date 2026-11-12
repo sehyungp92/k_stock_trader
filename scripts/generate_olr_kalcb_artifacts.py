@@ -35,7 +35,7 @@ from strategy_olr.artifact_store import OLR_STAGE1_ARTIFACT_STAGE
 from strategy_olr.config import OLRConfig
 from strategy_olr.research import load_candidate_snapshot
 
-DEFAULT_BASELINE_MANIFEST = Path(os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json"))
+DEFAULT_BASELINE_MANIFEST = Path(os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "config/olr_kalcb/validation_baseline.json"))
 DEFAULT_DAILY_UNIVERSE_FILE = Path(os.environ.get("OLR_KALCB_DAILY_UNIVERSE_FILE", "config/olr_kalcb/olr_deployment_universe_103.yaml"))
 DEFAULT_DAILY_ROOT = Path(os.environ.get("OLR_KALCB_DAILY_ROOT", "data/krx_daily_parquet"))
 DEFAULT_INTRADAY_ROOT = Path(os.environ.get("OLR_KALCB_INTRADAY_ROOT", "data/kis_intraday_parquet"))
@@ -95,7 +95,7 @@ def run_daily(args: argparse.Namespace) -> dict[str, Any]:
     daily_end = date.fromisoformat(args.daily_end) if args.daily_end else trade_date - timedelta(days=1)
     daily_start = daily_end - timedelta(days=int(args.daily_lookback_days))
     fixture_generated_at = _parse_fixture_generated_at(getattr(args, "fixture_generated_at", None))
-    configs = _load_strategy_configs(args.baseline_manifest)
+    configs = _load_strategy_configs(args.baseline_manifest, args.strategies)
     sector_map = _load_sector_map(args.sector_map)
     strategies = {str(item).upper().strip() for item in args.strategies}
     bundle = _load_daily_bundle(
@@ -181,7 +181,7 @@ def run_daily(args: argparse.Namespace) -> dict[str, Any]:
 
 def run_afternoon(args: argparse.Namespace) -> dict[str, Any]:
     trade_date = date.fromisoformat(args.trade_date)
-    configs = _load_strategy_configs(args.baseline_manifest)
+    configs = _load_strategy_configs(args.baseline_manifest, ("OLR",))
     sector_map = _load_sector_map(args.sector_map)
     olr_root = _resolve_path(args.olr_artifact_root)
     stage1 = load_candidate_snapshot(
@@ -192,15 +192,34 @@ def run_afternoon(args: argparse.Namespace) -> dict[str, Any]:
     if stage1 is None:
         raise FileNotFoundError(f"OLR stage1 artifact missing for {trade_date.isoformat()}")
     stage1_symbols = tuple(str(candidate.symbol).zfill(6) for candidate in stage1.candidates)
-    target_symbols = _normalize_symbol_list(args.symbols) if args.symbols else stage1_symbols
-    bars = _load_intraday_bars(args, trade_date, target_symbols)
-    if not bars:
+    # Sector rotation and relative leadership depend on the full declared
+    # feature universe, including names not selected into the stage-1 pool.
+    feature_universe = getattr(args, "feature_universe_file", None)
+    target_symbols = _daily_expected_symbols(cli_symbols=None, universe_file=feature_universe,
+        payload={}, fallback_symbols=stage1_symbols) if feature_universe else stage1_symbols
+    if args.symbols:
+        requested = _normalize_symbol_list(args.symbols)
+        if feature_universe and set(requested) != set(target_symbols) and not args.allow_partial_afternoon_bars:
+            raise ValueError("Sector features require the full declared universe; partial symbol fixtures must be explicit")
+        target_symbols = requested
+    bars = _load_intraday_bars(args, trade_date, target_symbols) if stage1_symbols else {}
+    if stage1_symbols and not bars:
         raise ValueError("no completed intraday 5m bars were loaded for OLR afternoon artifact generation")
+    if stage1_symbols and feature_universe and not args.allow_partial_afternoon_bars:
+        from kis_core.trading_calendar import get_trading_calendar
+        calendar = get_trading_calendar()
+        loaded_features = {symbol for (_day, symbol) in bars}
+        missing_features = [symbol for symbol in target_symbols if symbol not in loaded_features
+                            and not calendar.suspension_source(symbol, trade_date)]
+        if missing_features:
+            raise ValueError(f"Missing sector-feature universe bars: {missing_features}")
     coverage = _validate_afternoon_coverage(
         bars,
         stage1_symbols,
         min_bars_per_symbol=_afternoon_min_bars(args, configs["OLR"]["config"]),
         allow_partial=bool(getattr(args, "allow_partial_afternoon_bars", False)),
+        trade_date=trade_date if getattr(args, "min_afternoon_bars_per_symbol", None) is None else None,
+        cutoff=_parse_cutoff(args.cutoff),
     )
     _snapshot, result = generate_olr_afternoon(
         trade_date,
@@ -218,6 +237,7 @@ def run_afternoon(args: argparse.Namespace) -> dict[str, Any]:
         "symbols_loaded": len(bars),
         "bar_count": sum(len(item) for item in bars.values()),
         "stage1_symbols": len(stage1_symbols),
+        "feature_universe_symbols": len(target_symbols),
         "min_bars_per_stage1_symbol": coverage.min_bars_per_symbol,
         "missing_stage1_bar_symbols": list(coverage.missing_symbols),
         "underfilled_stage1_bar_symbols": coverage.underfilled_symbols,
@@ -228,15 +248,19 @@ def run_afternoon(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def _load_strategy_configs(baseline_manifest: str | Path) -> dict[str, dict[str, Any]]:
+def _load_strategy_configs(baseline_manifest: str | Path, strategies: Sequence[str] = ("KALCB", "OLR")) -> dict[str, dict[str, Any]]:
     manifest_path = _resolve_path(baseline_manifest)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     configs: dict[str, dict[str, Any]] = {}
-    for strategy_id in ("KALCB", "OLR"):
+    for strategy_id in dict.fromkeys(str(s).upper().strip() for s in strategies):
+        if strategy_id not in {"KALCB", "OLR"}:
+            raise ValueError(f"unsupported strategy {strategy_id}")
         record = _config_record(manifest, strategy_id)
         if record is None:
             raise ValueError(f"baseline manifest is missing {strategy_id} optimized config artifact")
         path = _resolve_path(record["path"])
+        if record.get("sha256") and file_sha256(path) != record["sha256"]:
+            raise ValueError(f"baseline optimized config SHA mismatch for {strategy_id}")
         raw = json.loads(path.read_text(encoding="utf-8"))
         mutations = _config_mutations(raw)
         config = KALCBConfig.from_mapping(mutations) if strategy_id == "KALCB" else OLRConfig.from_mapping(mutations)
@@ -246,13 +270,17 @@ def _load_strategy_configs(baseline_manifest: str | Path) -> dict[str, dict[str,
 
 def _config_record(manifest: Mapping[str, Any], strategy_id: str) -> dict[str, Any] | None:
     sid = strategy_id.lower()
-    for row in manifest.get("artifacts") or ():
+    rows = list(manifest.get("artifacts") or ())
+    for row in rows:
         item = dict(row or {})
         label = str(item.get("label") or "").lower()
-        path = str(item.get("path") or "").lower()
         if sid in label and "optimized_config" in label:
             return item
-        if sid in path and path.endswith("optimized_config.json"):
+    for row in rows:
+        item = dict(row or {})
+        parts = str(item.get("path") or "").lower().replace("\\", "/").split("/")
+        filename = parts[-1]
+        if filename.endswith("optimized_config.json") and (filename.startswith(sid + "_") or sid in parts[:-1]):
             return item
     return None
 
@@ -345,7 +373,8 @@ def _load_intraday_bars(
     trade_date: date,
     symbols: Sequence[str] | None,
 ) -> dict[tuple[date, str], tuple[MarketBar, ...]]:
-    cutoff = _parse_cutoff(args.cutoff)
+    from strategy_common.execution_session import session_cutoff
+    cutoff = session_cutoff(trade_date, _parse_cutoff(args.cutoff))
     if args.bars_json:
         payload = _load_mapping(args.bars_json)
         raw = payload.get("bars_by_symbol", payload)
@@ -358,7 +387,8 @@ def _load_intraday_bars(
             for bar in load_market_bars_for_replay(path)
         ]
         return _group_bars(_filter_bars(bars, trade_date, cutoff))
-    return _bars_from_intraday_root(_resolve_path(args.intraday_root), trade_date, cutoff, symbols)
+    return _bars_from_intraday_root(_resolve_path(args.intraday_root), trade_date, cutoff, symbols,
+                                    snapshot_end=getattr(args, "intraday_snapshot_end", None))
 
 
 def _bars_from_json(raw: Any, trade_date: date, cutoff: time) -> dict[tuple[date, str], tuple[MarketBar, ...]]:
@@ -369,7 +399,7 @@ def _bars_from_json(raw: Any, trade_date: date, cutoff: time) -> dict[tuple[date
     return _group_bars(_filter_bars(bars, trade_date, cutoff))
 
 
-def _bars_from_intraday_root(root: Path, trade_date: date, cutoff: time, symbols: Sequence[str] | None) -> dict[tuple[date, str], tuple[MarketBar, ...]]:
+def _bars_from_intraday_root(root: Path, trade_date: date, cutoff: time, symbols: Sequence[str] | None, *, snapshot_end: str | None = None) -> dict[tuple[date, str], tuple[MarketBar, ...]]:
     try:
         import pandas as pd
     except ImportError as exc:
@@ -380,9 +410,12 @@ def _bars_from_intraday_root(root: Path, trade_date: date, cutoff: time, symbols
         symbol_dir = root / symbol
         if not symbol_dir.is_dir():
             continue
-        for path in _intraday_5m_files_for_trade_date(symbol_dir, symbol, trade_date):
+        for path in _intraday_5m_files_for_trade_date(symbol_dir, symbol, trade_date, snapshot_end=snapshot_end):
             fingerprint = file_sha256(path)
             frame = pd.read_parquet(path)
+            stamps = pd.to_datetime(frame["timestamp"])
+            stamps = stamps.dt.tz_localize(KST) if stamps.dt.tz is None else stamps.dt.tz_convert(KST)
+            frame = frame[(stamps.dt.date == trade_date) & (stamps.dt.time < cutoff)]
             for row in frame.to_dict("records"):
                 bars.append(_bar_from_mapping(symbol, row, source=str(path), source_fingerprint=fingerprint))
     return _group_bars(_filter_bars(bars, trade_date, cutoff))
@@ -400,8 +433,13 @@ def _filter_bars(bars: Sequence[MarketBar], trade_date: date, cutoff: time) -> l
 
 def _group_bars(bars: Sequence[MarketBar]) -> dict[tuple[date, str], tuple[MarketBar, ...]]:
     grouped: dict[tuple[date, str], list[MarketBar]] = {}
+    seen = set()
     for bar in bars:
         key = (bar.timestamp.astimezone(KST).date(), str(bar.symbol).zfill(6))
+        identity = (key, bar.timestamp)
+        if identity in seen:
+            raise ValueError(f"Duplicate completed feature bar: {bar.symbol} {bar.timestamp}")
+        seen.add(identity)
         grouped.setdefault(key, []).append(bar)
     return {key: tuple(value) for key, value in sorted(grouped.items())}
 
@@ -626,17 +664,30 @@ def _validate_afternoon_coverage(
     *,
     min_bars_per_symbol: int,
     allow_partial: bool,
+    trade_date: date | None = None,
+    cutoff: time = DEFAULT_CUTOFF,
 ) -> AfternoonCoverageReport:
     required = tuple(dict.fromkeys(str(symbol).zfill(6) for symbol in required_symbols))
     counts = {
         str(symbol).zfill(6): len(tuple(items))
         for (_day, symbol), items in bars.items()
     }
-    missing = tuple(symbol for symbol in required if counts.get(symbol, 0) <= 0)
+    requirements = {symbol: min_bars_per_symbol for symbol in required}
+    incomplete = set()
+    if trade_date is not None:
+        from strategy_common.execution_session import session_cutoff
+        from strategy_common.source_quality import expected_labels, missing_prefix
+        available = datetime.combine(trade_date, session_cutoff(trade_date, cutoff), KST)
+        for symbol in required:
+            requirements[symbol] = sum(stamp + timedelta(minutes=5) <= available
+                                       for stamp in expected_labels(symbol, trade_date))
+            if missing_prefix(symbol, trade_date, (bar.timestamp for bar in bars.get((trade_date, symbol), ())), available):
+                incomplete.add(symbol)
+    missing = tuple(symbol for symbol in required if requirements[symbol] and counts.get(symbol, 0) <= 0)
     underfilled = {
         symbol: counts.get(symbol, 0)
         for symbol in required
-        if 0 < counts.get(symbol, 0) < min_bars_per_symbol
+        if counts.get(symbol, 0) > 0 and (counts[symbol] < requirements[symbol] or symbol in incomplete)
     }
     if (missing or underfilled) and not allow_partial:
         raise ValueError(
@@ -665,9 +716,12 @@ def _expected_5m_bar_count(cutoff: time) -> int:
     return max(1, (cutoff_minutes - start_minutes) // 5)
 
 
-def _intraday_5m_files_for_trade_date(symbol_dir: Path, symbol: str, trade_date: date) -> tuple[Path, ...]:
-    files = sorted(symbol_dir.glob(f"{symbol}_5m_*.parquet"))
+def _intraday_5m_files_for_trade_date(symbol_dir: Path, symbol: str, trade_date: date, *, snapshot_end: str | None = None) -> tuple[Path, ...]:
+    pattern = f"{symbol}_5m_*_{snapshot_end}.parquet" if snapshot_end else f"{symbol}_5m_*.parquet"
+    files = sorted(symbol_dir.glob(pattern))
     covering = [path for path in files if _intraday_file_covers_trade_date(path, trade_date)]
+    if len(covering) > 1:
+        raise ValueError(f"Ambiguous intraday generations for {symbol}; declare --intraday-snapshot-end or use a frozen input root")
     if covering:
         return tuple(covering)
     return tuple(files[-1:]) if files else ()
@@ -805,10 +859,12 @@ def _parser() -> argparse.ArgumentParser:
     afternoon = subparsers.add_parser("afternoon", help="Generate the OLR final afternoon artifact from completed 5m bars.")
     _add_common_args(afternoon)
     afternoon.add_argument("--intraday-root", default=str(DEFAULT_INTRADAY_ROOT), help="Prepared per-symbol intraday parquet root.")
+    afternoon.add_argument("--intraday-snapshot-end", help="Exact YYYYMMDD generation; required when multiple snapshots cover the session.")
+    afternoon.add_argument("--feature-universe-file", default="config/universe_103.yaml", help="Full universe for sector rotation/leadership, including non-candidate stocks.")
     afternoon.add_argument("--bars-parquet", help="Optional consolidated completed 5m bars parquet.")
     afternoon.add_argument("--bars-json", help="Optional JSON input containing bars_by_symbol.")
     afternoon.add_argument("--cutoff", default="14:30", help="KST cutoff; bars at or after this time are excluded.")
-    afternoon.add_argument("--min-afternoon-bars-per-symbol", type=int, help="Minimum completed 5m bars required for every OLR stage1 candidate. Defaults to full 09:00-to-cutoff coverage.")
+    afternoon.add_argument("--min-afternoon-bars-per-symbol", type=int, help="Fixture override for minimum bars per stage1 candidate. Default checks the sourced session prefix, including halts.")
     afternoon.add_argument("--allow-partial-afternoon-bars", action="store_true", help="Fixture/shadow only: allow missing OLR stage1 candidate bars.")
     return parser
 

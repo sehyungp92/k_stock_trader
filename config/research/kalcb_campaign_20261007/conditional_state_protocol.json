@@ -1,0 +1,14 @@
+{
+  "version": "conditional-campaign-v1",
+  "declared_after": "Additive campaign feature test returned 44.3909% / 17.8088%, with 12.1089% / 14.4360% drawdown; rejected as an improvement",
+  "hypothesis": "An additive structural block cannot directly distinguish the interaction of extension with compression and acceptance. Test one small, economically specified conditional block.",
+  "interactions": [
+    ["daily_return_20d", "campaign_box_squeeze"],
+    ["daily_return_20d", "campaign_opening_above_share"],
+    ["first30_ret", "campaign_close_distance_atr"],
+    ["first30_ret", "campaign_prior_volume_ratio"]
+  ],
+  "fixed": "All previous columns, spline knots, Ridge penalty, chronology, quantities, gates and execution",
+  "candidate_count": 1,
+  "evaluation": "Same development history; report attempted additive and conditional variants even if unsuccessful; no June-July access"
+}

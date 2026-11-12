@@ -39,13 +39,11 @@ def test_sim_broker_marks_each_symbol_with_its_own_last_price():
     second = MarketBar("000002", datetime(2026, 1, 5, 9, 0, tzinfo=KST), "1m", 200, 200, 200, 200, 1000)
     broker.submit(SubmitEntry("alpha", "000001", 10, "MARKET", None, 95, "first"), first.timestamp)
     broker.submit(SubmitEntry("alpha", "000002", 10, "MARKET", None, 190, "second"), second.timestamp)
-    broker.process_bar(first)
-    broker.process_bar(second)
+    broker.process_batch((first, second))
 
     first_next = MarketBar("000001", datetime(2026, 1, 5, 9, 1, tzinfo=KST), "1m", 110, 110, 110, 110, 1000)
     second_next = MarketBar("000002", datetime(2026, 1, 5, 9, 1, tzinfo=KST), "1m", 220, 220, 220, 220, 1000)
-    broker.process_bar(first_next)
-    broker.process_bar(second_next)
+    broker.process_batch((first_next, second_next))
 
     first_later = MarketBar("000001", datetime(2026, 1, 5, 9, 2, tzinfo=KST), "1m", 120, 120, 120, 120, 1000)
     equity = broker.mark_to_market(first_later)
@@ -101,7 +99,7 @@ def test_sim_broker_protective_stop_uses_live_parity_metadata():
     assert fill.metadata["live_backtest_stop_parity_version"] == LIVE_BACKTEST_STOP_PARITY_VERSION
 
 
-def test_same_day_forced_flatten_does_not_carry_to_next_session():
+def test_same_day_exit_without_execution_bar_remains_unresolved():
     class Adapter:
         strategy_id = "TEST"
 
@@ -132,10 +130,10 @@ def test_same_day_forced_flatten_does_not_carry_to_next_session():
 
     result = run_replay(bars, Adapter(), costs=None)
 
-    assert len(result.trades) == 1
-    assert result.trades[0].exit_fill_time.date() == datetime(2026, 1, 5, tzinfo=KST).date()
-    assert result.trades[0].exit_fill_time.hour == 15
-    assert result.broker.same_day_forced_exit_count == 1
+    assert result.trades == []
+    assert result.broker.position_qty("TEST", "000001") == 1
+    assert result.broker.expired_orders
+    assert result.broker.same_day_forced_exit_count == 0
 
 
 def test_replay_rejects_incomplete_bars_before_strategy_logic():

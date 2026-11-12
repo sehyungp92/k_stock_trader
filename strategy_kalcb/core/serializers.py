@@ -40,6 +40,8 @@ def restore_state(payload: dict[str, Any]) -> KALCBState:
             position["entry_time"] = _coerce_datetime(position["entry_time"])
             data["position"] = KALCBPositionState(**position)
         data["stage"] = SymbolStage(data.get("stage", SymbolStage.WATCHING))
+        data["entry_history"] = {key: KALCBPositionState(**{**value, "entry_time": _coerce_datetime(value["entry_time"])})
+                                 for key, value in data.get("entry_history", {}).items()}
         data["session_date"] = _coerce_date(data["session_date"]) if data.get("session_date") else None
         symbols[symbol] = KALCBSymbolState(**data)
     return KALCBState(
@@ -48,6 +50,7 @@ def restore_state(payload: dict[str, Any]) -> KALCBState:
         source_fingerprint=str(payload.get("source_fingerprint", "")),
         session_date=_coerce_date(payload["session_date"]) if payload.get("session_date") else None,
         order_roles=dict(payload.get("order_roles", {}) or {}),
+        order_history=dict(payload.get("order_history", {}) or {}),
         meta=dict(payload.get("meta", {}) or {}),
     )
 

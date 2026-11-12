@@ -56,10 +56,15 @@ def test_exit_stage_trade_validates_against_assistant_schema(tmp_path):
         trade_id="trade-1",
         exit_price=71000.0,
         exit_reason="SIGNAL",
+        fees_paid=0.0,  # Explicitly known costs under the legacy consumer contract.
     )
 
     assert trade is not None
-    AssistantTradeEvent.model_validate(trade.to_dict())
+    from schemas.execution_accounting import ExecutionObservation
+    ExecutionObservation.model_validate(trade.to_dict())
+    import pytest
+    with pytest.raises(ValueError, match="Execution observations"):
+        AssistantTradeEvent.model_validate(trade.to_dict())
 
 
 def test_missed_opportunity_validates_against_assistant_schema(tmp_path):

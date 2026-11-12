@@ -2,12 +2,16 @@ strategy: kalcb
 timeframe: 5m
 execution_timeframe: 5m_next_open
 capability_level: real_replay
+input_manifest_path: data/backtests/integrity/2026-10-05-capacity-model-v17/manifest.json
 data_root: data/kis_intraday_parquet
 daily_data_root: data/krx_daily_parquet
 data_snapshot_end: "2026-05-12"
 artifact_root: data/strategy/kalcb
 holdout_days: 42
 initial_equity: 100000000
+capacity_scenario:
+  name: research-baseline
+  participation: 0.01
 live_parity_fill_timing: next_5m_open
 auction_mode: non_auction_continuous
 tick_policy: krx_tick_table

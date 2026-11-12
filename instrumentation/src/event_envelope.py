@@ -72,6 +72,10 @@ def wrap_for_relay(
     """
 
     raw = dict(raw_event or {})
+    if raw.get("schema_version") == "daily_execution_accounting_v2":
+        identity = f"{bot_id}|{raw['date']}|{raw.get('strategy_type', '')}|{raw.get('snapshot_sequence', 0)}|{raw['snapshot_revision']}"
+        raw["event_id"] = hashlib.sha256(identity.encode()).hexdigest()
+        raw["exchange_timestamp"] = raw["date"] + "T23:59:59+00:00"
     metadata = dict(raw.get("event_metadata") or {})
     payload_object = raw.get("payload") if isinstance(raw.get("payload"), Mapping) else {}
     event_type = str(raw.get("event_type") or metadata.get("event_type") or event_type)

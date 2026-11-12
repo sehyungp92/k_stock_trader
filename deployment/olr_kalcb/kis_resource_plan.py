@@ -12,6 +12,7 @@ from strategy_kalcb.models import KALCBDailySnapshot
 from strategy_olr.artifact_store import OLR_FINAL_ARTIFACT_STAGE, OLR_STAGE1_ARTIFACT_STAGE
 from strategy_olr.config import OLRConfig
 from strategy_olr.models import OLRDailySnapshot
+from strategy_common.execution_session import kalcb_session_config, session_cutoff
 
 from .hashing import canonical_json_hash
 from .kis_limits import KISLimitProfile, kis_mode_matches_runtime, limit_profile_for_runtime
@@ -146,6 +147,7 @@ def build_kis_resource_plan(
             failures.extend(_olr_surface_failures(final_surface, olr_cfg))
 
     lease_windows = _build_lease_windows(
+        trade_date=trade_date,
         profile=profile,
         surfaces=surfaces,
         kalcb_config=kalcb_cfg,
@@ -346,11 +348,14 @@ def target_strategy_ids_for_bar(
 
 def _build_lease_windows(
     *,
+    trade_date: date,
     profile: KISLimitProfile,
     surfaces: Sequence[CandidateSurface],
     kalcb_config: KALCBConfig | None,
     completed_bar_source: str,
 ) -> list[ResourceLeaseWindow]:
+    if kalcb_config is not None:
+        kalcb_config = kalcb_session_config(kalcb_config, trade_date)
     windows: list[ResourceLeaseWindow] = []
     rest_budget = max(0, profile.rest_calls_per_5m - profile.order_rest_reserve_per_5m - profile.oms_reconcile_reserve_per_5m)
     ws_budget = max(0, profile.ws_max_registrations - profile.ws_reserved_execution_regs)
@@ -403,14 +408,14 @@ def _build_lease_windows(
             )
         )
     if olr_stage1 is not None:
-        acquisition_start = kalcb_config.entry_window_end if kalcb_config is not None else time(14, 20)
+        acquisition_start = kalcb_config.entry_window_end if kalcb_config is not None else session_cutoff(trade_date, time(14, 20))
         rest_symbols = olr_stage1.frontier_symbols
         rest_calls = len(rest_symbols) if completed_bar_source == "paced_rest" else 0
         windows.append(
             ResourceLeaseWindow(
                 name="olr_stage1_bar_acquisition",
                 starts_at_kst=_time_text(acquisition_start),
-                ends_at_kst=_time_text(OLR_FINAL_CUTOFF),
+                ends_at_kst=_time_text(session_cutoff(trade_date, OLR_FINAL_CUTOFF)),
                 strategy_id="OLR",
                 rest_symbols=rest_symbols,
                 rest_endpoint_class="completed_5m_chart",
@@ -429,8 +434,8 @@ def _build_lease_windows(
         windows.append(
             ResourceLeaseWindow(
                 name="olr_final_runtime",
-                starts_at_kst=_time_text(OLR_RUNTIME_ENABLE),
-                ends_at_kst=_time_text(CLOSE_WINDOW_END),
+                starts_at_kst=_time_text(session_cutoff(trade_date, OLR_RUNTIME_ENABLE)),
+                ends_at_kst=_time_text(session_cutoff(trade_date, CLOSE_WINDOW_END)),
                 strategy_id="OLR",
                 rest_symbols=(),
                 rest_endpoint_class="none",
@@ -450,8 +455,8 @@ def _build_lease_windows(
         windows.append(
             ResourceLeaseWindow(
                 name="close_order_window",
-                starts_at_kst=_time_text(CLOSE_WINDOW_START),
-                ends_at_kst=_time_text(CLOSE_WINDOW_END),
+                starts_at_kst=_time_text(session_cutoff(trade_date, CLOSE_WINDOW_START)),
+                ends_at_kst=_time_text(session_cutoff(trade_date, CLOSE_WINDOW_END)),
                 strategy_id="OMS",
                 rest_symbols=(),
                 rest_endpoint_class="orders_and_reconciliation",

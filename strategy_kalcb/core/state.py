@@ -74,16 +74,26 @@ class KALCBPositionState:
     or_high: float = 0.0
     or_low: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Excursions observed against the cost basis that existed at that mark.
+    # Never rebase an old high/low against the average of later entry fills.
+    observed_mfe_r: float | None = None
+    observed_mae_r: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_favorable_price <= 0:
             self.max_favorable_price = self.entry_price
         if self.max_adverse_price <= 0:
             self.max_adverse_price = self.entry_price
+        if self.observed_mfe_r is None:
+            self.observed_mfe_r = max(0.0, self.unrealized_r(self.max_favorable_price))
+        if self.observed_mae_r is None:
+            self.observed_mae_r = min(0.0, self.unrealized_r(self.max_adverse_price))
 
     def update_mark(self, *, high: float, low: float) -> None:
         self.max_favorable_price = max(self.max_favorable_price, float(high))
         self.max_adverse_price = min(self.max_adverse_price, float(low))
+        self.observed_mfe_r = max(float(self.observed_mfe_r or 0.0), self.unrealized_r(high))
+        self.observed_mae_r = min(float(self.observed_mae_r or 0.0), self.unrealized_r(low))
 
     def unrealized_r(self, price: float) -> float:
         if self.risk_per_share <= 0:
@@ -93,12 +103,12 @@ class KALCBPositionState:
     def mfe_r(self) -> float:
         if self.risk_per_share <= 0:
             return 0.0
-        return (self.max_favorable_price - self.entry_price) / self.risk_per_share
+        return float(self.observed_mfe_r or 0.0)
 
     def mae_r(self) -> float:
         if self.risk_per_share <= 0:
             return 0.0
-        return (self.max_adverse_price - self.entry_price) / self.risk_per_share
+        return float(self.observed_mae_r or 0.0)
 
 
 @dataclass(slots=True)
@@ -124,6 +134,7 @@ class KALCBSymbolState:
     touched_pdh: bool = False
     touched_reclaim_levels: dict[str, bool] = field(default_factory=dict)
     position: KALCBPositionState | None = None
+    entry_history: dict[str, KALCBPositionState] = field(default_factory=dict)
     rejected_reason: str = ""
     entry_attempted: bool = False
     last_decision_code: str = ""
@@ -144,8 +155,6 @@ class KALCBSymbolState:
         self.or_volume = 0.0
         self.vwap_value = 0.0
         self.vwap_volume = 0.0
-        self.pending_entry_order_id = ""
-        self.pending_entry_metadata.clear()
         self.touched_vwap = False
         self.touched_or_mid = False
         self.touched_or_high = False
@@ -183,6 +192,7 @@ class KALCBState:
     source_fingerprint: str = ""
     session_date: date | None = None
     order_roles: dict[str, dict[str, Any]] = field(default_factory=dict)
+    order_history: dict[str, dict[str, Any]] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
 
     def symbol_state(self, symbol: str) -> KALCBSymbolState:

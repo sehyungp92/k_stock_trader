@@ -13,17 +13,8 @@ _TRADING_CALENDAR = None
 
 
 def _get_trading_calendar():
-    global _TRADING_CALENDAR_LOADED, _TRADING_CALENDAR
-    if _TRADING_CALENDAR_LOADED:
-        return _TRADING_CALENDAR
-    _TRADING_CALENDAR_LOADED = True
-    try:
-        from kis_core.trading_calendar import get_trading_calendar
-
-        _TRADING_CALENDAR = get_trading_calendar()
-    except Exception:  # pragma: no cover - defensive import for isolated tooling
-        _TRADING_CALENDAR = None
-    return _TRADING_CALENDAR
+    from kis_core.trading_calendar import get_trading_calendar
+    return get_trading_calendar()
 
 
 def is_trading_day(value: date) -> bool:
@@ -35,7 +26,8 @@ def is_trading_day(value: date) -> bool:
 
 def is_regular_session(value: datetime) -> bool:
     ts = ensure_kst(value)
-    return is_trading_day(ts.date()) and KRX_OPEN <= ts.time() <= KRX_CLOSE
+    opening, closing = _get_trading_calendar().session_hours(ts.date())
+    return is_trading_day(ts.date()) and opening <= ts.time() <= closing
 
 
 def timeframe_delta(timeframe: str) -> timedelta | None:
@@ -51,13 +43,16 @@ def timeframe_delta(timeframe: str) -> timedelta | None:
 
 def session_close_for(value: datetime | date) -> datetime:
     day = value if isinstance(value, date) and not isinstance(value, datetime) else ensure_kst(value).date()
-    return datetime.combine(day, KRX_CLOSE, tzinfo=KST)
+    return datetime.combine(day, _get_trading_calendar().session_hours(day)[1], tzinfo=KST)
 
 
 def bar_availability_time(bar_or_timestamp: MarketBar | datetime, timeframe: str | None = None) -> datetime:
     if isinstance(bar_or_timestamp, MarketBar):
         timestamp = ensure_kst(bar_or_timestamp.timestamp)
         timeframe = bar_or_timestamp.timeframe
+        from strategy_common.execution_session import bar_is_delayed_closing_auction
+        if bar_is_delayed_closing_auction(bar_or_timestamp):
+            return timestamp
     else:
         timestamp = ensure_kst(bar_or_timestamp)
         if timeframe is None:

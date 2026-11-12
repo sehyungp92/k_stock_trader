@@ -7,6 +7,7 @@ from typing import Iterable
 
 from strategy_common.clock import KST
 from strategy_common.market import MarketBar
+from strategy_common.execution_session import session_cutoff
 
 
 FIRST30_START = time(9, 0)
@@ -73,7 +74,9 @@ def completed_first30_bars(bars: Iterable[MarketBar], *, required_count: int = F
     for bar in sorted(bars, key=lambda item: item.timestamp):
         local_ts = bar.timestamp.astimezone(KST)
         t = local_ts.time()
-        if FIRST30_START <= t < FIRST30_END:
+        opening = session_cutoff(local_ts.date(), FIRST30_START, anchor="open")
+        cutoff = session_cutoff(local_ts.date(), FIRST30_END, anchor="open")
+        if opening <= t < cutoff:
             if not bar.is_completed:
                 raise ValueError(f"KALCB first30 feature requires completed bars: {bar.symbol} {bar.timestamp.isoformat()}")
             if bar.timeframe.lower() != "5m":
@@ -89,7 +92,7 @@ def completed_first30_bars(bars: Iterable[MarketBar], *, required_count: int = F
     if session_date is None:
         return ()
     expected_count = max(1, int(required_count))
-    start = datetime.combine(session_date, FIRST30_START, tzinfo=KST)
+    start = datetime.combine(session_date, session_cutoff(session_date, FIRST30_START, anchor="open"), tzinfo=KST)
     expected_times = tuple(start + timedelta(minutes=5 * index) for index in range(expected_count))
     return tuple(window_by_time[item] for item in expected_times if item in window_by_time)
 

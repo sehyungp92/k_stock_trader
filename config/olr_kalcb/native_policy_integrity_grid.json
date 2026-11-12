@@ -1,0 +1,7 @@
+[
+  {"name": "native_cash_account", "mutations": {"portfolio.max_gross_notional": 100000000, "portfolio.max_symbol_notional": 100000000, "portfolio.max_sector_notional": 100000000}},
+  {"name": "native_half_gross", "mutations": {"portfolio.max_gross_notional": 50000000, "portfolio.max_symbol_notional": 100000000, "portfolio.max_sector_notional": 100000000}},
+  {"name": "native_symbol_cap", "mutations": {"portfolio.max_gross_notional": 100000000, "portfolio.max_symbol_notional": 20000000, "portfolio.max_sector_notional": 100000000}},
+  {"name": "native_sector_cap", "mutations": {"portfolio.max_gross_notional": 100000000, "portfolio.max_symbol_notional": 100000000, "portfolio.max_sector_notional": 30000000}},
+  {"name": "native_olr_priority", "mutations": {"portfolio.max_gross_notional": 100000000, "portfolio.max_symbol_notional": 100000000, "portfolio.max_sector_notional": 100000000, "portfolio.strategy_priority": ["OLR", "KALCB"]}}
+]

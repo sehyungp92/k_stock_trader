@@ -19,16 +19,14 @@ ULTIMATE_TARGETS: dict[str, float] = {
     "olr_discrimination_quality": 0.70,
 }
 
-# Keep the immutable score compact: return, realized R, frequency, quality,
-# drawdown, alpha capture, and signal discrimination.
+# Only realized, costed account/trade metrics may rank candidates.
+# Unmatched daily labels and gross MFE remain observer diagnostics.
 IMMUTABLE_SCORE_COMPONENTS: dict[str, float] = {
     "official_mtm_net_return_pct": 0.24,
     "expected_total_r": 0.15,
     "total_trades": 0.13,
     "profit_factor": 0.08,
     "max_drawdown_pct": 0.12,
-    "olr_alpha_capture": 0.16,
-    "olr_discrimination_quality": 0.12,
 }
 
 
@@ -38,7 +36,7 @@ PHASE_HARD_REJECTS: dict[int, dict[str, float]] = {
         "min_profit_factor": 1.03,
         "max_max_drawdown_pct": 0.170,
         "max_same_bar_fill_count": 0.0,
-        "max_rejected_order_count": 0.0,
+        "max_invalid_order_rejection_count": 0.0,
         "max_forced_replay_close_count": 0.0,
         "max_end_open_position_count": 0.0,
     },
@@ -47,7 +45,7 @@ PHASE_HARD_REJECTS: dict[int, dict[str, float]] = {
         "min_profit_factor": 1.05,
         "max_max_drawdown_pct": 0.165,
         "max_same_bar_fill_count": 0.0,
-        "max_rejected_order_count": 0.0,
+        "max_invalid_order_rejection_count": 0.0,
         "max_forced_replay_close_count": 0.0,
         "max_end_open_position_count": 0.0,
     },
@@ -56,7 +54,7 @@ PHASE_HARD_REJECTS: dict[int, dict[str, float]] = {
         "min_profit_factor": 1.06,
         "max_max_drawdown_pct": 0.160,
         "max_same_bar_fill_count": 0.0,
-        "max_rejected_order_count": 0.0,
+        "max_invalid_order_rejection_count": 0.0,
         "max_forced_replay_close_count": 0.0,
         "max_end_open_position_count": 0.0,
     },
@@ -65,7 +63,7 @@ PHASE_HARD_REJECTS: dict[int, dict[str, float]] = {
         "min_profit_factor": 1.07,
         "max_max_drawdown_pct": 0.155,
         "max_same_bar_fill_count": 0.0,
-        "max_rejected_order_count": 0.0,
+        "max_invalid_order_rejection_count": 0.0,
         "max_forced_replay_close_count": 0.0,
         "max_end_open_position_count": 0.0,
     },
@@ -74,7 +72,7 @@ PHASE_HARD_REJECTS: dict[int, dict[str, float]] = {
         "min_profit_factor": 1.08,
         "max_max_drawdown_pct": 0.155,
         "max_same_bar_fill_count": 0.0,
-        "max_rejected_order_count": 0.0,
+        "max_invalid_order_rejection_count": 0.0,
         "max_forced_replay_close_count": 0.0,
         "max_end_open_position_count": 0.0,
     },
@@ -83,7 +81,7 @@ PHASE_HARD_REJECTS: dict[int, dict[str, float]] = {
         "min_profit_factor": 1.10,
         "max_max_drawdown_pct": 0.150,
         "max_same_bar_fill_count": 0.0,
-        "max_rejected_order_count": 0.0,
+        "max_invalid_order_rejection_count": 0.0,
         "max_forced_replay_close_count": 0.0,
         "max_end_open_position_count": 0.0,
     },
@@ -142,24 +140,6 @@ def gate_criteria(
                 _expected_total_r(metrics),
                 _expected_total_r(metrics) >= _phase_floor(phase, "expected_total_r"),
             ),
-            GateCriterion(
-                "olr_alpha_capture",
-                _phase_floor(phase, "olr_alpha_capture"),
-                _alpha_capture(metrics),
-                _alpha_capture(metrics) >= _phase_floor(phase, "olr_alpha_capture"),
-            ),
-            GateCriterion(
-                "olr_discrimination_quality",
-                _phase_floor(phase, "olr_discrimination_quality"),
-                _f(metrics, "olr_discrimination_quality"),
-                _f(metrics, "olr_discrimination_quality") >= _phase_floor(phase, "olr_discrimination_quality"),
-            ),
-            GateCriterion(
-                "selected_negative_label_share",
-                _phase_negative_label_ceiling(phase),
-                _f(metrics, "selected_negative_label_share", _f(metrics, "olr_selected_negative_label_share")),
-                _f(metrics, "selected_negative_label_share", _f(metrics, "olr_selected_negative_label_share")) <= _phase_negative_label_ceiling(phase),
-            ),
         ]
     )
     return criteria
@@ -199,6 +179,8 @@ def _phase_negative_label_ceiling(phase: int) -> float:
 
 
 def _metric_value(metrics: dict[str, Any], metric: str) -> float:
+    if metric == "invalid_order_rejection_count":
+        return _f(metrics, metric, _f(metrics, "rejected_order_count", float("inf")))
     if metric == "total_trades":
         return _entry_frequency(metrics)
     if metric == "profit_factor":
@@ -218,7 +200,7 @@ def _normalized_weights(weights: dict[str, float]) -> dict[str, float]:
     allowed = {key: float(value) for key, value in dict(weights or {}).items() if key in IMMUTABLE_SCORE_COMPONENTS}
     total = sum(max(value, 0.0) for value in allowed.values())
     if total <= 0.0:
-        return dict(IMMUTABLE_SCORE_COMPONENTS)
+        return _normalized_weights(IMMUTABLE_SCORE_COMPONENTS)
     return {key: max(value, 0.0) / total for key, value in allowed.items()}
 
 
@@ -231,11 +213,11 @@ def _expected_total_r(metrics: dict[str, Any]) -> float:
 
 
 def _entry_frequency(metrics: dict[str, Any]) -> float:
-    if _has_metric(metrics, "entry_fill_count"):
-        return _f(metrics, "entry_fill_count")
     if _has_metric(metrics, "entry_level_trade_count"):
         return _f(metrics, "entry_level_trade_count")
-    return _f(metrics, "total_trades")
+    if _has_metric(metrics, "total_trades"):
+        return _f(metrics, "total_trades")
+    return _f(metrics, "entry_fill_count")
 
 
 def _profit_factor(metrics: dict[str, Any]) -> float:

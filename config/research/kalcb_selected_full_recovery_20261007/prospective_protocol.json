@@ -1,0 +1,27 @@
+{
+  "adaptation": "Preserve the existing past-only expanding selector and its original action-label target, with 60 mature sessions, a one-session embargo and 20-session refits. Keep support calibration at 60 prior sessions and 100-observation shrinkage. Simulate the declared original actions to form selector labels; keep realised changed-management outcomes separate. Never silently substitute new targets.",
+  "comparison": "Two separate same-capital paper accounts under matching data and execution costs. Record timestamped candidate snapshots before orders; include cash days, rejected/no-fill actions and source failures.",
+  "completion_policy_revision": {
+    "policy": "config/research/forward_validation_policy.json",
+    "reason": "User removed fixed future-session counts from completion conditions; strategy and evidence-integrity requirements are unchanged.",
+    "revised_at_utc": "2026-10-08T09:24:49.831959+00:00"
+  },
+  "completion_requires_future_sessions": false,
+  "decision_rule": "Report inconclusive evidence if uncertainty is large. Do not reselect on the validation window, extend until significance, or retrospectively drop difficult sessions. No scheduled task or live orders have been created.",
+  "earliest_start": "2026-10-08",
+  "evaluation_window_policy": "Evaluate the declared available window, with no fixed minimum session count. Disclose sample size, uncertainty and every reporting endpoint; completion does not establish independent performance.",
+  "freeze_before_first_observation": [
+    "selected registry and hashes",
+    "original full-size comparator",
+    "sizing and execution assumptions",
+    "feature/label definitions and refit schedules"
+  ],
+  "report": [
+    "native intrabar DD and liquidation failures",
+    "net return, distinct stock-days, trades, active sessions and turnover",
+    "paired session-block uncertainty and tail concentration",
+    "added, removed and shared-position contribution"
+  ],
+  "research_only": true,
+  "status": "specified_not_run"
+}

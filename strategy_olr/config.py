@@ -5,7 +5,7 @@ from typing import Any
 
 
 STRATEGY_ID = "OLR"
-OLR_CORE_VERSION = "olr-research-v4"
+OLR_CORE_VERSION = "olr-research-v6"
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +21,7 @@ class OLRConfig:
     research_top_long_count: int = 30
     frontier_active_selection_mode: str = "hybrid"
     afternoon_top_n: int = 8
+    require_complete_feature_prefix: bool = False
     overnight_slot_count: int = 4
 
     premarket_frontier_size: int = 30
@@ -158,6 +159,46 @@ class OLRConfig:
     exit_mode: str = "next_close"
     allocation_mode: str = "selected_equal_capped"
     target_gross_exposure: float = 1.0
+    allocation_equity_cap_krw: float = 0.0
+    # Optional native capacity policy; zero values preserve the frozen control.
+    capacity_entry_bars: int = 0
+    capacity_exit_quantile: float = 0.0
+    capacity_participation: float = 0.01
+    capacity_min_exit_observations: int = 3
+    capacity_min_position_pct: float = 0.0
+    capacity_exit_guard: bool = False
+    capacity_exit_guard_mode: str = 'whole_position'
+    capacity_joint_allocation: bool = False
+    capacity_exit_priority: bool = False
+    capacity_loss_position_pct: float = 0.0
+    capacity_loss_sector_pct: float = 0.0
+    capacity_loss_total_pct: float = 0.0
+    capacity_loss_atr_multiple: float = 1.25
+    capacity_opening_tail: bool = False
+    capacity_weak_partial_fraction: float = 0.0
+    capacity_defer_minutes: int = 0
+    capacity_defer_min_fraction: float = 0.25
+    capacity_broad_auction_history: bool = False
+    capacity_history_scope: str = 'legacy_feed'
+    capacity_history_prior_strength: int = 3
+    capacity_sparse_exit_mode: str = 'native'
+    capacity_volume_exponent: float = 0.0
+    capacity_session_budget_fraction: float = 0.0
+    capacity_value_mode: str = 'off'
+    capacity_value_strength: float = .5
+    capacity_redistribute: bool = False
+    capacity_redistribute_max_rank: int = 2
+    capacity_redistribution_evidence: str = 'auction'
+    capacity_redistribution_max_multiplier: float = 0.0
+    capacity_recycle_liquidity_only: bool = False
+    capacity_release_minutes: int = 0
+    capacity_release_fraction: float = 1.0
+    # Opt-in research rule for residual inventory beyond its intended horizon.
+    capacity_stale_release: bool = False
+    capacity_rotation: bool = False
+    capacity_rotation_filter: str = 'below_vwap'
+    capacity_rotation_fraction: float = 0.5
+    capacity_rotation_max_rank: int = 2
     max_position_pct: float = 0.25
     rank_decay: float = 1.0
     min_selected: int = 1
@@ -174,6 +215,100 @@ class OLRConfig:
     tax_bps_on_sell: float = 18.0
 
     def __post_init__(self) -> None:
+        import math
+        if type(self.capacity_opening_tail) is not bool:
+            raise ValueError('capacity_opening_tail must be boolean')
+        if self.capacity_opening_tail and (not self.capacity_joint_allocation or not self.capacity_loss_total_pct):
+            raise ValueError('Opening-tail sizing requires joint allocation and an account loss budget')
+        if not math.isfinite(self.capacity_weak_partial_fraction) or not 0 <= self.capacity_weak_partial_fraction <= .5:
+            raise ValueError('Weak partial fraction must be finite and between zero and one half')
+        if self.capacity_weak_partial_fraction and not self.capacity_exit_priority:
+            raise ValueError('Weak partial exits require acknowledged priority escalation')
+        if type(self.capacity_exit_priority) is not bool:
+            raise ValueError('Exit priority must be a boolean')
+        for name in ('capacity_loss_position_pct', 'capacity_loss_sector_pct', 'capacity_loss_total_pct'):
+            value = getattr(self, name)
+            if not math.isfinite(value) or not 0 <= value <= .2:
+                raise ValueError('Invalid scenario-loss budget: ' + name)
+            if value and not self.capacity_joint_allocation:
+                raise ValueError('Scenario-loss budgeting requires joint allocation')
+        if not math.isfinite(self.capacity_loss_atr_multiple) or self.capacity_loss_atr_multiple < 1:
+            raise ValueError('Scenario-loss distance must include at least one ATR')
+        if type(self.capacity_stale_release) is not bool:
+            raise ValueError('Stale release must be a boolean')
+        if self.capacity_stale_release and (self.capacity_rotation or self.capacity_release_minutes):
+            raise ValueError('Stale release cannot overlap other capital-release policies')
+        if self.capacity_recycle_liquidity_only and (not self.capacity_redistribute or self.capacity_defer_minutes):
+            raise ValueError('Liquidity recycling requires native top-ups without deferred intents')
+        if self.capacity_value_mode not in ('off','rank','band') or self.capacity_value_strength not in (.5,1):
+            raise ValueError('Unsupported causal allocation value policy')
+        if self.capacity_value_mode!='off' and not self.capacity_joint_allocation:
+            raise ValueError('Allocation value requires joint allocation')
+        if self.capacity_value_mode!='off' and (self.capacity_defer_minutes or self.capacity_redistribute or self.capacity_rotation):
+            raise ValueError('Allocation value has not qualified delayed or redistributed intents')
+        if self.capacity_session_budget_fraction not in (0, .5, .65, .8):
+            raise ValueError('Session entry budget must be disabled, half, 65% or 80%')
+        if self.capacity_session_budget_fraction and not self.capacity_joint_allocation:
+            raise ValueError('Session entry budgeting requires joint allocation')
+        if self.capacity_rotation_filter not in ('below_vwap', 'any'):
+            raise ValueError('Unsupported incumbent rotation condition')
+        if self.capacity_rotation and (not self.capacity_joint_allocation or self.capacity_defer_minutes != 10
+                or self.capacity_release_minutes or self.trade_exit_plan.get('hard_stop_enabled', False)):
+            raise ValueError('Rotation requires joint allocation, ten-minute revalidation, no scheduled release or hard stop')
+        if self.capacity_rotation_max_rank not in (1, 2):
+            raise ValueError('Rotation only supports the first two native ranks')
+        if not math.isfinite(self.capacity_rotation_fraction) or not 0 < self.capacity_rotation_fraction <= 1:
+            raise ValueError('Rotation fraction must be in (0,1]')
+        if self.capacity_history_scope not in ('legacy_feed', 'orderable', 'conditional_shrink', 'conditional_exit'):
+            raise ValueError('Unsupported OLR capacity history scope')
+        if self.capacity_history_prior_strength not in (3,10):
+            raise ValueError('Conditional liquidity prior strength must be 3 or 10')
+        if self.capacity_history_scope in ('conditional_shrink','conditional_exit') and not self.capacity_broad_auction_history:
+            raise ValueError('Conditional liquidity shrinkage requires sourced broad history')
+        if self.capacity_history_scope in ('conditional_shrink','conditional_exit') and self.capacity_volume_exponent:
+            raise ValueError('Selection-conditioned liquidity is not combined with uncalibrated volume scaling')
+        if self.capacity_broad_auction_history and self.capacity_history_scope == 'orderable':
+            raise ValueError('Broad seed and conditional orderable history cannot be mixed')
+        if self.capacity_sparse_exit_mode not in ('native', 'continuous'):
+            raise ValueError('Unsupported OLR sparse-history fallback')
+        if self.capacity_volume_exponent not in (0, .5, 1):
+            raise ValueError('Volume conditioning exponent must be 0, 0.5 or 1')
+        if self.capacity_volume_exponent and (not self.capacity_broad_auction_history or not self.capacity_exit_quantile):
+            raise ValueError('Volume conditioning requires sourced broad auction history and an exit quantile')
+        if self.capacity_redistribute and not self.capacity_joint_allocation:
+            raise ValueError('Capacity redistribution requires joint allocation')
+        if self.capacity_redistribute_max_rank not in (2, 3, 5):
+            raise ValueError('Redistribution rank ceiling must be 2, 3 or 5')
+        if self.capacity_redistribution_evidence not in ('auction','entry'):
+            raise ValueError('Unsupported redistribution evidence')
+        if not math.isfinite(self.capacity_redistribution_max_multiplier) or self.capacity_redistribution_max_multiplier not in (0,1.5,2):
+            raise ValueError('Redistribution multiplier must be 0 (position limit), 1.5 or 2')
+        if self.capacity_release_minutes not in (0, 30, 60, 90):
+            raise ValueError('Capital release must precede close by 30, 60 or 90 minutes')
+        if not math.isfinite(self.capacity_release_fraction) or not 0 < self.capacity_release_fraction <= 1:
+            raise ValueError('Capital release fraction must be in (0,1]')
+        if self.capacity_exit_guard_mode not in ('whole_position','excess_only'):
+            raise ValueError('Unsupported OLR capacity exit guard mode')
+        if self.capacity_defer_minutes not in (0, 5, 10):
+            raise ValueError("OLR funding deferral must be 0, 5 or 10 minutes")
+        if self.capacity_defer_minutes and not self.capacity_joint_allocation:
+            raise ValueError("OLR funding deferral requires joint allocation")
+        if self.capacity_defer_minutes and self.trade_entry_plan.get('mode', self.entry_mode) not in ('confirm_next_bar', 'decision_next_open'):
+            raise ValueError("OLR funding deferral requires a revalidated confirmation/next-open signal")
+        if not math.isfinite(self.capacity_defer_min_fraction) or not 0 < self.capacity_defer_min_fraction <= 1:
+            raise ValueError("OLR funding deferral fraction must be in (0,1]")
+        if self.capacity_entry_bars not in (0, 3, 6, 12):
+            raise ValueError("OLR entry capacity horizon must be 0, 3, 6 or 12 bars")
+        if not math.isfinite(self.capacity_exit_quantile) or not 0 <= self.capacity_exit_quantile <= 1:
+            raise ValueError("OLR exit quantile must be in [0,1]")
+        if not math.isfinite(self.capacity_participation) or not 0 < self.capacity_participation <= .01:
+            raise ValueError("OLR sizing participation must be in (0,0.01]")
+        if self.capacity_min_exit_observations < 2:
+            raise ValueError("OLR exit forecast requires at least two observations")
+        if not math.isfinite(self.capacity_min_position_pct) or not 0 <= self.capacity_min_position_pct <= .05:
+            raise ValueError("OLR minimum ticket must be between zero and 5% of equity")
+        if not math.isfinite(self.allocation_equity_cap_krw) or self.allocation_equity_cap_krw < 0:
+            raise ValueError("OLR allocation equity cap must be finite and nonnegative")
         if isinstance(self.live_parity_fill_timing, bool):
             live_parity_fill_timing = (
                 "completed_5m_signal_next_bar_or_resting_close_auction" if self.live_parity_fill_timing else "unspecified"
@@ -363,6 +498,7 @@ _ALIASES = {
     "olr.signal.gap_down_trigger_pct": "gap_down_trigger_pct",
     "olr.afternoon.score_mode": "afternoon_score_mode",
     "olr.afternoon.top_n": "afternoon_top_n",
+    "olr.source.require_complete_prefix": "require_complete_feature_prefix",
     "olr.afternoon.min_ret": "afternoon_min_ret",
     "olr.afternoon.min_vwap_ret": "afternoon_min_vwap_ret",
     "olr.afternoon.max_ret": "afternoon_max_ret",
@@ -431,6 +567,7 @@ _ALIASES = {
     "olr.trade_plan.exit": "trade_exit_plan",
     "olr.allocation.mode": "allocation_mode",
     "olr.allocation.target_gross_exposure": "target_gross_exposure",
+    "olr.allocation.equity_cap_krw": "allocation_equity_cap_krw",
     "olr.allocation.max_position_pct": "max_position_pct",
     "olr.allocation.rank_decay": "rank_decay",
     "olr.allocation.min_selected": "min_selected",

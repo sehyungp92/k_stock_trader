@@ -119,6 +119,12 @@ async def _rebuild_offline_replay_from_session(root: Path) -> Path:
             if strategy_id not in drivers:
                 raise ValueError(f"bar event references unavailable strategy {strategy_id}")
             await drivers[strategy_id].handle_bar(bar)
+        elif kind == "strategy_bar_batch":
+            strategy_id, bars = payload
+            await drivers[strategy_id].handle_bars(bars)
+        elif kind == "strategy_capacity_seed":
+            strategy_id, bars, available_at = payload
+            await drivers[strategy_id].handle_capacity_seed(bars, available_at)
         elif kind == "timer":
             strategy_id, timestamp = payload
             if strategy_id not in drivers:
@@ -338,6 +344,17 @@ class ReplayInputLoader:
                     if not strategy_id:
                         raise ValueError("runtime event input missing strategy_id")
                     events.append((timestamp, "strategy_bar", (strategy_id, self._bar_for_runtime_event(row, payload))))
+            elif event_type == "bar_batch":
+                strategy_id = str(row.get("strategy_id") or "").upper().strip()
+                if strategy_id != 'OLR' or not payload.get('bars'):
+                    raise ValueError('Invalid recorded OLR cohort')
+                bars = tuple(self._bar_for_runtime_event({'bar_hash':market_bar_hash(raw)}, raw) for raw in payload['bars'])
+                events.append((timestamp, 'strategy_bar_batch', (strategy_id, bars)))
+            elif event_type == 'capacity_seed':
+                strategy_id = str(row.get('strategy_id') or '').upper().strip()
+                if strategy_id != 'OLR':raise ValueError('Invalid capacity seed owner')
+                bars = tuple(_row_to_bar(dict(raw)) for raw in payload.get('bars',()))
+                events.append((timestamp,'strategy_capacity_seed',(strategy_id,bars,timestamp)))
             elif event_type == "timer":
                 strategy_id = str(row.get("strategy_id") or "").upper().strip()
                 if not strategy_id:

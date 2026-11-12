@@ -7,6 +7,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from kis_core.trading_calendar import get_trading_calendar
+from strategy_common.execution_session import snapshot_reference_issues, session_cutoff
 from strategy_kalcb.artifact_store import KALCBArtifactStore
 from strategy_kalcb.models import KALCBDailySnapshot
 from strategy_kalcb.research import KALCB_FINAL_ARTIFACT_STAGE
@@ -50,17 +51,26 @@ def load_strategy_artifact(
 ) -> KALCBDailySnapshot | OLRDailySnapshot:
     sid = strategy_id.upper().strip()
     mode_name = str(mode or "").strip().lower()
+    calendar = get_trading_calendar()
+    if mode_name in {"paper", "live"} and (
+        not calendar.has_coverage(trade_date) or not calendar.has_session_coverage(trade_date)
+    ):
+        raise ValueError("Verified exchange-session coverage is required for paper/live readiness")
     roots = {**DEFAULT_ARTIFACT_ROOTS, **{key.upper(): Path(value) for key, value in dict(artifact_roots or {}).items()}}
     if sid == "KALCB":
         _validate_required_stage_for_mode(sid, required_stage, mode_name)
         snapshot = KALCBArtifactStore(roots["KALCB"]).load_snapshot(trade_date)
         _validate_snapshot(snapshot, sid, trade_date, required_stage, max_candidates=max_candidates)
+        if mode_name in {"paper", "live"} and (issues := snapshot_reference_issues(snapshot)):
+            raise ValueError(f"Invalid previous-session references: {issues}")
         return snapshot
     if sid == "OLR":
         stage = _normalize_olr_stage(required_stage)
         _validate_required_stage_for_mode(sid, stage, mode_name)
         snapshot = OLRArtifactStore(roots["OLR"]).load_snapshot(trade_date, artifact_stage=stage)
         _validate_snapshot(snapshot, sid, trade_date, stage, max_candidates=max_candidates)
+        if mode_name in {"paper", "live"} and (issues := snapshot_reference_issues(snapshot)):
+            raise ValueError(f"Invalid previous-session references: {issues}")
         return snapshot
     raise ValueError(f"unsupported strategy_id={strategy_id!r}")
 
@@ -191,10 +201,12 @@ def _validate_generated_at(
         raise ValueError("generated_at cannot be converted to KST") from exc
     if generated_kst.date() != trade_date:
         raise ValueError(f"generated_at KST date mismatch: {generated_kst.date().isoformat()} != {trade_date.isoformat()}")
-    if strategy_id == "OLR" and required_stage == OLR_FINAL_ARTIFACT_STAGE and generated_kst.time() < OLR_FINAL_READY_TIME:
-        raise ValueError("OLR final generated_at is before the 14:30 KST artifact cutoff")
-    if _requires_pre_session_generated_at(strategy_id, required_stage) and generated_kst.time() >= PRESESSION_READY_CUTOFF:
-        raise ValueError("pre-session artifact generated_at must be before the 09:00 KST session open")
+    final_time = session_cutoff(trade_date, OLR_FINAL_READY_TIME)
+    opening = get_trading_calendar().session_hours(trade_date)[0]
+    if strategy_id == "OLR" and required_stage == OLR_FINAL_ARTIFACT_STAGE and generated_kst.time() < final_time:
+        raise ValueError(f"OLR final generated_at is before the {final_time:%H:%M} KST artifact cutoff")
+    if _requires_pre_session_generated_at(strategy_id, required_stage) and generated_kst.time() >= opening:
+        raise ValueError(f"pre-session artifact generated_at must be before the {opening:%H:%M} KST session open")
 
 
 def _requires_pre_session_generated_at(strategy_id: str, required_stage: str) -> bool:

@@ -1,18 +1,22 @@
 from __future__ import annotations
 
+from backtests.core.input_manifest import parquet_input, read_input_bytes
+from backtests.core.shared_market_inputs import market_bar_values, selected_intraday_paths
+
 import hashlib
 import json
 import pickle
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from backtests.analysis.metrics import compute_trade_metrics
-from backtests.auto.shared.cache_keys import fingerprint_paths, stable_signature
-from backtests.engine.replay import ReplayResult, run_replay
+from backtests.auto.shared.cache_keys import fingerprint_paths, stable_signature, source_generation_hash
+from backtests.engine.replay import drive_timestamp_batch, ReplayResult, run_replay
 from backtests.engine.sim_broker import BrokerCosts, SimBroker, SimOrder
+from backtests.engine.contracts import EXECUTION_VERSION, CONTRACT_VERSIONS
 from backtests.strategies.kalcb.fixed_trade_plan_phase import _normalize_mutations
 from backtests.strategies.kalcb.runner import KALCBReplayAdapter, _collapse_exit_legs
 from backtests.strategies.kalcb.trade_plan_sweep import CompiledCoreReplay, _clone_snapshots_for_replay
@@ -28,6 +32,7 @@ from strategy_kalcb.config import KALCBConfig
 from strategy_kalcb.models import KALCBDailySnapshot
 from strategy_olr.config import OLRConfig
 from strategy_olr.models import OLRDailySnapshot
+from .native_policy import NativePolicyMixin
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +43,8 @@ class PromotedReplayInputs:
     olr_snapshots: dict[date, OLRDailySnapshot]
     olr_bars: tuple[MarketBar, ...]
     lineage: dict[str, Any]
+    kalcb_timed_snapshots: dict = field(default_factory=dict)
+    kalcb_observation_symbols: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +85,7 @@ def load_promoted_olr_snapshots(
     generated_after_round: list[str] = []
     round_generated_at = _parse_datetime(round_generated_at_utc)
     for path in paths:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(read_input_bytes(path).decode("utf-8"))
         snapshot = OLRDailySnapshot.from_json_dict(payload)
         snapshots[snapshot.trade_date] = snapshot
         raw_artifact_hashes[snapshot.trade_date.isoformat()] = str(payload.get("artifact_hash") or snapshot.artifact_hash)
@@ -148,7 +155,7 @@ def load_promoted_olr_snapshots(
     }
 
 
-class NativeRiskSharedBroker(SimBroker):
+class NativeRiskSharedBroker(NativePolicyMixin, SimBroker):
     """One cash account that preserves each strategy's native cost/leverage contract.
 
     The old portfolio replay imposed a second, much tighter sizing model on top
@@ -163,6 +170,13 @@ class NativeRiskSharedBroker(SimBroker):
         *,
         strategy_costs: Mapping[str, BrokerCosts],
         strategy_leverage: Mapping[str, float],
+        execution_clock: str = EXECUTION_VERSION,
+        capacity_policy=None,
+        portfolio_policy=None,
+        sectors=None,
+        quality_model=None,
+        decision_rank=False,
+        sizing_equity_cap=0.,
     ) -> None:
         normalized_leverage = {
             str(strategy).upper(): max(float(leverage), 1.0)
@@ -179,10 +193,70 @@ class NativeRiskSharedBroker(SimBroker):
             initial_equity,
             costs=normalized_costs[default_strategy],
             buying_power_leverage=max(normalized_leverage.values()),
+            execution_clock=execution_clock,
+            capacity_policy=capacity_policy,
         )
         self.strategy_costs = normalized_costs
         self.strategy_leverage = normalized_leverage
         self.capacity_blocks: list[dict[str, Any]] = []
+        self.configure_portfolio_policy(portfolio_policy, sectors)
+        self.quality_model = quality_model
+        self.decision_rank = bool(decision_rank)
+        self.sizing_equity_cap = float(sizing_equity_cap)
+
+    def strategy_sizing_equity(self):
+        equity = float(self._portfolio_equity())
+        return min(equity, self.sizing_equity_cap) if self.sizing_equity_cap > 0 else equity
+
+    def strategy_risk_cash(self, strategy_id):
+        """Standalone-equivalent sleeve risk base; execution uses actual funding.
+
+        KALCB's native core derives risk and buying power from cash minus its
+        own positions. Another sleeve's holdings must not be subtracted twice.
+        The broker still limits every fill against the entire shared account.
+        """
+        if self.portfolio_policy and self.portfolio_policy.config.funding_mode == "native_buying_power":
+            return self.strategy_sizing_equity() - self._strategy_open_notional(strategy_id)
+        return self.cash
+
+    def order_strategy_decisions(self, adapter, bars):
+        """Rank known OLR candidates before its core reserves pending cash."""
+        if not self.decision_rank or adapter.strategy_id != "OLR":
+            return bars
+        from datetime import time, timedelta
+        from strategy_common.execution_session import session_cutoff
+        day = bars[0].timestamp.date()
+        if bars[0].timestamp.time().replace(tzinfo=None) < session_cutoff(day, time(14, 30), anchor="open"):
+            return bars
+        snapshot = adapter.snapshots.get(day)
+        if snapshot is None:
+            return bars
+        candidates = {c.symbol: c for c in snapshot.candidates}
+        at = bars[0].timestamp + timedelta(minutes=5)
+        def key(bar):
+            candidate = candidates.get(bar.symbol)
+            if candidate is None:
+                return (1, 0., 0, bar.symbol)
+            score = self.quality_model.score("OLR", candidate.metadata, at) if self.quality_model else None
+            return (0, -score if score is not None else 0., candidate.rank, bar.symbol)
+        return sorted(bars, key=key)
+
+    def strategy_buying_power(self, strategy_id: str) -> float:
+        """Current marked capacity only; pending exits never supply funding."""
+        equity = max(float(self._portfolio_equity()), 0.0)
+        return max(0.0, min(
+            equity * self.strategy_leverage[strategy_id] - self._strategy_open_notional(strategy_id),
+            equity * self.buying_power_leverage - self._open_notional(),
+        ))
+
+    def strategy_account_view(self, strategy_id: str) -> tuple[float, float]:
+        policy = self.portfolio_policy
+        funding = (self.strategy_buying_power(strategy_id)
+                   if policy and policy.config.funding_mode == "native_buying_power" else self.cash)
+        equity = self.strategy_sizing_equity()
+        if self.sizing_equity_cap > 0:
+            funding = min(funding, max(equity * self.strategy_leverage[strategy_id] - self._strategy_open_notional(strategy_id), 0))
+        return equity, float(funding)
 
     def _fill_price(self, order: SimOrder, bar: MarketBar) -> float | None:
         return self._with_strategy_costs(order.strategy_id, super()._fill_price, order, bar)
@@ -246,6 +320,8 @@ def load_promoted_kalcb_replay(
     intraday_root: Path | None = None,
     data_snapshot_end: str = "20260512",
     market_bar_digest_path: Path | None = None,
+    snapshot_end_overrides: Mapping[str, str] | None = None,
+    allow_digest_mismatch: bool = False,
 ) -> tuple[KALCBConfig, CompiledCoreReplay, dict[str, Any]]:
     mutations = dict(optimized.get("mutations") or {})
     expected_hash = str((optimized.get("execution_contract") or {}).get("candidate_snapshot_hash") or "")
@@ -260,6 +336,8 @@ def load_promoted_kalcb_replay(
     resolved_intraday_root = intraday_root or repo_root / "data/kis_intraday_parquet"
     snapshot_paths = sorted(snapshot_root.glob("*.json"))
     bar_paths = sorted(resolved_intraday_root.rglob(f"*_5m_*_{data_snapshot_end}.parquet"))
+    for symbol, end_date in (snapshot_end_overrides or {}).items():
+        bar_paths.extend((resolved_intraday_root / symbol).glob(f"{symbol}_5m_*_{end_date}.parquet"))
     snapshot_source_fingerprint = fingerprint_paths(snapshot_paths, root=snapshot_root)
     bar_source_fingerprint = fingerprint_paths(bar_paths, root=resolved_intraday_root)
     digest_hash = (
@@ -269,7 +347,11 @@ def load_promoted_kalcb_replay(
     )
     cache_key = stable_signature(
         {
-            "version": "promoted_kalcb_replay_v2",
+            "version": "promoted_kalcb_replay_v3",
+            "contract_versions": CONTRACT_VERSIONS,
+            "source_generation": source_generation_hash(),
+            "effective_loader_config": dict(raw_config),
+            "snapshot_end_overrides": dict(snapshot_end_overrides or {}),
             "source_hash": source_hash,
             "pool_hash": pool_hash,
             "optimized_mutations": mutations,
@@ -293,6 +375,7 @@ def load_promoted_kalcb_replay(
             end=_config_date(raw_config.get("end")),
             initial_equity=float(raw_config.get("initial_equity", 100_000_000.0)),
             market_bar_digest_path=market_bar_digest_path,
+            snapshot_end_overrides=snapshot_end_overrides,
         )
         if expected_hash and compiled.candidate_artifact_hash != expected_hash:
             raise ValueError(
@@ -302,6 +385,8 @@ def load_promoted_kalcb_replay(
         _write_pickle(cache_path, compiled)
         cache_status = "rebuilt"
     bar_audit = _market_bar_audit(compiled.bars, market_bar_digest_path)
+    if market_bar_digest_path is not None and not bar_audit["archived_digest_match"] and not allow_digest_mismatch:
+        raise ValueError("KALCB archived market-bar digest mismatch; specify exact input versions or opt into diagnostics")
     base_cfg = KALCBConfig.from_mapping(dict(raw_config), {})
     config = base_cfg.with_mutations(_normalize_mutations(mutations))
     return config, compiled, {
@@ -313,6 +398,7 @@ def load_promoted_kalcb_replay(
         "candidate_snapshot_root": str(snapshot_root),
         "snapshot_source_fingerprint": snapshot_source_fingerprint,
         "bar_source_fingerprint": bar_source_fingerprint,
+        "snapshot_end_overrides": dict(snapshot_end_overrides or {}),
         "promoted_cache_path": str(cache_path),
         "promoted_cache_status": cache_status,
         "candidate_snapshot_hash": compiled.candidate_artifact_hash,
@@ -332,10 +418,11 @@ def _load_exported_kalcb_replay(
     end: str,
     initial_equity: float,
     market_bar_digest_path: Path | None,
+    snapshot_end_overrides: Mapping[str, str] | None = None,
 ) -> CompiledCoreReplay:
     snapshots: dict[date, KALCBDailySnapshot] = {}
     for path in sorted(snapshot_root.glob("*.json")):
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(read_input_bytes(path).decode("utf-8"))
         snapshot = KALCBDailySnapshot.from_json_dict(payload)
         snapshots[snapshot.trade_date] = snapshot
     if not snapshots:
@@ -353,13 +440,14 @@ def _load_exported_kalcb_replay(
             selected_pairs,
             intraday_root=intraday_root,
             data_snapshot_end=data_snapshot_end,
+            snapshot_end_overrides=snapshot_end_overrides,
         )
     )
     digest = {}
     current_bar_hash = ""
     archived_bar_hash_match = True
     if market_bar_digest_path is not None and market_bar_digest_path.is_file():
-        digest = json.loads(market_bar_digest_path.read_text(encoding="utf-8"))
+        digest = json.loads(read_input_bytes(market_bar_digest_path).decode("utf-8"))
         current_bar_hash = _market_bar_hash(bars)
         archived_bar_hash_match = (
             len(bars) == int(digest.get("bar_count", -1))
@@ -390,7 +478,7 @@ def _load_exported_kalcb_replay(
     )
 
 
-def run_kalcb_standalone(config: KALCBConfig, replay: CompiledCoreReplay) -> ReplayResult:
+def run_kalcb_standalone(config: KALCBConfig, replay: CompiledCoreReplay, *, execution_clock: str = EXECUTION_VERSION, capacity_policy=None) -> ReplayResult:
     costs = kalcb_costs(config)
     adapter = KALCBReplayAdapter(
         config,
@@ -406,6 +494,8 @@ def run_kalcb_standalone(config: KALCBConfig, replay: CompiledCoreReplay) -> Rep
         close_open_positions=False,
         bars_are_ordered=True,
         buying_power_leverage=max(float(config.intraday_leverage), 1.0),
+        execution_clock=execution_clock,
+        capacity_policy=capacity_policy,
     )
     result.decisions.extend(adapter._sync_new_fills(result.broker))
     result.trades = _collapse_exit_legs(result.trades)
@@ -418,6 +508,8 @@ def run_olr_standalone(
     bars: Iterable[MarketBar],
     *,
     initial_equity: float,
+    execution_clock: str = EXECUTION_VERSION,
+    capacity_policy=None,
 ) -> ReplayResult:
     adapter = OLRReplayAdapter(config, dict(snapshots))
     result = run_replay(
@@ -427,54 +519,54 @@ def run_olr_standalone(
         costs=olr_costs(config),
         close_open_positions=False,
         bars_are_ordered=True,
+        execution_clock=execution_clock,
+        capacity_policy=capacity_policy,
     )
     result.decisions.extend(adapter._sync_new_fills(result.broker))
+    result.trades = _collapse_exit_legs(result.trades)
     return result
 
 
-def run_native_risk_shared_replay(inputs: PromotedReplayInputs, *, initial_equity: float) -> ReplayResult:
+def run_native_risk_shared_replay(inputs: PromotedReplayInputs, *, initial_equity: float, execution_clock: str = EXECUTION_VERSION, capacity_policy=None, portfolio_policy=None, quality_model=None, decision_rank=False) -> ReplayResult:
+    sectors = {}
+    for snapshot in (*inputs.kalcb_replay.snapshots.values(), *inputs.olr_snapshots.values(),
+                     *(s for rows in inputs.kalcb_timed_snapshots.values() for s in rows)):
+        for candidate in snapshot.candidates:
+            sector = str(candidate.sector or "UNKNOWN").strip().upper()
+            previous = sectors.setdefault(candidate.symbol, sector)
+            if portfolio_policy is not None and previous != sector:
+                raise ValueError("Changing sector membership requires dated native policy inputs")
     broker = NativeRiskSharedBroker(
         initial_equity,
         strategy_costs={"KALCB": kalcb_costs(inputs.kalcb_config), "OLR": olr_costs(inputs.olr_config)},
         strategy_leverage={"KALCB": inputs.kalcb_config.intraday_leverage, "OLR": 1.0},
+        execution_clock=execution_clock,
+        capacity_policy=capacity_policy,
+        portfolio_policy=portfolio_policy,
+        sectors=sectors,
+        quality_model=quality_model,
+        decision_rank=decision_rank,
     )
     kalcb = KALCBReplayAdapter(
         inputs.kalcb_config,
         _clone_snapshots_for_replay(inputs.kalcb_replay.snapshots),
         initial_equity=initial_equity,
         costs=kalcb_costs(inputs.kalcb_config),
+        timed_snapshots=inputs.kalcb_timed_snapshots,
+        observation_symbols=inputs.kalcb_observation_symbols,
     )
     olr = OLRReplayAdapter(inputs.olr_config, dict(inputs.olr_snapshots))
     decisions: list[Any] = []
     events = _merge_strategy_bars(inputs.kalcb_replay.bars, inputs.olr_bars)
-    timestamp_kalcb_bars: list[MarketBar] = []
-    timestamp_olr_bars: list[MarketBar] = []
-    for index, event in enumerate(events):
-        bar = event["bar"]
-        broker.process_bar(bar)
-        if event["KALCB"]:
-            decisions.extend(kalcb.on_bar(bar, broker))
-            timestamp_kalcb_bars.append(bar)
-        if event["OLR"]:
-            decisions.extend(olr.on_bar(bar, broker))
-            timestamp_olr_bars.append(bar)
-        next_timestamp = events[index + 1]["bar"].timestamp if index + 1 < len(events) else None
-        if next_timestamp == bar.timestamp:
-            continue
-        if timestamp_kalcb_bars:
-            decisions.extend(kalcb.on_timestamp_end(bar.timestamp, tuple(timestamp_kalcb_bars), broker))
-        if timestamp_olr_bars:
-            decisions.extend(olr.on_timestamp_end(bar.timestamp, tuple(timestamp_olr_bars), broker))
-        if next_timestamp is None or next_timestamp.date() != bar.timestamp.date():
-            broker.force_same_day_exits(bar)
-        timestamp_kalcb_bars = []
-        timestamp_olr_bars = []
+    from itertools import groupby
+    for timestamp, grouped in groupby(events, key=lambda event: event["bar"].timestamp):
+        batch = tuple(grouped)
+        membership = {event["bar"].symbol: event for event in batch}
+        decisions.extend(drive_timestamp_batch(broker, [event["bar"] for event in batch], (kalcb, olr),
+            accepts=lambda adapter, bar: membership[bar.symbol][adapter.strategy_id]))
     decisions.extend(kalcb._sync_new_fills(broker))
     decisions.extend(olr._sync_new_fills(broker))
-    trades = [
-        *_collapse_exit_legs([trade for trade in broker.trades if trade.strategy_id == "KALCB"]),
-        *[trade for trade in broker.trades if trade.strategy_id == "OLR"],
-    ]
+    trades = _collapse_exit_legs(list(broker.trades))
     trades.sort(key=lambda trade: (trade.exit_fill_time or trade.entry_fill_time, trade.strategy_id, trade.symbol))
     return ReplayResult(
         trades=trades,
@@ -487,7 +579,7 @@ def run_native_risk_shared_replay(inputs: PromotedReplayInputs, *, initial_equit
 
 def summarize_replay(result: ReplayResult, *, initial_equity: float) -> ReplaySummary:
     final_equity = float(result.equity_curve[-1]) if result.equity_curve else float(initial_equity)
-    metrics = compute_trade_metrics(result.trades, result.equity_curve, initial_equity=initial_equity)
+    metrics = compute_trade_metrics(result.trades, result.equity_curve, timestamps=result.timestamps, mark_coverage=result.broker.mark_coverage or None, initial_equity=initial_equity)
     strategy_ids = sorted({str(trade.strategy_id).upper() for trade in result.trades})
     return ReplaySummary(
         initial_equity=float(initial_equity),
@@ -619,6 +711,8 @@ def _merge_strategy_bars(
         for bar in bars:
             key = (bar.timestamp, bar.symbol)
             event = merged.setdefault(key, {"bar": bar, "KALCB": False, "OLR": False})
+            if market_bar_values(event["bar"]) != market_bar_values(bar):
+                raise ValueError(f"Conflicting shared market bar: {key}")
             event[strategy_id] = True
     return [merged[key] for key in sorted(merged)]
 
@@ -628,6 +722,7 @@ def _load_pinned_parquet_bars(
     *,
     intraday_root: Path,
     data_snapshot_end: str,
+    snapshot_end_overrides: Mapping[str, str] | None = None,
 ) -> list[MarketBar]:
     import pandas as pd
 
@@ -638,11 +733,14 @@ def _load_pinned_parquet_bars(
         dates_by_symbol[str(symbol).zfill(6)].add(day)
     bars: list[MarketBar] = []
     for symbol, dates in sorted(dates_by_symbol.items()):
-        paths = sorted((intraday_root / symbol).glob(f"{symbol}_5m_*_{data_snapshot_end}.parquet"))
+        selected_end = (snapshot_end_overrides or {}).get(symbol, data_snapshot_end)
+        paths = selected_intraday_paths(intraday_root, symbol, "5m")
+        if paths is None:
+            paths = sorted((intraday_root / symbol).glob(f"{symbol}_5m_*_{selected_end}.parquet"))
         if not paths:
             raise FileNotFoundError(f"No pinned 5m parquet for {symbol}")
         frames = [
-            pd.read_parquet(path, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            pd.read_parquet(parquet_input(path), columns=["timestamp", "open", "high", "low", "close", "volume"])
             for path in paths
         ]
         frame = pd.concat(frames, ignore_index=True)
@@ -665,7 +763,7 @@ def _load_pinned_parquet_bars(
                     volume=float(row.volume),
                     is_completed=True,
                     source="kis_krx_parquet",
-                    source_fingerprint=f"pinned_{data_snapshot_end}",
+                    source_fingerprint=f"pinned_{selected_end}",
                 )
             )
     return sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol))
@@ -681,11 +779,13 @@ def _pinned_trading_calendar(
 ) -> tuple[date, ...]:
     import pandas as pd
 
-    paths = sorted((intraday_root / symbol).glob(f"{symbol}_5m_*_{data_snapshot_end}.parquet"))
+    paths = selected_intraday_paths(intraday_root, symbol, "5m")
+    if paths is None:
+        paths = sorted((intraday_root / symbol).glob(f"{symbol}_5m_*_{data_snapshot_end}.parquet"))
     if not paths:
         raise FileNotFoundError(f"No pinned calendar source for {symbol}")
     timestamps = pd.concat(
-        [pd.read_parquet(path, columns=["timestamp"]) for path in paths],
+        [pd.read_parquet(parquet_input(path), columns=["timestamp"]) for path in paths],
         ignore_index=True,
     )["timestamp"].drop_duplicates()
     start_date = date.fromisoformat(start)
@@ -744,7 +844,7 @@ def _market_bar_audit(
     current_hash = _market_bar_hash(bars)
     archived: dict[str, Any] = {}
     if market_bar_digest_path is not None and market_bar_digest_path.is_file():
-        archived = json.loads(market_bar_digest_path.read_text(encoding="utf-8"))
+        archived = json.loads(read_input_bytes(market_bar_digest_path).decode("utf-8"))
     archived_count = int(archived.get("bar_count", -1))
     archived_hash = str(archived.get("market_bar_hash") or "")
     return {
@@ -759,16 +859,15 @@ def _market_bar_audit(
 
 
 def _file_hash(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return hashlib.sha256(read_input_bytes(path)).hexdigest()
 
 
 def _repo_path(repo_root: Path, raw: Any) -> Path:
     path = Path(str(raw or ""))
-    return path if path.is_absolute() else repo_root / path
+    path = path if path.is_absolute() else repo_root / path
+    from backtests.core.input_manifest import active_manifest
+    manifest = active_manifest()
+    return manifest.resolve(path) if manifest else path
 
 
 def _config_date(value: Any) -> str:

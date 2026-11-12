@@ -8,7 +8,7 @@ from typing import Any, Iterable
 from .hashing import canonical_json_hash
 
 SUPPORTED_SIDES = {"BUY", "SELL"}
-SUPPORTED_NOTIONAL_CAP_MODES = {"absolute", "equity_scaled"}
+SUPPORTED_NOTIONAL_CAP_MODES = {"absolute", "equity_scaled", "equity_capped"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,8 +19,14 @@ class PortfolioPolicyConfig:
     notional_cap_mode: str = "absolute"
     notional_cap_reference_equity: float = 10_000_000.0
     strategy_priority: tuple[str, ...] = ("KALCB", "OLR")
+    funding_mode: str = "cash"
+    same_symbol_policy: str = "block"
 
     def __post_init__(self) -> None:
+        if self.funding_mode not in {"cash", "native_buying_power"}:
+            raise ValueError("unsupported funding_mode")
+        if self.same_symbol_policy not in {"block", "aggregate"}:
+            raise ValueError("unsupported same_symbol_policy")
         mode = str(self.notional_cap_mode or "absolute").lower().strip()
         if mode not in SUPPORTED_NOTIONAL_CAP_MODES:
             raise ValueError(
@@ -67,6 +73,7 @@ class PortfolioArbitrationInput:
     current_symbol_notional: float = 0.0
     cash: float = 0.0
     equity: float = 0.0
+    available_buying_power: float | None = None
     source_artifact_hashes: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -123,8 +130,10 @@ class PortfolioArbitrationPolicy:
         """
 
         scale = 1.0
-        if self.config.notional_cap_mode == "equity_scaled":
+        if self.config.notional_cap_mode in {"equity_scaled", "equity_capped"}:
             scale = max(float(equity), 0.0) / self.config.notional_cap_reference_equity
+            if self.config.notional_cap_mode == "equity_capped":
+                scale = min(scale, 1.0)
         return {
             "max_gross_notional": self.config.max_gross_notional * scale,
             "max_symbol_notional": self.config.max_symbol_notional * scale,
@@ -174,12 +183,13 @@ class PortfolioArbitrationPolicy:
             return self._decision(item, "blocked", 0, 0.0, "zero_quantity_or_notional")
         if item.side == "SELL":
             return self._sell_decision(item, admitted_exit_notional=admitted_exit_notional, admitted_exit_qty=admitted_exit_qty)
-        if item.cash <= 0.0 or item.equity <= 0.0:
+        funding = item.cash if self.config.funding_mode == "cash" else item.available_buying_power
+        if funding is None or not math.isfinite(funding) or funding <= 0.0 or item.equity <= 0.0:
             return self._decision(item, "blocked", 0, 0.0, "missing_or_zero_account_state")
-        if item.current_symbol_exposure + admitted_symbol > 0:
+        if self.config.same_symbol_policy == "block" and item.current_symbol_exposure + admitted_symbol > 0:
             return self._decision(item, "blocked", 0, 0.0, "duplicate_symbol_conflict")
         caps = self.effective_notional_caps(item.equity)
-        cash_capacity = item.cash - admitted_gross
+        cash_capacity = funding - admitted_gross
         capacity = min(
             caps["max_gross_notional"] - item.current_portfolio_exposure - admitted_gross,
             caps["max_symbol_notional"] - item.current_symbol_exposure - admitted_symbol,

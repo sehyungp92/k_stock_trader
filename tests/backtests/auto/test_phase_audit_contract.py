@@ -53,7 +53,7 @@ def test_strict_promotion_blocks_missing_required_audit() -> None:
     assert passed["hard_audit_pass"] is False
 
 
-def test_strict_promotion_passes_with_official_basis_and_audit() -> None:
+def test_strict_promotion_blocks_audit_claim_without_receipt() -> None:
     passed = _passed_by_name(
         _official_metrics(
             promotion_requires_audit_pass=True,
@@ -62,7 +62,7 @@ def test_strict_promotion_passes_with_official_basis_and_audit() -> None:
         )
     )
 
-    assert all(passed.values())
+    assert passed["hard_audit_pass"] is False
 
 
 def test_strict_promotion_blocks_synthetic_capability() -> None:

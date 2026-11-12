@@ -42,7 +42,7 @@ ARTIFACT_ONLY_MODES = {"artifact_only", "artifact_only_stage1"}
 EXECUTION_MODES = {"dry_run", "paper", "live"}
 RUNTIME_MODES = ARTIFACT_ONLY_MODES | EXECUTION_MODES
 DEFAULT_STRATEGY_CONFIG_SOURCE = Path(
-    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json")
+    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "config/olr_kalcb/validation_baseline.json")
 )
 
 REQUIRED_HEALTH_CHECKS_BY_MODE: dict[str, tuple[str, ...]] = {
@@ -348,7 +348,12 @@ class RuntimeSessionPlan:
         _emit_runtime_deployment_metadata(self)
         return driver
 
+    async def poll_execution_feedback(self) -> int:
+        from .execution_feedback import drain_execution_feedback
+        return await drain_execution_feedback(self)
+
     async def handle_bar(self, bar: Any, *, target_strategy_ids: Sequence[str] | None = None) -> tuple[Any, ...]:
+        await self.poll_execution_feedback()
         if self.mode not in EXECUTION_MODES:
             raise RuntimeError(f"{self.mode} runtime plan cannot process market bars")
         if not self.ready_to_start or self.action_router is None:
@@ -391,6 +396,38 @@ class RuntimeSessionPlan:
                 )
             return ()
         return await handle_combined_bar(self.drivers, bar, target_strategy_ids=targets or None)
+
+    async def handle_olr_bars(self, bars: Sequence[Any]) -> tuple[Any, ...]:
+        """Accept the feed's completed timestamp cohort for native OLR allocation."""
+        bars = tuple(bars)
+        if not bars or 'OLR' not in self.drivers:
+            raise ValueError('Nonempty OLR timestamp cohort required')
+        if self.mode not in EXECUTION_MODES or not self.ready_to_start or self.action_router is None:
+            raise RuntimeError('Runtime plan is not ready for OLR market observations')
+        if (len({b.symbol for b in bars}) != len(bars)
+                or any(not b.is_completed or b.timestamp != bars[0].timestamp for b in bars)):
+            raise ValueError('Invalid completed OLR cohort')
+        await self.poll_execution_feedback()
+        selected = []
+        for bar in bars:
+            allowed = ('OLR',) if self.kis_resource_plan is None else target_strategy_ids_for_bar(
+                self.kis_resource_plan, symbol=bar.symbol, timestamp=bar.timestamp,
+                available_strategy_ids=tuple(self.drivers),
+                held_or_pending_symbols=_held_or_pending_symbols(self.drivers))
+            if 'OLR' in allowed:
+                selected.append(bar)
+            else:
+                if self.session_recorder is not None:
+                    self.session_recorder.record_market_bar(bar)
+                _record_resource_route_suppression(self.session_recorder, self.kis_resource_plan, bar,
+                    requested_targets=('OLR',), reason_code='no_resource_plan_target')
+        return (await self.drivers['OLR'].handle_bars(tuple(selected)),) if selected else ()
+
+    async def seed_olr_capacity_history(self, bars: Sequence[Any], available_at: datetime) -> Any:
+        if self.mode not in EXECUTION_MODES or not self.ready_to_start or 'OLR' not in self.drivers:
+            raise RuntimeError('Runtime plan is not ready for OLR capacity history')
+        return await self.drivers['OLR'].handle_capacity_seed(tuple(bars),available_at)
+
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -626,6 +663,8 @@ def prepare_runtime_session(
             session_recorder.write_manifest(
                 {
                     "mode": mode_name,
+                    "startup_preflight": preflight.to_json_dict(),
+                    "startup_oms_health": _extract_oms_health_payload(health_checks or {})[0],
                     "strategy_ids": list(sids),
                     "strategy_configs": config_summaries,
                     "portfolio_enabled": portfolio is not None,
@@ -679,7 +718,7 @@ def prepare_runtime_session(
         preflight=preflight,
         descriptors=descriptors,
         drivers=drivers,
-        schedule=default_session_schedule(mode_name, sids),
+        schedule=default_session_schedule(mode_name, sids, trade_date=trade_date),
         portfolio_policy_hash=portfolio.policy_hash if portfolio is not None else None,
         portfolio_enabled=bool(portfolio_enabled),
         action_router=action_router,
@@ -858,7 +897,14 @@ def run_runtime_preflight(
     return RuntimePreflightResult(mode_name, trade_date, tuple(checks))
 
 
-def default_session_schedule(mode: str, strategy_ids: Sequence[str] = ("KALCB", "OLR")) -> tuple[RuntimeScheduleStep, ...]:
+def default_session_schedule(mode: str, strategy_ids: Sequence[str] = ("KALCB", "OLR"), *, trade_date: date | None = None) -> tuple[RuntimeScheduleStep, ...]:
+    if trade_date is not None:
+        from dataclasses import replace
+        from datetime import time
+        from strategy_common.execution_session import session_cutoff
+        return tuple(replace(step, run_at_kst=session_cutoff(trade_date, time.fromisoformat(step.run_at_kst),
+            anchor="open" if time.fromisoformat(step.run_at_kst) <= time(9) else "close").strftime("%H:%M"))
+            for step in default_session_schedule(mode, strategy_ids))
     mode_name = _normalize_mode(mode)
     sids = {_normalize_strategy_id(strategy_id) for strategy_id in strategy_ids}
     artifact_steps: list[RuntimeScheduleStep] = []
@@ -1053,7 +1099,9 @@ def _derive_oms_hardening_health_checks(provided_checks: Mapping[str, Any]) -> d
         watcher_age_missing = watcher_age is None
         watcher_age_stale = watcher_age is not None and watcher_age > _MAX_STOP_WATCHER_AGE_SEC
 
-    oms_ok = bool(status in _ACCEPTABLE_OMS_STATUS)
+    oms_ok = bool(status in _ACCEPTABLE_OMS_STATUS
+                  and payload.get("broker_reconciliation_ready") is True
+                  and payload.get("execution_recovery_required") is not True)
     stop_ok = bool(
         not missing_stop_fields
         and not invalid_stop_fields
@@ -1084,7 +1132,8 @@ def _derive_oms_hardening_health_checks(provided_checks: Mapping[str, Any]) -> d
             (
                 f"derived from OMS /health evidence '{source}': status={status or 'missing'}"
                 if oms_ok
-                else f"OMS /health status is {status or 'missing'} in evidence '{source}'"
+                else f"OMS /health status={status or 'missing'}, broker reconciliation="
+                     f"{payload.get('broker_reconciliation_reason') or 'unverified'} in evidence '{source}'"
             ),
         ),
         "durable_stops_ok": RuntimePreflightCheck(

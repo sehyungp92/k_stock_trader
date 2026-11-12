@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from backtests.engine.contracts import execution_valid
+from backtests.engine.integrity import audit_broker, receipt_matches
+
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -68,7 +71,7 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
 
     name = "olr"
     num_phases = 6
-    requires_full_diagnostics = False
+    requires_full_diagnostics = True
     ultimate_targets = ULTIMATE_TARGETS
     initial_mutations = dict(BASE_MUTATIONS)
     default_scoring_weights = dict(IMMUTABLE_SCORE_COMPONENTS)
@@ -84,6 +87,12 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
         capability_level: str = "real_replay",
     ):
         self.config = dict(config or {})
+        if self.config.get("native_case_plan_sha256"):
+            raise ValueError(
+                "This saved OLR policy binds a frozen native execution feed. "
+                "Use refresh_olr_final_artifacts.py --round N with its native case plan; "
+                "generic phased replay cannot substitute a different execution model."
+            )
         self.config.setdefault("capability_level", capability_level)
         self.config.setdefault("live_parity_fill_timing", "completed_5m_signal_next_bar_or_resting_close_auction")
         self.config.setdefault("auction_mode", "resting_close_auction_after_14_30_decision")
@@ -174,7 +183,9 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
         cumulative_mutations = self.canonicalize_mutations(cumulative_mutations)
         base_result = self._evaluate_result(cumulative_mutations)
         reject = olr_reject_reason(phase, base_result.metrics, hard_rejects)
-        baseline_score = score_olr_phase(phase, base_result.metrics, scoring_weights)
+        if not execution_valid(base_result.metrics):
+            reject = "execution_audit_unverified_or_failed"
+        baseline_score = 0.0 if reject else score_olr_phase(phase, base_result.metrics, scoring_weights)
         baseline = ScoredCandidate("__baseline__", baseline_score, bool(reject), reject, base_result.metrics)
         rebuild_phase = phase in _OLR_SELECTION_REBUILD_PHASES
         if rebuild_phase and self.capability_level.lower() not in {"synthetic", "dry_run"}:
@@ -212,9 +223,9 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
         return attach_official_metric_contract(
             dict(result.metrics),
             requires_audit_pass=True,
-            audit_status="direct_official_training_replay_paper_live_pending",
+            audit_status=result.metrics.get("audit_status", "unverified"),
             official_replay_pass=True,
-            audit_pass=True,
+            audit_pass=execution_valid(result.metrics),
             execution_contract=build_execution_contract(
                 self,
                 result.metrics,
@@ -253,8 +264,8 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
             return_actual = final_return - base_return
             return_target = -0.01
             return_passed = return_actual >= return_target
-        base_entries = _metric_float(base_metrics, "entry_fill_count", "entry_level_trade_count", "total_trades")
-        final_entries = _metric_float(final_metrics, "entry_fill_count", "entry_level_trade_count", "total_trades")
+        base_entries = _metric_float(base_metrics, "entry_lifecycle_count", "entry_level_trade_count", "total_trades", "entry_fill_count")
+        final_entries = _metric_float(final_metrics, "entry_lifecycle_count", "entry_level_trade_count", "total_trades", "entry_fill_count")
         entry_ratio = final_entries / max(base_entries, 1.0)
         return [
             GateCriterion(
@@ -285,7 +296,7 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
             final_diagnostics_text=text,
             dimension_reports={
                 "signal_extraction": "Stage 1 and Stage 2 are rebuilt through shared OLR research functions with holdout excluded; selector changes are judged by realized official replay plus label discrimination, not label proxy alone.",
-                "signal_discrimination": "Score-band, top/bottom label spread, positive/negative label shares, and rejected-signal hygiene are promotion-visible metrics.",
+                "signal_discrimination": "Daily outcome labels describe filter quality only; they are excluded from scoring and promotion gates. Gross MFE capture is a hindsight diagnostic, not benchmark alpha.",
                 "entry_mechanism": "Entry route mutations use completed 5m bars and fill no earlier than a later bar, or a resting close-auction order submitted after the decision cutoff.",
                 "trade_management": "Managed exits are neutral OLR actions handled by the same SimBroker path as baseline next-close exits.",
                 "allocation": "Rank, score, and capped equal allocations remain shared-core sizing mutations with MTM drawdown as the risk basis.",
@@ -296,6 +307,10 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
                 "The round is suitable for research promotion only; holdout and paper/live parity remain mandatory before production use."
             ),
         )
+
+    def write_full_diagnostics(self, state, output_dir, *, round_num=None, round_name=""):
+        from .final_diagnostics import write_full_diagnostics
+        return write_full_diagnostics(self, state, Path(output_dir), round_num=round_num, round_name=round_name)
 
     def get_diagnostic_gaps(self, phase: int, metrics: dict[str, float]) -> list[str]:
         del phase
@@ -427,7 +442,9 @@ class OLROptimizationPlugin(SharedStrategyPluginMixin):
         key = mutation_signature(mutations)
         with self._cache_lock:
             cached = self._result_cache.get(key)
-        if cached is not None:
+        from backtests.engine.evaluation_identity import request_identity
+        config = self.config if self.capability_level.lower() in {"synthetic", "dry_run"} else self.training_config
+        if cached is not None and receipt_matches(cached.metrics, expected_request=request_identity(config, mutations), expected_mutations=key):
             self._remember_backtest_result(mutations, cached)
             return cached
         if self.capability_level.lower() in {"synthetic", "dry_run"}:
@@ -808,7 +825,7 @@ def _augment_trade_alpha_metrics(metrics: dict[str, Any], trades: Iterable[Any])
     metrics["olr_positive_mfe_share"] = positive_mfe / len(trade_list) if trade_list else 0.0
     metrics["olr_low_mfe_trade_share"] = low_mfe / len(trade_list) if trade_list else 0.0
     metrics["entry_conversion_rate"] = (
-        _float(metrics.get("entry_fill_count")) / max(_float(metrics.get("selected_candidate_count")), 1.0)
+        _metric_float(metrics, "entry_lifecycle_count", "entry_level_trade_count", "total_trades", "entry_fill_count") / max(_float(metrics.get("selected_candidate_count")), 1.0)
         if metrics.get("selected_candidate_count")
         else 0.0
     )
@@ -880,7 +897,7 @@ def _format_olr_diagnostics(
         f"- End open positions: {int(open_positions)}",
         f"- Entry-level profit factor: {entry_profit_factor:.3f}",
         f"- Entry-level expected total R: {entry_expected_r:.3f}",
-        f"- Alpha capture: {_float(metrics.get('olr_alpha_capture', metrics.get('mfe_capture'))):.3f}",
+        f"- Gross MFE capture (hindsight diagnostic, not benchmark alpha): {_float(metrics.get('olr_alpha_capture', metrics.get('mfe_capture'))):.3f}",
         f"- Discrimination quality: {_float(metrics.get('olr_discrimination_quality')):.3f}",
         f"- Negative selected label share: {_pct(metrics.get('olr_selected_negative_label_share'))}",
         f"- Score top-bottom label spread: {_pct(metrics.get('olr_score_top_bottom_label_spread_pct'))}",
@@ -1073,7 +1090,7 @@ def _augment_proxy_trade_alpha_metrics(metrics: dict[str, Any], outcomes: tuple[
     metrics["olr_positive_mfe_share"] = _share([outcome.mfe_r for outcome in outcomes], lambda value: value > 0.0)
     metrics["olr_low_mfe_trade_share"] = _share([outcome.mfe_r for outcome in outcomes], lambda value: value <= 0.10)
     metrics["entry_conversion_rate"] = (
-        _float(metrics.get("entry_fill_count")) / max(_float(metrics.get("selected_candidate_count")), 1.0)
+        _metric_float(metrics, "entry_lifecycle_count", "entry_level_trade_count", "total_trades", "entry_fill_count") / max(_float(metrics.get("selected_candidate_count")), 1.0)
         if metrics.get("selected_candidate_count")
         else 0.0
     )

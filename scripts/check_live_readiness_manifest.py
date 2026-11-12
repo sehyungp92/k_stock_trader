@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deployment.olr_kalcb.hashing import file_sha256
 
 DEFAULT_BASELINE_MANIFEST = Path(
-    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "data/live_readiness/olr_kalcb/2026-05-28/baseline_manifest.json")
+    os.environ.get("OLR_KALCB_BASELINE_MANIFEST", "config/olr_kalcb/validation_baseline.json")
 )
 
 

@@ -1,0 +1,36 @@
+{
+  "baseline_date": "2026-10-07",
+  "scope": {
+    "olr_round": 1,
+    "kalcb_round": 3
+  },
+  "paper_trading_approved": false,
+  "live_capital_approved": false,
+  "promotion_status": "offline_validation_only",
+  "notes": [
+    "OLR fully repaired control. KALCB record retained only for explicitly requested joint operation; no new KALCB qualification implied.",
+    "Use --strategies OLR / --strategy-ids OLR for OLR validation. Dated runtime artifacts must be generated separately."
+  ],
+  "artifacts": [
+    {
+      "label": "olr_round1_optimized_config",
+      "path": "data/backtests/output/olr/round_1/optimized_config.json",
+      "sha256": "018f2e9644b36b0565df87b2b54ba6fd0afcf33960e45d3da218c630fd4ad229"
+    },
+    {
+      "label": "kalcb_round3_optimized_config",
+      "path": "data/backtests/output/kalcb/round_3/optimized_config.json",
+      "sha256": "ea46f5d8f3c60a7714a8f079f1bd6be00bc14151bfb76c657ab8a97bf0dc7bd0"
+    },
+    {
+      "label": "olr_frozen_universe",
+      "path": "config/universe_103.yaml",
+      "sha256": "c58542e92c3e7950ee6048700925126ac4babe5acb449b1bf706b847f4283dfa"
+    },
+    {
+      "label": "olr_sector_map",
+      "path": "config/olr/sector_map.yaml",
+      "sha256": "d83df4a6a0977e6442e92ce3c3cab196a3e0c54da03397f073df156d1876ea1f"
+    }
+  ]
+}

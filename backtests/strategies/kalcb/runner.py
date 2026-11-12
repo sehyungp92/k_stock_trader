@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+from backtests.engine.evaluation_identity import bound_evaluation
+from backtests.engine.capacity import capacity_from_config
+
 import math
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from backtests.analysis.metrics import compute_trade_metrics
+from backtests.engine.integrity import audit_broker
+from backtests.engine.contracts import EXECUTION_VERSION
 from backtests.auto.shared.cache_keys import stable_signature
 from backtests.core.replay_bundle import EventReplayBundle
-from backtests.engine.replay import ReplayResult, run_replay
+from backtests.engine.replay import ReplayResult, run_replay, drive_timestamp_batch
 from backtests.engine.sim_broker import BrokerCosts, SimBroker
 from backtests.strategies.common.capabilities import KALCB_OFFICIAL_REQUIREMENTS, require_capabilities
 from backtests.strategies.common.synthetic import make_synthetic_replay_bundle
@@ -16,8 +21,8 @@ from strategy_common.actions import StrategyAction, SubmitEntry
 from strategy_common.events import DecisionEvent, TradeOutcome
 from strategy_common.market import MarketBar
 from strategy_kalcb.config import KALCBConfig, KALCB_CORE_VERSION, STRATEGY_ID
-from strategy_kalcb.core.core_models import KALCBFillEvent, KALCBPortfolioView
-from strategy_kalcb.core.logic import on_kalcb_fill, on_kalcb_timer, remember_submitted_order, step_kalcb_core
+from strategy_kalcb.core.core_models import KALCBFillEvent, KALCBPortfolioView, KALCBOrderUpdateEvent
+from strategy_kalcb.core.logic import on_kalcb_fill, on_kalcb_timer, on_kalcb_order_update, remember_submitted_order, step_kalcb_core
 from strategy_kalcb.core.state import KALCBState
 from strategy_kalcb.execution import normalize_action_prices
 from strategy_kalcb.models import KALCBDailyCandidate, KALCBDailySnapshot
@@ -48,6 +53,11 @@ class StrategyBacktestResult:
 class KALCBReplayAdapter:
     strategy_id = STRATEGY_ID
 
+    def qualification_snapshot_sequence(self):
+        """Bind every consumed candidate update to the independent source audit."""
+        return tuple(s for day,base in sorted(self.snapshots.items())
+                     for s in (base,*self.timed_snapshots.get(day,())))
+
     def __init__(
         self,
         config: KALCBConfig,
@@ -55,17 +65,23 @@ class KALCBReplayAdapter:
         *,
         initial_equity: float,
         costs: BrokerCosts,
+        timed_snapshots: dict | None = None,
+        observation_symbols: tuple[str, ...] = (),
     ):
         if not snapshots:
             raise ValueError("KALCB replay adapter requires at least one candidate snapshot")
         self.config = config
         self.snapshots = dict(sorted(snapshots.items()))
+        self.timed_snapshots = timed_snapshots or {}
+        self.observation_symbols = frozenset(observation_symbols)
+        self._activated_intraday_hash = {}
         first_snapshot = next(iter(self.snapshots.values()))
         self.state = KALCBState(
             snapshot_hash=_aggregate_snapshot_hash(self.snapshots),
             source_fingerprint=first_snapshot.source_fingerprint,
         )
         self._fill_cursor = 0
+        self._terminal_cursor = {"expired_orders": 0, "rejected_orders": 0}
         self._daily_active_symbols: dict[date, set[str]] = {}
         self.frontier_promotion_log: list[dict[str, Any]] = []
         self.frontier_shadow = (
@@ -79,6 +95,16 @@ class KALCBReplayAdapter:
         decisions.extend(self._sync_new_fills(broker))
         portfolio = self._portfolio_view(broker)
         full_snapshot = self.snapshots.get(bar.timestamp.date())
+        if self.timed_snapshots:
+            from strategy_kalcb.core.candidate_updates import activate_candidate_snapshot
+            available = bar.timestamp + _execution_bar_delta(self.config)
+            updates = [s for s in self.timed_snapshots.get(bar.timestamp.date(), ()) if s.generated_at <= available]
+            if updates:
+                full_snapshot = updates[-1]
+                if self._activated_intraday_hash.get(bar.timestamp.date()) != full_snapshot.artifact_hash:
+                    activate_candidate_snapshot(self.state, full_snapshot, available)
+                    self._daily_active_symbols.pop(bar.timestamp.date(), None)
+                    self._activated_intraday_hash[bar.timestamp.date()] = full_snapshot.artifact_hash
         active_snapshot = self._active_snapshot(full_snapshot)
         active_symbols = self._daily_active_symbols.get(bar.timestamp.date(), set())
         execution_symbols = active_symbols
@@ -93,12 +119,18 @@ class KALCBReplayAdapter:
             result = step_kalcb_core(self.state, bar, self.config, active_snapshot, portfolio)
             self._submit_actions(result.actions, broker, bar.timestamp)
             decisions.extend(result.decisions)
+        elif bar.symbol in self.observation_symbols:
+            from strategy_kalcb.core.candidate_updates import observe_candidate_bar
+            observe_candidate_bar(self.state, bar, self.snapshots.get(bar.timestamp.date()))
         if self.frontier_shadow is not None and full_snapshot is not None:
+            self.frontier_shadow.broker.execution_clock = broker.execution_clock
             self.frontier_shadow.on_bar(bar, full_snapshot, active_symbols)
         return decisions
 
     def on_timestamp_end(self, timestamp: datetime, bars: tuple[MarketBar, ...], broker: SimBroker) -> list[DecisionEvent]:
         del bars
+        if self.frontier_shadow is not None:
+            self.frontier_shadow.flush_timestamp()
         decisions: list[DecisionEvent] = []
         decisions.extend(self._sync_new_fills(broker))
         timer_timestamp = timestamp + _execution_bar_delta(self.config)
@@ -107,8 +139,21 @@ class KALCBReplayAdapter:
         decisions.extend(result.decisions)
         return decisions
 
+    def on_fills(self, broker: SimBroker) -> list[DecisionEvent]:
+        return self._sync_new_fills(broker)
+
     def _sync_new_fills(self, broker: SimBroker) -> list[DecisionEvent]:
         decisions: list[DecisionEvent] = []
+        for attribute, status in (("expired_orders", "EXPIRED"), ("rejected_orders", "REJECTED")):
+            orders = getattr(broker, attribute, ())
+            for order in orders[self._terminal_cursor[attribute]:]:
+                if order.strategy_id == self.strategy_id:
+                    stamp = broker.timestamps[-1] if broker.timestamps else order.submitted_at
+                    result = on_kalcb_order_update(self.state, KALCBOrderUpdateEvent(
+                        order.order_id, order.symbol, status, stamp,
+                        metadata=dict(order.metadata)))
+                    decisions.extend(result.decisions)
+            self._terminal_cursor[attribute] = len(orders)
         new_fills = broker.fills[self._fill_cursor :]
         self._fill_cursor = len(broker.fills)
         for fill in new_fills:
@@ -133,10 +178,16 @@ class KALCBReplayAdapter:
         return decisions
 
     def _submit_actions(self, actions: list[StrategyAction], broker: SimBroker, submitted_at: datetime) -> None:
+        from strategy_common.actions import CancelOrders
         for action in actions:
             normalized = normalize_action_prices(action)
+            cancelled = [order for order in broker.orders if order.strategy_id == self.strategy_id
+                         and order.symbol == action.symbol] if isinstance(action, CancelOrders) else []
             order_id = broker.submit(normalized, submitted_at)
             remember_submitted_order(self.state, order_id, normalized)
+            for order in cancelled:
+                on_kalcb_order_update(self.state, KALCBOrderUpdateEvent(order.order_id,
+                    order.symbol, "CANCELLED", submitted_at, metadata=dict(order.metadata)))
 
     def _portfolio_view(self, broker: SimBroker) -> KALCBPortfolioView:
         return _portfolio_view_for_broker(broker, self.strategy_id)
@@ -334,24 +385,51 @@ class KALCBFrontierShadow:
         self.broker = SimBroker(initial_equity=max(float(initial_equity) * 10.0, float(initial_equity)), costs=costs)
         self._fill_cursor = 0
         self._trade_cursor = 0
-        self._pending_trade_legs: dict[tuple[str, str, str, float], list[TradeOutcome]] = {}
+        self._pending_trade_legs: dict[tuple[str, str, str], list[TradeOutcome]] = {}
         self.symbol_stats: dict[str, dict[str, float]] = {}
         self.trade_rows: list[dict[str, Any]] = []
+        self._pending_bars: list[tuple] = []
 
     def on_bar(self, bar: MarketBar, snapshot: KALCBDailySnapshot, active_symbols: set[str]) -> None:
-        self.broker.process_bar(bar)
-        self._sync_new_fills()
-        portfolio = _portfolio_view_for_broker(self.broker, self.strategy_id)
-        result = step_kalcb_core(self.state, bar, self.config, snapshot, portfolio)
-        self._submit_actions(result.actions, bar.timestamp, active_symbols)
+        if self._pending_bars and self._pending_bars[0][0].timestamp != bar.timestamp:
+            self.flush_timestamp()
+        self._pending_bars.append((bar, snapshot, set(active_symbols)))
+
+    def flush_timestamp(self) -> None:
+        from types import SimpleNamespace
+        if not self._pending_bars:
+            return
+        pending, self._pending_bars = self._pending_bars, []
+        context = {bar.symbol: (snapshot, symbols) for bar, snapshot, symbols in pending}
+        def observe(bar, broker):
+            snapshot, symbols = context[bar.symbol]
+            result = step_kalcb_core(self.state, bar, self.config, snapshot,
+                _portfolio_view_for_broker(broker, self.strategy_id))
+            self._submit_actions(result.actions, bar.timestamp, symbols)
+            return result.decisions
+        def deliver(broker):
+            self._sync_new_fills()
+            return []
+        def timer(timestamp, bars, broker):
+            result = on_kalcb_timer(self.state, timestamp, self.config)
+            active = set().union(*(symbols for _, symbols in context.values()))
+            self._submit_actions(result.actions, timestamp, active)
+            return result.decisions
+        drive_timestamp_batch(self.broker, [item[0] for item in pending],
+            (SimpleNamespace(on_bar=observe, on_fills=deliver, on_timestamp_end=timer),))
         self._record_new_trades()
 
     def finalize(self, last_bar: MarketBar | None) -> None:
-        if last_bar is not None:
+        self.flush_timestamp()
+        if last_bar is not None and self.broker.capacity_policy is None:
             self.broker.close_all_at_end(last_bar, reason="frontier_shadow_end_of_replay")
             self._sync_new_fills()
             self._record_new_trades()
         for key, legs in list(self._pending_trade_legs.items()):
+            if legs and int(legs[-1].cohort_metadata.get("position_qty_after", 0)) > 0:
+                # Realized fragments of a still-open position cannot prove a
+                # completed shadow trade for symbol promotion.
+                continue
             if legs:
                 self._record_trade_row(_collapse_trade_legs(legs))
             self._pending_trade_legs.pop(key, None)
@@ -395,6 +473,8 @@ class KALCBFrontierShadow:
         global_proof = self._frontier_global_proof()
         return {
             "frontier_shadow_trade_count": float(len(self.trade_rows)),
+            "frontier_shadow_pending_position_count": float(len(self._pending_trade_legs)),
+            "frontier_shadow_pending_realized_pnl": sum(t.net_pnl for legs in self._pending_trade_legs.values() for t in legs),
             "frontier_shadow_expected_total_r": float(sum(all_r)),
             "frontier_shadow_avg_r": float(sum(all_r) / len(all_r)) if all_r else 0.0,
             "frontier_shadow_nonselected_trade_count": float(len(nonselected)),
@@ -588,14 +668,19 @@ class KALCBFrontierShadow:
         stats["total_r"] += r_value
 
 
+@bound_evaluation
 def run_kalcb_backtest(
     config: dict[str, Any] | None = None,
     mutations: dict[str, Any] | None = None,
     replay_bundle: EventReplayBundle | None = None,
+    *,
+    execution_clock: str = EXECUTION_VERSION,
 ) -> StrategyBacktestResult:
     raw_config = dict(config or {})
     raw_mutations = dict(mutations or {})
     cfg = KALCBConfig.from_mapping(raw_config, raw_mutations)
+    if cfg.entry_checkpoint_enabled:
+        raise ValueError("Timed KALCB candidates require their authenticated policy. Use scripts/kalcb_executed_value_replay.py for native execution or backtests.strategies.kalcb.full_diagnostics --acceptance-manifest for qualified diagnostics; the legacy selector cannot substitute for this policy.")
     capability_level = str(raw_config.get("capability_level", "real_replay")).lower()
     if capability_level in {"official", "feature_complete"}:
         official_available = set(
@@ -642,13 +727,15 @@ def run_kalcb_backtest(
         adapter,
         initial_equity=initial_equity,
         costs=costs,
+        capacity_policy=capacity_from_config(raw_config),
+        execution_clock=execution_clock,
         close_open_positions=(capability_level == "synthetic"),
         buying_power_leverage=cfg.intraday_leverage,
     )
     result.decisions.extend(adapter._sync_new_fills(result.broker))
     adapter.finalize_frontier_shadow(bars[-1] if bars else None)
     result.trades = _collapse_exit_legs(result.trades)
-    metrics = compute_trade_metrics(result.trades, result.equity_curve, initial_equity=initial_equity)
+    metrics = compute_trade_metrics(result.trades, result.equity_curve, timestamps=result.timestamps, mark_coverage=result.broker.mark_coverage or None, initial_equity=initial_equity)
     final_equity = float(result.equity_curve[-1]) if result.equity_curve else float(initial_equity)
     metrics["official_mtm_net_return_pct"] = (final_equity / float(initial_equity) - 1.0) if initial_equity else 0.0
     metrics["final_equity"] = final_equity
@@ -714,6 +801,7 @@ def run_kalcb_backtest(
     metrics.update(adapter.frontier_metrics())
     feature_hash = str((replay_bundle.metadata or {}).get("kalcb_feature_bundle_hash") or "") or build_feature_bundle_hash_for_snapshots(snapshots, replay_bundle.source_fingerprint)
     candidate_snapshot_hash = str((replay_bundle.metadata or {}).get("kalcb_candidate_artifact_hash") or "") or _aggregate_snapshot_hash(snapshots)
+    metrics.update(audit_broker(result.broker, identity={"input_manifest": replay_bundle.metadata.get("input_manifest"), "config": cfg.to_dict() if hasattr(cfg, "to_dict") else repr(cfg), "source_fingerprint": replay_bundle.source_fingerprint, "candidate_snapshot_hash": _aggregate_snapshot_hash(snapshots)}))
     return StrategyBacktestResult(
         "kalcb",
         metrics,
@@ -780,8 +868,12 @@ def _portfolio_view_for_broker(broker: SimBroker, strategy_id: str) -> KALCBPort
         open_risk += float(position.route_metadata.get("risk_per_share", 0.0) or 0.0) * position.qty
         open_notional += position.avg_price * position.qty
     equity = float(broker._portfolio_equity())
+    risk_cash = broker.cash
+    if hasattr(broker, "strategy_risk_cash"):
+        risk_cash = broker.strategy_risk_cash(strategy_id)
+        equity = broker.strategy_sizing_equity()
     return KALCBPortfolioView(
-        cash=broker.cash,
+        cash=risk_cash,
         positions=positions,
         open_positions=len(positions),
         sector_counts=sectors,
@@ -808,75 +900,26 @@ def _dedupe(values: list[str]) -> list[str]:
     return out
 
 
-def _trade_leg_key(trade: TradeOutcome) -> tuple[str, str, str, float]:
-    return (trade.strategy_id, trade.symbol, trade.entry_fill_time.isoformat(), round(float(trade.entry_price), 6))
+def _trade_leg_key(trade: TradeOutcome) -> tuple[str, str, str]:
+    from backtests.analysis.trade_groups import trade_group_key
+    return trade_group_key(trade)
 
 
 def _is_partial_trade(trade: TradeOutcome) -> bool:
     cohort = dict(trade.cohort_metadata)
+    if "position_qty_after" in cohort:
+        return int(cohort["position_qty_after"]) > 0
     return str(trade.exit_reason).lower() == "partial_profit" or str(cohort.get("exit_cohort", "")).lower() == "partial"
 
 
 def _collapse_exit_legs(trades: list[TradeOutcome]) -> list[TradeOutcome]:
-    grouped: dict[tuple[str, str, str, float], list[TradeOutcome]] = {}
-    order: list[tuple[str, str, str, float]] = []
-    singles: list[TradeOutcome] = []
-    for trade in trades:
-        key = _trade_leg_key(trade)
-        if key not in grouped:
-            grouped[key] = []
-            order.append(key)
-        grouped[key].append(trade)
-    for key in order:
-        legs = grouped[key]
-        if len(legs) == 1:
-            singles.append(legs[0])
-        else:
-            singles.append(_collapse_trade_legs(legs))
-    return singles
+    from backtests.analysis.trade_groups import collapse_exit_legs
+    return collapse_exit_legs(trades)
 
 
 def _collapse_trade_legs(legs: list[TradeOutcome]) -> TradeOutcome:
-    ordered = sorted(legs, key=lambda item: (item.exit_fill_time or item.entry_fill_time, 0 if _is_partial_trade(item) else 1))
-    first = ordered[0]
-    final = ordered[-1]
-    total_qty = sum(int(item.qty) for item in ordered)
-    if total_qty <= 0:
-        return final
-    weighted_exit = sum(float(item.exit_price or item.entry_price) * int(item.qty) for item in ordered) / total_qty
-    partial_count = sum(1 for item in ordered if _is_partial_trade(item))
-    route = dict(first.route_metadata)
-    route.update(
-        {
-            "partial_taken": partial_count > 0,
-            "partial_exit_count": partial_count,
-            "exit_leg_count": len(ordered),
-            "exit_legs": [_trade_leg_metadata(item) for item in ordered],
-            "final_exit_reason": final.exit_reason,
-        }
-    )
-    cohort = dict(final.cohort_metadata)
-    cohort.update({"partial_taken": partial_count > 0, "partial_exit_count": partial_count, "exit_leg_count": len(ordered)})
-    return TradeOutcome(
-        strategy_id=first.strategy_id,
-        symbol=first.symbol,
-        qty=total_qty,
-        entry_decision_time=first.entry_decision_time,
-        entry_fill_time=first.entry_fill_time,
-        entry_price=first.entry_price,
-        exit_fill_time=final.exit_fill_time,
-        exit_price=weighted_exit,
-        gross_pnl=sum(float(item.gross_pnl) for item in ordered),
-        commission=sum(float(item.commission) for item in ordered),
-        net_pnl=sum(float(item.net_pnl) for item in ordered),
-        realized=all(bool(item.realized) for item in ordered),
-        exit_reason=final.exit_reason,
-        route_metadata=route,
-        cohort_metadata=cohort,
-        source_artifact_hash=first.source_artifact_hash,
-        mfe=max(float(item.mfe) for item in ordered),
-        mae=min(float(item.mae) for item in ordered),
-    )
+    from backtests.analysis.trade_groups import combine_trade_legs
+    return combine_trade_legs(legs)
 
 
 def _trade_leg_metadata(trade: TradeOutcome) -> dict[str, Any]:

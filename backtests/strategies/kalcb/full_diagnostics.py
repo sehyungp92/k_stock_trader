@@ -64,6 +64,80 @@ def write_kalcb_optimization_full_diagnostics(
     return analysis["diagnostics_summary"]
 
 
+def write_kalcb_qualified_full_diagnostics(bundle, config, mutations, output_dir, *, round_num=1, round_name=""):
+    """Render the existing full report from bound native exports, observationally."""
+    from .qualified_artifacts import diagnostic_result, load_qualified_profile, read, digest, close
+    import shutil
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    profile = bundle["profile"]
+    result = diagnostic_result(bundle)
+    analysis = analyze_kalcb_result(result, config=config, mutations=mutations)
+    analysis.update(round=round_num, round_name=round_name, promotion_status="accepted_optimized_baseline_research_only")
+    analysis["gate_result"] = {"status": "accepted_research_baseline", "checks": {
+        "four_source_audits": True, "frozen_inputs": True, "cash_cost_trade_mtm_reconciliation": True},
+        "production_ready": False}
+    analysis["live_parity_audit"].update(
+        status="shared_core_contract_only_pending_paper_execution",
+        observation_watch_count=103, observation_window_minutes=45,
+        active_symbol_count_basis="admitted candidate snapshot count; not verified live subscription occupancy",
+        paper_promotion_blockers=["Full 103-name prefix and model update delivery latency has not been qualified live.",
+            "KIS paper order/fill/restart parity remains required.", "Independent forward validation remains required.",
+            "A funded fixed-capital/no-compounding native replay remains required before production candidacy."])
+    analysis["diagnostics_summary"]["live_parity_audit"] = analysis["live_parity_audit"]
+    scenario_metrics = {s: c["result"] for s, c in bundle["cases"].items()}
+    supplemental = {"acceptance_manifest": bundle["manifest"], "acceptance_manifest_hash": bundle["manifest_hash"],
+        "scenarios": {s: {k: r[k] for k in ("return_pct", "drawdown_pct", "trades", "active_days", "audit_status")} for s, r in scenario_metrics.items()},
+        "scenario_checks": {s: c["validation"] for s, c in bundle["cases"].items()},
+        "date_range": profile["date_range"], "initial_equity_krw": profile["initial_equity_krw"],
+        "training": "Expanding prefixes; completed labels before fitting; one-session embargo; refit every 20 sessions",
+        "validation_scope": "Reused development data; June-July 2026 excluded; no independent OOS claim",
+        "policy": profile["policy"], "audit_manifest": profile["audit_manifest"],
+        "forecast_reconstruction": profile["forecast_reconstruction"],
+        "drawdown_targets_are_soft": True, "original_trials": profile["all_trials"],
+        "new_search_trials": 0, "production_enabled": False}
+    # Constant-notional attribution isolates compounding mechanically. It is
+    # deliberately not reported as a funded portfolio return or drawdown.
+    supplemental["constant_notional_attribution"] = {
+        "notional_krw_per_trade": 10_000_000,
+        "net_pnl_krw": sum(t.net_pnl * 10_000_000 / (t.entry_price * t.qty) for t in result.trades),
+        "scope": "Descriptive rescaling of observed trades; excludes funding/capacity feedback; not a fixed-capital portfolio backtest"}
+    close(analysis["final_metrics"]["net_return_pct"] * 100, scenario_metrics["baseline"]["return_pct"], "Diagnostic return drift")
+    close(analysis["final_metrics"]["max_drawdown_pct"] * 100, scenario_metrics["baseline"]["drawdown_pct"], "Diagnostic drawdown drift")
+    close(analysis["final_metrics"]["profit_factor"], bundle["cases"]["baseline"]["validation"]["net_profit_factor"], "Diagnostic PF drift")
+    report = render_kalcb_diagnostics_report(analysis)
+    report = report.replace("Full-universe alpha", "Non-selected outcome evidence").replace("Intraday Alpha Curve", "Intraday realized PnL attribution")
+    report += "\n\nQUALIFIED NATIVE REPLAY / EXISTING SAFEGUARDS\n" + json.dumps(supplemental, indent=2, default=str) + "\n"
+    report += ("\nSortino: exchange-session close-to-close returns, 252 sessions/year, zero downside target.\n"
+               "Calmar: annualized session return divided by bar-level MTM drawdown.\n"
+               "Shadow comparisons are unavailable without matched outcome-policy evidence. MFE alternatives are hindsight path descriptions.\n"
+               "Model capacity and next-bar execution are historical research assumptions; paper/live executability is not certified.\n")
+    analysis["diagnostics_summary"]["qualified_native_replay"] = supplemental
+    _atomic_write_text(output_dir / "round_final_diagnostics.txt", report)
+    _atomic_write_json(analysis["diagnostics_summary"], output_dir / "diagnostics_summary.json")
+    _atomic_write_json(analysis["candidate_frontier"], output_dir / "candidate_frontier.json")
+    _atomic_write_json(analysis["live_parity_audit"], output_dir / "live_parity_audit.json")
+    _atomic_write_json({k: v for k, v in analysis.items() if k not in ("trades", "decisions")}, output_dir / "round_final_full_diagnostics.json")
+    _atomic_write_json(supplemental, output_dir / "qualified_replay_diagnostics.json")
+    _atomic_write_jsonl(output_dir / "trade_events.jsonl", analysis["trade_events"])
+    _atomic_write_jsonl(output_dir / "decision_events.jsonl", [d.to_json_dict() for d in result.decisions])
+    _atomic_write_json(profile, output_dir / "selected_research_profile.json")
+    shutil.copy2(profile["configuration"], output_dir / "strategy_config.json")
+    shutil.copy2(bundle["manifest"], output_dir / "acceptance_manifest.json")
+    source_paths = {"qualified_profile": bundle["manifest"], "native_audit": profile["audit_manifest"]}
+    artifact_paths = _artifact_paths(output_dir)
+    for name in ("round_final_full_diagnostics.json", "qualified_replay_diagnostics.json", "decision_events.jsonl",
+                 "selected_research_profile.json", "strategy_config.json", "acceptance_manifest.json", "diagnostic_integrity.json"):
+        artifact_paths[name] = str(output_dir / name)
+    _atomic_write_json(_index_payload(analysis, artifact_paths, source_paths), output_dir / "full_diagnostics_index.json")
+    # Validation after rendering proves the report did not alter native evidence.
+    load_qualified_profile(bundle["manifest"])
+    _atomic_write_json({"passed": True, "native_evidence_unchanged": True,
+        "report_sha256": digest(output_dir / "round_final_diagnostics.txt"),
+        "metric_units": "Fractions for returns/drawdowns in canonical metrics; scenario tables explicitly use percent"}, output_dir / "diagnostic_integrity.json")
+    return analysis["diagnostics_summary"]
+
+
 def promote_kalcb_baseline_round(
     *,
     config_path: str | Path = DEFAULT_CONFIG,
@@ -75,6 +149,10 @@ def promote_kalcb_baseline_round(
 ) -> dict[str, Any]:
     config_path = Path(config_path)
     output_root = Path(output_root)
+    manager = RoundManager("stock", "kalcb", base_dir=output_root)
+    existing = manager.round_path(round_num)
+    if existing.exists() and any(existing.iterdir()):
+        raise FileExistsError("Preserve/archive the existing round before replacement: " + str(existing))
     config = normalize_runtime_config("kalcb", load_yaml_config(config_path))
     mutations = dict(config.get("initial_mutations") or {})
     if not mutations:
@@ -84,7 +162,6 @@ def promote_kalcb_baseline_round(
     external = _load_external_artifacts(ws8_summary_path, capacity_validation_path, broad_summary_path)
     analysis = analyze_kalcb_result(result, config=config, mutations=mutations, external_artifacts=external)
 
-    manager = RoundManager("stock", "kalcb", base_dir=output_root)
     round_dir = manager.get_round_dir(round_num)
     mutation_sha = _json_sha256(mutations)
     source_paths = {
@@ -227,8 +304,9 @@ def analyze_kalcb_result(
     trades = list(result.trades)
     decisions = list(result.decisions)
     rows = [_trade_row(trade) for trade in trades]
-    final_metrics = _final_metrics(result.metrics, trades, config, result.replay_result.equity_curve)
-    selected = str((external.get("ws8_summary") or {}).get("best", {}).get("name") or "start1025_trail_end1300")
+    final_metrics = _final_metrics(result.metrics, trades, config, result.replay_result.equity_curve,
+                                   timestamps=result.replay_result.timestamps)
+    selected = str(config.get("selected_candidate") or (external.get("ws8_summary") or {}).get("best", {}).get("name") or "unspecified_candidate")
     groups = _build_group_stats(rows)
     signal_funnel = _signal_funnel(decisions)
     sweeps = _sweep_frontier(external)
@@ -414,8 +492,8 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
     ):
         lines.append(f"  {key}: {audit.get(key)}")
     lines.append("  Verdict: completed-bar signals and next_5m_open fills are clean; no same-bar fills were observed.")
-    lines.append("  KIS note: websocket expansion above ws8 raised frequency but degraded expectancy in the capacity sweep.")
-    lines.append("  Coverage note: the executable slice is ws-capped; the broader frontier is REST-pollable and shadowed before promotion.")
+    lines.append("  KIS note: admitted candidate count is distinct from live observation subscriptions; live feed capacity requires separate qualification.")
+    lines.append("  Coverage note: historical observation coverage and admitted candidates are separate from verified live data-delivery capacity.")
 
     _section(lines, "3. Signal Funnel & Gate Attribution")
     lines.extend(
@@ -455,8 +533,8 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             f"  Promotion-proof cohort: symbols={_int(metrics.get('frontier_rotation_proof_symbol_count'))}, trades={_int(metrics.get('frontier_rotation_proof_trade_count'))}, Total R={_signed(metrics.get('frontier_rotation_proof_total_r'))}, Avg R={_signed(metrics.get('frontier_rotation_proof_avg_r'))}",
             f"  Full frontier proof: trades={_int(metrics.get('frontier_rotation_global_trade_count'))}, Total R={_signed(metrics.get('frontier_rotation_global_total_r'))}, Avg R={_signed(metrics.get('frontier_rotation_global_avg_r'))}",
             f"  Frontier proof ready: {bool(metrics.get('frontier_rotation_frontier_proof_ready'))}",
-            "  Interpretation: hot market is treated as opportunity breadth, not a naive directional chase; active ws names are seeded from prior-completed campaign/opportunity features, then shadowed against the full frontier.",
-            "  Policy: non-selected frontier names can enter the executable slice only after the full frontier and the promotion-proof cohort both have positive prior shadow evidence; ws_budget remains the hard cap.",
+            "  Interpretation: these are recorded candidate and frontier counts. Decision clocks and admission rules follow the bound policy.",
+            "  Policy: absence of shadow observations cannot establish the quality of rejected candidates or live subscription feasibility.",
         ]
     )
     unavailable = metrics.get("unavailable_symbols") or []
@@ -471,7 +549,7 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             avg_r = total_r / trades if trades else 0.0
             lines.append(f"    {item.get('symbol')}: n={trades}, Total R={_signed(total_r)}, Avg R={_signed(avg_r)}")
 
-    _section(lines, "3c. Full-Universe Alpha Capture Attribution")
+    _section(lines, "3c. Accepted and Non-selected Outcome Evidence")
     actual = alpha.get("actual") or {}
     shadow = alpha.get("shadow_nonselected") or {}
     selected_shadow = alpha.get("shadow_selected") or {}
@@ -484,7 +562,7 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             f"  Positive shadow pool: {_signed(alpha.get('shadow_positive_pool_total_r'))}R  |  Negative shadow pool: {_signed(alpha.get('shadow_negative_pool_total_r'))}R",
             f"  Same-day net shadow > executable: {_int(same_day.get('days_shadow_net_gt_actual'))}/{_int(same_day.get('days'))} days",
             f"  Same-day gross positive shadow > executable: {_int(same_day.get('days_shadow_positive_pool_gt_actual'))}/{_int(same_day.get('days'))} days",
-            "  Interpretation: the broader hot market contains isolated positive names, but the unselected full-universe signal pool is net negative before the ws8 cap. Expansion without stronger selection would add low-value trades faster than alpha.",
+            "  Interpretation: absent non-selected outcomes are unavailable evidence, not zero-return alternatives. Common-policy controlled replays are required for filter-quality claims.",
         ]
     )
     _append_shadow_group_section(lines, "  Shadow R by frontier rank bucket:", alpha.get("shadow_by_rank_bucket") or {})
@@ -514,12 +592,12 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             f"    CPR: {_signed(profile_delta.get('cpr'))}  |  AVWAP dist: {_signed(profile_delta.get('avwap_distance_pct'))}  |  OR width: {_signed(profile_delta.get('or_width_pct'))}",
             f"    MFE: winners {_signed(winner_profile.get('mfe_r'))} vs losers {_signed(loser_profile.get('mfe_r'))}; MAE: winners {_signed(winner_profile.get('mae_r'))} vs losers {_signed(loser_profile.get('mae_r'))}",
             f"  Losers with first MFE > 0.3R: {_int(management.get('losers_with_mfe_gt_03'))} ({_pct(management.get('losers_with_mfe_gt_03_share'))})",
-            "  Interpretation: if score/RVOL deltas are small while MFE/MAE deltas are large, the issue is path quality after entry and candidate discrimination, not a broken fill model.",
+            "  Interpretation: these descriptive path differences do not independently validate the execution model or establish a causal source of performance.",
         ]
     )
     lost_alpha = management.get("top_lost_alpha_trades") or []
     if lost_alpha:
-        lines.append("  Top lost-alpha trades:")
+        lines.append("  Largest hindsight MFE givebacks (not executable missed profit):")
         for item in lost_alpha[:6]:
             lines.append(
                 f"    {str(item.get('entry_time'))[:10]} {item.get('symbol')}: "
@@ -680,7 +758,7 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             f"R={_signed(m.get('expected_total_r')):>8} ret={_pct(m.get('net_return_pct')):>8} "
             f"PF={_num(m.get('profit_factor')):>5} DD={_pct(m.get('max_drawdown_pct')):>7} active={_int(m.get('active_symbol_max'))}"
         )
-    lines.append("  Interpretation: the selected 10:25-13:00 ws8 slice gives the strongest corrected train score; ws10/ws12 expansions added trades but weakened expectancy and drawdown.")
+    lines.append("  Interpretation: capacity conclusions require bound controlled replays. An empty sweep table establishes no capacity result.")
 
     _section(lines, "25. Holdout Validation")
     for item in frontier["targeted_holdout"]:
@@ -692,7 +770,7 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
         )
 
     _section(lines, "26. Mutation Threshold Sweeps")
-    lines.append("  Targeted ws8 refinement:")
+    lines.append("  Bound development refinement evidence (if supplied):")
     for item in frontier["targeted_train"]:
         m = item.get("metrics", {})
         lines.append(
@@ -700,16 +778,16 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             f"trades={_int(m.get('total_trades')):>4} R={_signed(m.get('expected_total_r')):>8} "
             f"ret={_pct(m.get('net_return_pct')):>8} PF={_num(m.get('profit_factor')):>5} DD={_pct(m.get('max_drawdown_pct')):>7}"
         )
-    lines.append(f"  Selected: {analysis['selected_candidate']}. It gave the strongest corrected train score while keeping ws_budget at 8; ws10/ws12 expansions added weaker or negative trades.")
+    lines.append(f"  Selected: {analysis['selected_candidate']}. Selection provenance follows the bound study; this diagnostic report performs no new optimization.")
 
     _section(lines, "27. Residual Risks / Next Diagnostics")
     holdout_trades = _selected_holdout_trades(frontier, analysis["selected_candidate"])
     lines.extend(
         [
-            f"  - Holdout contains only {holdout_trades} selected-candidate trades, so this is a starting baseline, not production promotion.",
+            f"  - Supplied holdout evidence contains {holdout_trades} selected-candidate trades. Zero means no holdout evidence was supplied; reused data must not be labelled independent.",
             "  - Rejected KALCB decisions do not yet carry realized shadow outcomes; selector frontier attribution is therefore based on accepted trades plus capacity/refinement sweeps.",
             "  - Daily frontier candidates use prior-completed daily heat and liquidity; intraday REST polling/paper parity should verify the same symbols before live promotion.",
-            "  - All sector metadata currently collapses to UNKNOWN for many KRX names; sector caps should be revisited once Korean sector mapping is attached.",
+            "  - Sector completeness must be assessed from the actual sector attribution table; unavailable classifications remain explicit.",
             f"  - {KALCB_CORE_VERSION} behavior changed entry eligibility and frontier discovery; historical capacity/refinement sweep artifacts should be rerun before any production promotion.",
             "  - Paper/live parity should compare submitted intents, accepted KIS orders, fills, rejects, and deferred REST actions before live promotion.",
         ]
@@ -720,10 +798,10 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
             "  - Decision ownership remains in the shared KALCB core; live and backtest adapters consume the same DecisionEvent/action stream.",
             "  - Signals still use completed 5m bars with next_5m_open fills; same-bar fill count is reported in the live-parity audit.",
             "  - Entries/exits continue through neutral StrategyAction objects and the replay SimBroker, preserving one execution/accounting path.",
-            f"  - CPR rescue plus frontier rotation are versioned behavior changes ({KALCB_CORE_VERSION}), not backtest-only filter overrides.",
+            f"  - Optional rules follow the declared configuration and source generation ({KALCB_CORE_VERSION}); disabled rules supply no intervention evidence.",
             "  - Diagnostics now split raw breakout quality failures into RVOL-min, CPR-floor, CPR-score, and CPR-rescued cohorts to keep funnel denominators cohort-pure.",
             "  - The KRX frontier is replay-bundle metadata plus an adapter-side active-snapshot view: the shared core still owns decisions, while shadow simulation uses a separate SimBroker and cannot alter executable PnL.",
-            "  - Frontier rotation is evidence-gated by prior shadow outcomes and preserves the ws_budget cap, matching the live/paper KIS constraint surface.",
+            "  - Shared-core agreement does not establish live data delivery, queue capacity, or broker execution; paper qualification remains a separate gate.",
         ]
     )
     _section(lines, "29. Monthly PnL")
@@ -789,7 +867,7 @@ def render_kalcb_diagnostics_report(analysis: dict[str, Any]) -> str:
         lines.append(f"    Exit types: {item.get('exit_reasons')}")
         lines.append(f"    Top sectors: {item.get('sectors')}")
 
-    _section(lines, "36. Intraday Alpha Curve")
+    _section(lines, "36. Intraday Realized PnL Attribution")
     for item in layers.get("intraday_alpha_curve") or []:
         lines.append(
             f"  {item.get('bucket'):<22} n={_int(item.get('n')):>4} WR={_pct(item.get('win_rate')):>6} "
@@ -931,10 +1009,13 @@ def _filter_actual(route: dict[str, Any], name: str) -> float | None:
 
 
 def _entry_bar_index(timestamp: datetime) -> int:
-    return int(((timestamp.hour * 60 + timestamp.minute) - (9 * 60)) / 5) + 1
+    from strategy_common.execution_session import session_cutoff
+    from datetime import time
+    opening = session_cutoff(timestamp.date(), time(9), anchor="open")
+    return int(((timestamp.hour * 60 + timestamp.minute) - (opening.hour * 60 + opening.minute)) / 5) + 1
 
 
-def _final_metrics(metrics: dict[str, Any], trades: list[TradeOutcome], config: dict[str, Any], equity_curve: list[float] | tuple[float, ...] | None = None) -> dict[str, Any]:
+def _final_metrics(metrics: dict[str, Any], trades: list[TradeOutcome], config: dict[str, Any], equity_curve: list[float] | tuple[float, ...] | None = None, *, timestamps=None) -> dict[str, Any]:
     rows = [_trade_row(trade) for trade in trades]
     total = len(rows)
     r_values = [row["r"] for row in rows]
@@ -943,12 +1024,18 @@ def _final_metrics(metrics: dict[str, Any], trades: list[TradeOutcome], config: 
     losses = [row for row in rows if row["net_pnl"] < 0]
     first_date = min((row["entry_time"].date() for row in rows), default=None)
     last_date = max((row["entry_time"].date() for row in rows), default=None)
+    date_range = config.get("date_range") or {}
+    if date_range.get("start") and date_range.get("end"):
+        first_date = datetime.fromisoformat(date_range["start"]).date()
+        last_date = datetime.fromisoformat(date_range["end"]).date()
+        if last_date < first_date:
+            raise ValueError("Reversed diagnostic date range")
     months = max(1.0, ((last_date - first_date).days + 1) / 30.4375) if first_date and last_date else 1.0
     initial_equity = float(config.get("initial_equity", 0.0) or 0.0)
     net_profit = float(metrics.get("net_profit", sum(row["net_pnl"] for row in rows)))
     max_dd = float(metrics.get("max_drawdown_pct", 0.0) or 0.0)
     net_return_pct = float(net_profit / initial_equity) if initial_equity else float(metrics.get("net_return_pct", 0.0) or 0.0)
-    risk_metrics = _equity_risk_metrics(equity_curve or ())
+    risk_metrics = _equity_risk_metrics(equity_curve or (), timestamps=timestamps)
     session_days = _observed_session_days(rows, metrics)
     active_days = len({row["entry_time"].date() for row in rows})
     base_metrics = {key: value for key, value in dict(metrics).items() if key != "frontier_shadow_trade_rows"}
@@ -972,8 +1059,10 @@ def _final_metrics(metrics: dict[str, Any], trades: list[TradeOutcome], config: 
         "trades_per_month": float(total / months) if months else 0.0,
         "total_commissions": float(sum(row["commission"] for row in rows)),
         "sharpe": float(metrics.get("sharpe", 0.0) or 0.0),
-        "sortino": float(metrics.get("sortino", risk_metrics.get("sortino", 0.0)) or 0.0),
-        "calmar": float((net_return_pct / max_dd) if max_dd > 0 else 0.0),
+        "sortino": risk_metrics.get("sortino"),
+        "sortino_sampling": risk_metrics["sampling"],
+        "calmar": (risk_metrics["annualized_return"] / max_dd) if max_dd > 0 and risk_metrics.get("annualized_return") is not None else None,
+        "period_return_over_max_drawdown": (net_return_pct / max_dd) if max_dd > 0 else None,
         "avg_mfe_r": float(mean(row["mfe_r"] for row in rows)) if rows else 0.0,
         "median_mfe_r": float(median(row["mfe_r"] for row in rows)) if rows else 0.0,
         "avg_mae_r": float(mean(row["mae_r"] for row in rows)) if rows else 0.0,
@@ -1241,6 +1330,9 @@ def _candidate_surfacing_diagnostics(metrics: dict[str, Any], alpha: dict[str, A
         actions.append("Candidate pool is very narrow; verify liquidity/clean filters are not choking the hot universe.")
     if not actions:
         actions.append("Candidate surfacing looks directionally useful; keep monitoring skipped positive-shadow pockets as expansion candidates.")
+    if not shadow.get("n"):
+        verdict = "NOT_ESTIMATED"
+        actions = ["No matched non-selected outcome cohort is available; realized accepted returns do not establish selection discrimination."]
     return {
         "verdict": verdict,
         "accepted_avg_r": accepted_avg,
@@ -1250,6 +1342,8 @@ def _candidate_surfacing_diagnostics(metrics: dict[str, Any], alpha: dict[str, A
         "interpretation": (
             "Accepted candidates outperform the skipped shadow pool after costs."
             if verdict == "GOOD"
+            else "Non-selected matched outcomes are unavailable; selection discrimination is not estimated."
+            if verdict == "NOT_ESTIMATED"
             else "Candidate surfacing is not cleanly separating the best intraday opportunities from skipped names."
         ),
         "actions": actions,
@@ -1711,14 +1805,14 @@ def _executive_verdicts(metrics: dict[str, Any], funnel: dict[str, Any], sweeps:
             else "REVIEW"
         ),
         "Entry mechanism": "GOOD" if higher_bad and total_r > 0 else "REVIEW",
-        "Exit mechanism": "REVIEW (failure stop disabled; quick exits and carry exits remain the main audit surface)",
+        "Exit mechanism": "Requires controlled native management replay; descriptive exit groups alone do not establish improvement",
         "Trade management": "GOOD" if dd <= 0.015 and pf >= 1.15 else "REVIEW",
         "Full-universe alpha": (
             f"NARROW (positive shadow pockets {_signed(positive_pool)} are overwhelmed by {_signed(negative_pool)} negative shadow R)"
             if positive_pool > 0 and negative_pool < 0
             else "REVIEW"
         ),
-        "Primary bottleneck": "full-universe selector discrimination and route quality, not raw data coverage or websocket mechanics",
+        "Primary bottleneck": "Requires controlled replay attribution; this descriptive report does not establish a causal bottleneck",
     }
 
 
@@ -1738,23 +1832,21 @@ def _strengths_weaknesses(
     total_gains = sum(row["net_pnl"] for row in wins)
     top5_share = sum(row["net_pnl"] for row in wins[:5]) / total_gains if total_gains else 0.0
     strengths = [
-        f"Positive full-train expectancy: total R {_signed(metrics['expected_total_r'])}, PF {_num(metrics['profit_factor'])}, net return {_pct(metrics['net_return_pct'])}.",
-        f"Accepted-vs-shadow discrimination is positive: accepted avgR {_signed((alpha.get('actual') or {}).get('avg_r'))} vs full non-selected shadow avgR {_signed((alpha.get('shadow_nonselected') or {}).get('avg_r'))}.",
+        f"Observed development results: total R {_signed(metrics['expected_total_r'])}, PF {_num(metrics['profit_factor'])}, net return {_pct(metrics['net_return_pct'])}.",
         f"Best symbol: {best_symbol[0]} (n={best_symbol[1]['n']}, WR={_pct(best_symbol[1]['win_rate'])}, avgR={_signed(best_symbol[1]['avg_r'])}, fee-net={_money(best_symbol[1]['net_pnl'])}).",
         f"Best exit reason: {best_exit[0]} (n={best_exit[1]['n']}, avgR={_signed(best_exit[1]['avg_r'])}, PF={_num(best_exit[1]['profit_factor'])}).",
-        f"Winner concentration is acceptable for a seed: top 5 winners drive {_pct(top5_share)} of gross positive PnL.",
+        f"Winner concentration: top 5 winners contribute {_pct(top5_share)} of positive net trade PnL; this is descriptive, not a robustness verdict.",
     ]
     weaknesses = [
         f"Worst symbol: {worst_symbol[0]} (n={worst_symbol[1]['n']}, WR={_pct(worst_symbol[1]['win_rate'])}, avgR={_signed(worst_symbol[1]['avg_r'])}, fee-net={_money(worst_symbol[1]['net_pnl'])}).",
         f"Worst exit reason: {worst_exit[0]} (n={worst_exit[1]['n']}, avgR={_signed(worst_exit[1]['avg_r'])}, PF={_num(worst_exit[1]['profit_factor'])}).",
-        f"Full-universe non-selected shadow is negative: n={_int((alpha.get('shadow_nonselected') or {}).get('n'))}, totalR={_signed((alpha.get('shadow_nonselected') or {}).get('total_r'))}, despite positive pockets of {_signed(alpha.get('shadow_positive_pool_total_r'))}R.",
-        f"Holdout is thin: {int((sweeps.get('targeted_holdout') or [{}])[0].get('metrics', {}).get('total_trades', 0) or 0)} trades in the top validation rows.",
-        "Rejected gate decisions still need gate-level realized shadow attribution; full-frontier selected-vs-skipped shadow attribution is now recorded separately.",
+        "Accepted/rejected filter quality requires matched outcomes and a controlled account replay; absent shadow outcomes are not zero-return alternatives.",
+        "Independent validation status must follow the bound study provenance; development and repeatedly used holdout data are not fresh OOS evidence.",
     ]
     notes = [
         f"Entry selectivity is tight: {funnel['entries']} entries from {funnel['evaluated']} evaluated candidate-bars ({_pct(funnel['accept_rate'])}).",
-        f"KRX hot frontier shadows {_int(metrics.get('frontier_symbol_max'))} symbols/day while keeping executable ws usage capped at {_int(metrics.get('active_symbol_max'))}.",
-        "The high-frequency sweep selected the 10:25-13:00 ws8 slice; wider websocket budgets added trades but weakened expectancy and drawdown.",
+        "Recorded candidate counts and historical observation coverage do not prove live websocket/REST delivery capacity.",
+        "MFE and capture alternatives are hindsight path descriptions, not executable missed profit or benchmark-relative alpha.",
         "All promotion remains research-only until KIS paper/live order and fill parity is attached.",
     ]
     quality = dict(funnel.get("raw_breakout_quality") or [])
@@ -1837,7 +1929,7 @@ def _live_parity_audit(result: StrategyBacktestResult, config: dict[str, Any], m
         "feature_bundle_hash": result.feature_bundle_hash,
         "paper_promotion_blockers": [
             "Need KIS paper intent/order/fill parity.",
-            "Need deeper OOS/forward sample beyond the current six-trade holdout.",
+            "Need independent forward validation; reused development results are not an unseen holdout.",
             "Need REST throttle/defer audit under live EGW00201 conditions.",
         ],
     }
@@ -2091,6 +2183,8 @@ def _section(lines: list[str], title: str) -> None:
 
 
 def _pct(value: Any) -> str:
+    if value is None:
+        return "n/a"
     return f"{100.0 * _float(value):.1f}%"
 
 
@@ -2103,8 +2197,10 @@ def _signed(value: Any) -> str:
 
 
 def _num(value: Any) -> str:
+    if value is None:
+        return "n/a"
     value = _float(value)
-    if value >= 998.0:
+    if math.isinf(value):
         return "inf"
     return f"{value:.2f}"
 
@@ -2140,20 +2236,30 @@ def _avg(values: Iterable[Any]) -> float:
     return float(mean(vals)) if vals else 0.0
 
 
-def _equity_risk_metrics(equity_curve: Iterable[float]) -> dict[str, float]:
-    equity = [float(value) for value in equity_curve if value is not None]
-    returns = [
-        (equity[index] - equity[index - 1]) / equity[index - 1]
-        for index in range(1, len(equity))
-        if equity[index - 1]
-    ]
-    if not returns:
-        return {"mean_return": 0.0, "downside_deviation": 0.0, "sortino": 0.0}
-    downside = [min(value, 0.0) for value in returns]
-    downside_dev = pstdev(downside) if len(downside) > 1 else 0.0
-    avg_return = mean(returns)
-    sortino = (avg_return / downside_dev) * math.sqrt(252 * 390) if downside_dev > 0 else 0.0
-    return {"mean_return": float(avg_return), "downside_deviation": float(downside_dev), "sortino": float(sortino)}
+def _equity_risk_metrics(equity_curve: Iterable[float], *, timestamps=None) -> dict[str, Any]:
+    """Annualize exchange-session returns, never irregular intraday marks."""
+    from strategy_common.clock import ensure_kst
+    equity = [float(value) for value in equity_curve]
+    missing = {"mean_return": None, "downside_deviation": None, "sortino": None,
+               "annualized_return": None, "sampling": "unavailable_without_timestamped_equity"}
+    if not equity or not timestamps:
+        return missing
+    stamps = list(timestamps)
+    if len(equity) != len(stamps) + 1 or any(not math.isfinite(x) or x <= 0 for x in equity):
+        raise ValueError("Risk diagnostics require initial equity plus one positive mark per timestamp")
+    if stamps != sorted(stamps):
+        raise ValueError("Nonchronological risk marks")
+    closes = {}
+    for stamp, value in zip(stamps, equity[1:]):
+        closes[ensure_kst(stamp).date()] = value
+    daily = [equity[0], *closes.values()]
+    returns = [b / a - 1 for a, b in zip(daily, daily[1:])]
+    avg = mean(returns)
+    downside = math.sqrt(mean(min(r, 0.0) ** 2 for r in returns))
+    return {"mean_return": avg, "downside_deviation": downside,
+            "sortino": avg / downside * math.sqrt(252) if downside > 0 else None,
+            "annualized_return": (daily[-1] / daily[0]) ** (252 / len(returns)) - 1,
+            "sampling": "exchange_session_close_to_close_252_zero_target"}
 
 
 def _observed_session_days(rows: list[dict[str, Any]], metrics: dict[str, Any]) -> int:
@@ -2329,7 +2435,54 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ws8-summary", default=str(DEFAULT_WS8_SUMMARY))
     parser.add_argument("--capacity-validation", default=str(DEFAULT_CAPACITY_VALIDATION))
     parser.add_argument("--broad-summary", default=str(DEFAULT_BROAD_SUMMARY))
+    parser.add_argument("--acceptance-manifest", type=Path, help="Qualified native timed-candidate exports; never rebuild the legacy selector")
+    parser.add_argument("--diagnostics-only", type=Path, help="Write a preview without installing a numbered round")
+    parser.add_argument("--veto-cap-source", type=Path, help="Authenticate the locked C12-B accounts for the user-selected research round")
+    parser.add_argument("--veto-cap-manifest", type=Path, help="Reuse an authenticated C12-B acceptance capsule; no financial replay")
+    parser.add_argument("--acceptance-output", type=Path, help="Fresh generation for C12-B source/account acceptance receipts")
+    parser.add_argument("--acceptance-tests", type=Path, help="Passing source-bound C12-B round acceptance test receipt")
     args = parser.parse_args(argv)
+    if args.veto_cap_source or args.veto_cap_manifest:
+        if args.acceptance_manifest or args.diagnostics_only or (args.veto_cap_source and args.veto_cap_manifest):
+            parser.error("Select exactly one locked acceptance mode")
+        from .veto_cap_round import VetoCapRoundPlugin, prepare_acceptance
+        from backtests.auto.shared.phase_runner import PhaseRunner
+        manager = RoundManager("stock", "kalcb", base_dir=Path(args.output_root))
+        target = manager.round_path(args.round)
+        if target.exists() and any(target.iterdir()):
+            raise FileExistsError("Preserve existing round before replacement: " + str(target))
+        manifest = args.veto_cap_manifest
+        if args.veto_cap_source:
+            if not args.acceptance_output or not args.acceptance_tests:
+                parser.error("--veto-cap-source requires --acceptance-output and --acceptance-tests")
+            manifest = prepare_acceptance(args.veto_cap_source, args.acceptance_output, args.acceptance_tests)
+        plugin = VetoCapRoundPlugin(manifest)
+        PhaseRunner(plugin, manager.get_round_dir(args.round), round_name=f"round_{args.round}_VETO_plus_cap",
+                    round_manager=manager, round_num=args.round, max_rounds=1,
+                    max_retries=0, max_diagnostic_retries=0).run_all_phases()
+        print(json.dumps({"round": args.round, "round_dir": str(target), "manifest": str(manager.manifest_path),
+                          "policy": "C12-B_VETO_plus_cap", "production_enabled": False}))
+        return 0
+    if args.acceptance_manifest:
+        from .qualified_round import KALCBQualifiedRoundPlugin
+        from backtests.auto.shared.phase_runner import PhaseRunner
+        plugin = KALCBQualifiedRoundPlugin(args.acceptance_manifest)
+        if args.diagnostics_only:
+            write_kalcb_qualified_full_diagnostics(plugin.bundle, plugin.config, plugin.initial_mutations,
+                                                  args.diagnostics_only, round_num=args.round)
+            print(json.dumps({"diagnostics": str(args.diagnostics_only), "promoted": False}))
+            return 0
+        manager = RoundManager("stock", "kalcb", base_dir=Path(args.output_root))
+        target = manager.round_path(args.round)
+        if target.exists() and any(target.iterdir()):
+            raise FileExistsError("Preserve/archive the existing round before replacement: " + str(target))
+        PhaseRunner(plugin, manager.get_round_dir(args.round), round_name=f"round_{args.round}",
+                    round_manager=manager, round_num=args.round, max_rounds=1,
+                    max_retries=0, max_diagnostic_retries=0).run_all_phases()
+        print(json.dumps({"round": args.round, "round_dir": str(target), "manifest": str(manager.manifest_path)}))
+        return 0
+    if args.diagnostics_only:
+        parser.error("--diagnostics-only requires --acceptance-manifest")
     payload = promote_kalcb_baseline_round(
         config_path=args.config,
         output_root=args.output_root,

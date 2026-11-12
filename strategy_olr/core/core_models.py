@@ -53,6 +53,13 @@ class OLRPortfolioView:
     open_positions: int = 0
     open_notional: float = 0.0
     gross_exposure_pct: float = 0.0
+    # Intent-only mode: an external allocator must approve and reserve sizes
+    # before submission. Default preserves the standalone/live core contract.
+    external_entry_allocation: bool = False
+    # Explicit research controller: proposals do not consume the session's
+    # attempt, and native rank weight is a prior rather than a sizing ceiling.
+    entry_proposal_only: bool = False
+    economic_size_envelope: bool = False
 
 
 @dataclass(slots=True)

@@ -28,6 +28,7 @@ from .config_loader import (
     stable_mapping_hash,
 )
 from .oms_core import OMSCore
+from .execution_feedback import ExecutionFeedback
 from .intent import Intent, IntentType, IntentStatus, IntentResult, Urgency, TimeHorizon, IntentConstraints, RiskPayload
 from .state import StrategyAllocation, WorkingOrder
 from .risk import RiskConfig
@@ -205,6 +206,12 @@ class HealthResponse(BaseModel):
     stop_watcher_last_check_age_sec: Optional[float] = None
     stop_watcher_price_stale_count: int = 0
     idempotency_status: str = "unknown"
+    execution_recovery_required: bool = False
+    broker_reconciliation_ready: bool = False
+    broker_reconciliation_age_sec: Optional[float] = None
+    broker_reconciliation_reason: str = "startup_reconciliation_required"
+    broker_mode: str = "unknown"
+    broker_account_fingerprint: str = ""
 
 
 class RegimeRequest(BaseModel):
@@ -342,6 +349,8 @@ async def lifespan(app: FastAPI):
         event_emitter=event_emitter,
         sector_map=sector_map,
         require_persistence=require_persistence,
+        require_reconciliation=True,
+        execution_feedback=ExecutionFeedback(os.environ.get("OMS_EXECUTION_FEEDBACK_PATH", "data/oms/execution_feedback.sqlite3")),
     )
     await _oms.start()
 
@@ -555,6 +564,22 @@ async def health():
     elif stop_status == "degraded" and overall_status == "ok":
         overall_status = "degraded"
 
+    execution_recovery = bool(getattr(oms, "execution_recovery_required", False))
+    if execution_recovery:
+        overall_status = "error"
+        recon_status = f"{recon_status},execution_recovery_required"
+    readiness_getter = getattr(oms, "reconciliation_health_payload", None)
+    readiness = readiness_getter() if callable(readiness_getter) else {
+        "broker_reconciliation_ready": False,
+        "broker_reconciliation_reason": "broker_reconciliation_unavailable",
+        "broker_reconciliation_age_sec": None,
+    }
+    if not readiness["broker_reconciliation_ready"]:
+        if overall_status != "error":
+            overall_status = "degraded"
+        recon_status = f"{recon_status},{readiness['broker_reconciliation_reason']}"
+    from oms.broker_snapshot import broker_identity
+    identity = broker_identity(oms.adapter.api)
     return HealthResponse(
         status=overall_status,
         uptime_sec=time.time() - _start_time,
@@ -569,6 +594,10 @@ async def health():
         stop_watcher_last_check_age_sec=watcher_age,
         stop_watcher_price_stale_count=stop_watcher_price_stale_count,
         idempotency_status=idempotency_status,
+        execution_recovery_required=execution_recovery,
+        **readiness,
+        broker_mode=identity["mode"],
+        broker_account_fingerprint=identity["account_fingerprint"],
     )
 
 
@@ -725,6 +754,24 @@ async def get_position(symbol: str):
         working_order_count=len(working_orders),
         working_orders=working_orders,
     )
+
+
+@app.get("/api/v1/execution-feedback/{strategy_id}")
+async def get_execution_feedback(strategy_id: str, after: int = 0, limit: int = 500):
+    oms = get_oms()
+    if isinstance(oms.persistence, OMSPersistence):
+        return {"events": await oms.persistence.read_execution_feedback(strategy_id, after, limit), "durable": True}
+    if oms.execution_feedback is None:
+        raise HTTPException(status_code=503, detail="Durable execution feedback is unavailable")
+    return {"events": oms.execution_feedback.read(strategy_id, after, limit), "durable": True}
+
+
+@app.get("/api/v1/execution-snapshot/{strategy_id}")
+async def get_execution_snapshot(strategy_id: str, after: int = 0, limit: int = 500):
+    oms = get_oms()
+    if not isinstance(oms.persistence, OMSPersistence):
+        raise HTTPException(status_code=503, detail="Canonical execution snapshot unavailable")
+    return await oms.persistence.execution_snapshot(strategy_id, after, limit)
 
 
 @app.get("/api/v1/working-orders", response_model=List[WorkingOrderInfo])

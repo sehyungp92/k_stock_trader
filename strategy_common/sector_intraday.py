@@ -280,12 +280,15 @@ def member_from_bars(
 
 
 def completed_session_bars(bars: Any, trade_date: date, *, cutoff: time) -> tuple[MarketBar, ...]:
+    from strategy_common.execution_session import session_cutoff
+    opening = session_cutoff(trade_date, SESSION_OPEN, anchor="open")
+    cutoff = session_cutoff(trade_date, cutoff, anchor="open" if cutoff <= FIRST30_CUTOFF else "close")
     out: list[MarketBar] = []
     for bar in sorted(tuple(bars or ()), key=lambda item: item.timestamp):
         ts = ensure_kst(bar.timestamp)
         if ts.date() != trade_date:
             continue
-        if ts.time() < SESSION_OPEN or ts.time() >= cutoff:
+        if ts.time() < opening or ts.time() >= cutoff:
             continue
         if not bool(bar.is_completed):
             continue

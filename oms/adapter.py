@@ -7,6 +7,7 @@ This is the ONLY code that knows KIS endpoints.
 from __future__ import annotations
 import asyncio
 import uuid
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, time
 from enum import Enum, auto
@@ -63,6 +64,8 @@ class BrokerOrder:
     order_type: str = ""
     submit_ref: str = ""
     created_ts: Optional[float] = None
+    execution_price_observed: bool = False
+    order_date: str = ""
 
 
 def _row_value(row: Any, *names: str, default: Any = "") -> Any:
@@ -197,8 +200,42 @@ class KISExecutionAdapter:
 
     def __init__(self, kis_api: 'KoreaInvestAPI'):
         self.api = kis_api
+        self.supports_execution_history = callable(getattr(type(kis_api), "get_execution_orders", None)) or callable(
+            getattr(kis_api, "__dict__", {}).get("get_execution_orders"))
         self._known_order_ids: set = set()
         self.retry_bind_open_order_on_ambiguous_submit = False
+
+    async def get_execution_orders(self, start_date, end_date) -> BrokerQueryResult:
+        try:
+            frame = await asyncio.to_thread(self.api.get_execution_orders, start_date, end_date)
+            if frame is None:
+                raise ValueError("Missing execution history response")
+            orders, seen = [], set()
+            for row in frame.to_dict("records"):
+                qty, filled = int(row["ord_qty"]), int(row["tot_ccld_qty"])
+                amount = float(row["tot_ccld_amt"])
+                if qty <= 0 or not 0 <= filled <= qty or not math.isfinite(amount) or amount < 0 or (filled and amount <= 0):
+                    raise ValueError("Invalid cumulative execution quantity/notional")
+                key = (str(row["ord_dt"]), str(row["odno"]))
+                if key in seen:
+                    raise ValueError("Ambiguous cumulative execution order identity")
+                seen.add(key)
+                side = _normalize_broker_side(row["sll_buy_dvsn_cd"])
+                if side not in {"BUY", "SELL"}:
+                    raise ValueError("Unknown execution side")
+                created, stamp = _parse_broker_timestamp(row["ord_tmd"], row["ord_dt"], self._now_kst())
+                remaining = int(row.get("rmn_qty", 0 if str(row.get("cncl_yn", "")).upper() == "Y" else qty - filled))
+                if not 0 <= remaining <= qty - filled:
+                    raise ValueError("Invalid remaining execution quantity")
+                status = "FILLED" if filled == qty else "WORKING" if remaining else "CANCELLED"
+                orders.append(BrokerOrder(key[1], str(row["pdno"]).zfill(6), side, qty, filled,
+                    amount / filled if filled else 0.0, status, created,
+                    branch=str(row.get("ord_gno_brno", "")), created_ts=stamp,
+                    execution_price_observed=bool(filled), order_date=key[0],
+                    order_type=_normalize_broker_order_type(row.get("ord_dvsn", ""))))
+            return BrokerQueryResult(ok=True, data=orders)
+        except Exception as exc:
+            return BrokerQueryResult(ok=False, error_message=f"Execution history unavailable: {type(exc).__name__}")
 
     _ORDER_OPEN = time(9, 0)
     _ORDER_CLOSE = time(15, 30)
@@ -210,9 +247,11 @@ class KISExecutionAdapter:
     def _is_order_session_open(self, now: Optional[datetime] = None) -> bool:
         """Return True only during the regular KRX cash session."""
         now = now or self._now_kst()
-        if not get_trading_calendar().is_trading_day(now.date()):
+        calendar = get_trading_calendar()
+        if not calendar.is_trading_day(now.date()):
             return False
-        return self._ORDER_OPEN <= now.time() <= self._ORDER_CLOSE
+        opening, closing = calendar.session_hours(now.date())
+        return opening <= now.time() <= closing
 
     async def _timeout_ambiguity_result(
         self,
@@ -523,7 +562,7 @@ class KISExecutionAdapter:
                     symbol=str(_row_value(row, "종목코드", "pdno", "symbol", "ticker")).zfill(6),
                     side=side,
                     qty=qty,
-                    filled_qty=max(qty - remaining_qty, 0),
+                    filled_qty=_coerce_int(_row_value(row, "tot_ccld_qty", default=max(qty - remaining_qty, 0))),
                     price=_coerce_float(_row_value(row, "주문가격", "ord_unpr", "price", "limit_price")),
                     status="WORKING",
                     created_at=created_at,

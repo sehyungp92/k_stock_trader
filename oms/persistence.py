@@ -18,9 +18,10 @@ from loguru import logger
 from .intent import Intent, IntentResult, IntentStatus
 from .state import WorkingOrder, SymbolPosition, StrategyAllocation, OrderStatus
 from .stop_protection import ProtectiveStop, StopStatus, stop_from_row
+from .execution_commit import ExecutionPersistence
 
 
-class OMSPersistence:
+class OMSPersistence(ExecutionPersistence):
     """Async persistence layer for OMS state."""
 
     def __init__(self, dsn: Optional[str] = None, oms_id: Optional[str] = None):
@@ -1432,7 +1433,7 @@ class OMSPersistence:
     ) -> None:
         """Record a fill. Idempotent by kis_exec_id."""
         if not self._is_connected():
-            return
+            raise RuntimeError("Canonical persistence unavailable")
         oms_order_id = await self._resolve_oms_order_id(order_id)
         try:
             await self.pool.execute(
@@ -1452,6 +1453,7 @@ class OMSPersistence:
         except Exception as e:
             self._record_failure()
             logger.error(f"Failed to record fill: {e}")
+            raise
 
     # ------------------------------------------------------------------
     # Position & Allocation Sync
@@ -1500,7 +1502,7 @@ class OMSPersistence:
     async def sync_allocation(self, symbol: str, alloc: StrategyAllocation) -> None:
         """Sync allocation state to database."""
         if not self._is_connected():
-            return
+            raise RuntimeError("Canonical persistence unavailable")
         try:
             await self.pool.execute(
                 """
@@ -1530,6 +1532,7 @@ class OMSPersistence:
         except Exception as e:
             self._record_failure()
             logger.error(f"Failed to sync allocation: {e}")
+            raise
 
     # ------------------------------------------------------------------
     # Risk Updates
@@ -1938,22 +1941,23 @@ class OMSPersistence:
         self,
         trade_date: date,
     ) -> Dict[str, float]:
-        """Load per-strategy realized PnL from today's closed trades.
-
-        Used on startup to restore in-memory state after mid-day restart.
-        """
+        """Restore gross realized P&L by execution date, including partial exits."""
         if not self._is_connected():
-            return {}
+            raise RuntimeError("Realized P&L recovery requires persistence")
         try:
+            missing = await self.pool.fetchval("""SELECT count(*) FROM fills f
+                WHERE f.oms_id=$1 AND f.side='SELL' AND (f.fill_ts AT TIME ZONE 'Asia/Seoul')::date=$2
+                AND NOT EXISTS(SELECT 1 FROM execution_commits c WHERE c.oms_id=f.oms_id AND c.identity=f.kis_exec_id)""",
+                self.oms_id, trade_date)
+            if missing:
+                raise RuntimeError("Legacy executions require a reconciled P&L migration before intraday restart")
             rows = await self.pool.fetch(
                 """
-                SELECT strategy_id, SUM(realized_pnl_krw) AS total_pnl
-                FROM trades
-                WHERE oms_id = $1
-                  AND entry_ts::date = $2
-                  AND status = 'CLOSED'
-                  AND realized_pnl_krw IS NOT NULL
-                GROUP BY strategy_id
+                SELECT payload->>'strategy_id' AS strategy_id,
+                    SUM((payload->'metadata'->>'realized_pnl')::numeric) AS total_pnl
+                FROM execution_commits WHERE oms_id=$1 AND payload->>'side'='SELL'
+                  AND ((payload->>'timestamp')::timestamptz AT TIME ZONE 'Asia/Seoul')::date=$2
+                GROUP BY payload->>'strategy_id'
                 """,
                 self.oms_id, trade_date,
             )
@@ -1962,7 +1966,7 @@ class OMSPersistence:
         except Exception as e:
             self._record_failure()
             logger.error(f"Failed to load daily realized PnL: {e}")
-            return {}
+            raise
 
     # ------------------------------------------------------------------
     # Recon Log
@@ -2082,12 +2086,16 @@ class OMSPersistence:
             for row in rows:
                 meta = self._jsonb_dict(row["meta"])
                 working_price = (
-                    float(row["limit_price"])
+                    float(row["avg_fill_price"])
+                    if row["filled_qty"] and row["avg_fill_price"]
+                    else float(row["limit_price"])
                     if row["limit_price"]
-                    else float(row["avg_fill_price"])
-                    if row["avg_fill_price"]
                     else float(meta.get("working_price") or 0.0)
                 )
+                created_at = row["created_at"]
+                if row.get("kis_order_date"):
+                    broker_day = datetime.strptime(row["kis_order_date"], "%Y%m%d")
+                    created_at = created_at.replace(year=broker_day.year, month=broker_day.month, day=broker_day.day)
                 orders.append(WorkingOrder(
                     order_id=row["kis_order_id"] or str(row["oms_order_id"]),
                     symbol=row["symbol"],
@@ -2098,7 +2106,7 @@ class OMSPersistence:
                     order_type=row["order_type"],
                     status=OrderStatus[row["status"]],
                     strategy_id=row["strategy_id"],
-                    created_at=row["created_at"],
+                    created_at=created_at,
                     updated_at=row["last_update_at"],
                     cancel_after_sec=row["cancel_after_sec"],
                     intent_id=str(row["intent_id"]) if row["intent_id"] else None,

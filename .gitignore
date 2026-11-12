@@ -159,7 +159,14 @@ config/local/
 _references/
 
 # Documentation (generated reports)
-docs/
+docs/*
+!docs/KALCB-round2-assessment-2026-10-17.md
+!docs/optimisation/
+docs/optimisation/*
+!docs/optimisation/kalcb/
+!docs/optimisation/kalcb/**
+!docs/optimisation/olr/
+!docs/optimisation/olr/**
 
 # Claude
 .claudeignore

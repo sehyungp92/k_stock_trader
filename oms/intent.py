@@ -10,6 +10,8 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Optional
 import time
 import uuid
+import hashlib
+import json
 
 
 class IntentType(Enum):
@@ -108,6 +110,11 @@ class Intent:
         # Normalize strategy ID (case-sensitive match with RiskConfig budgets)
         self.strategy_id = self.strategy_id.upper().strip()
         self.metadata = dict(self.metadata or {})
+
+        action_ref = self.metadata.get("provisional_order_ref") or self.metadata.get("action_ref")
+        if self.idempotency_key is None and action_ref:
+            scope = [self.metadata.get("account_id", ""), self.strategy_id, str(action_ref)]
+            self.idempotency_key = "ACTION:" + hashlib.sha256(json.dumps(scope).encode()).hexdigest()
 
         if self.idempotency_key is None:
             trade_date = _kst_trade_date()

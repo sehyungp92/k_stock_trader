@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from strategy_common.execution_session import kalcb_session_config
+
+from strategy_common.fill_lifecycle import record_fill_delta, order_fill_complete, is_duplicate_fill, entry_order_key
+from copy import deepcopy
+from dataclasses import replace
+from math import isfinite
+
 from datetime import datetime, timedelta
 from typing import Any
 
 from strategy_common.actions import (
+    CancelOrders,
     FlattenPosition,
     ReplaceProtectiveStop,
     StrategyAction,
@@ -25,6 +33,8 @@ from strategy_kalcb.exits import (
     trailing_stop_from_mfe,
 )
 from strategy_kalcb.first30 import build_first30_features
+from strategy_kalcb.price_lock import price_lock_evidence
+from strategy_kalcb.liquidation import liquidation_evidence
 from strategy_kalcb.models import EntryType, KALCBDailyCandidate, KALCBDailySnapshot
 from strategy_kalcb.risk import (
     compute_entry_qty,
@@ -33,6 +43,7 @@ from strategy_kalcb.risk import (
     momentum_stop_price,
     regime_size_mult,
     round_price_for_krx,
+    volatility_quantity_scale,
 )
 from strategy_kalcb.signals import (
     classify_raw_breakout,
@@ -58,9 +69,10 @@ def step_kalcb_core(
         raise ValueError(f"KALCB core requires completed bars: {bar.symbol} {bar.timestamp}")
     if bar.timeframe.lower() != "5m":
         raise ValueError("KALCB core requires 5m bars")
+    config = kalcb_session_config(config, bar.timestamp.date())
     state.meta["fast_replay_suppress_rejections"] = bool(config.fast_replay_suppress_rejections)
     _ensure_session(state, bar, candidate_snapshot)
-    _update_portfolio_context(state, portfolio)
+    _update_portfolio_context(state, portfolio,config)
     symbol_state = state.symbol_state(bar.symbol)
     candidate = _candidate_for_symbol(candidate_snapshot, bar.symbol, bar.timestamp.date())
     candidate_rank = _candidate_rank(candidate_snapshot, bar.symbol, bar.timestamp.date())
@@ -78,6 +90,21 @@ def step_kalcb_core(
     if symbol_state.position is not None:
         return _manage_position(state, symbol_state, bar, config)
 
+    if config.entry_require_complete_prefix:
+        from strategy_common.source_quality import missing_prefix
+        missing = missing_prefix(bar.symbol, bar.timestamp.date(),
+            (item.timestamp for item in symbol_state.bars_today), bar.timestamp + timedelta(minutes=5))
+        if missing:
+            actions = []
+            if symbol_state.pending_entry_order_id or symbol_state.stage == SymbolStage.ENTRY_QUEUED:
+                actions.append(CancelOrders(STRATEGY_ID, bar.symbol, "incomplete_observed_prefix"))
+                symbol_state.pending_entry_order_id = ""
+                symbol_state.pending_entry_metadata.clear()
+            symbol_state.stage = SymbolStage.BLOCKED
+            symbol_state.rejected_reason = "incomplete_observed_prefix"
+            return KALCBCoreResult(state, actions, [_decision(bar, "entry_blocked", "incomplete_observed_prefix",
+                metadata={"first_missing_interval": missing[0].isoformat()})])
+
     if symbol_state.stage == SymbolStage.ENTRY_QUEUED or symbol_state.pending_entry_order_id:
         return KALCBCoreResult(state)
 
@@ -90,6 +117,17 @@ def step_kalcb_core(
     if candidate is None or not candidate.tradable:
         symbol_state.rejected_reason = "no_daily_candidate" if candidate is None else ",".join(candidate.reject_reasons) or "candidate_not_tradable"
         return KALCBCoreResult(state)
+
+    checkpoint = candidate.metadata.get("entry_checkpoint_at") if config.entry_checkpoint_enabled else None
+    if checkpoint:
+        at = datetime.fromisoformat(str(checkpoint))
+        available = bar.timestamp + timedelta(minutes=5)
+        if at.tzinfo is None or at.date() != bar.timestamp.date():
+            raise ValueError("Checkpoint must be timezone-aware and within the candidate session")
+        # The candidate is a one-time decision. Later bars cannot revive a
+        # rejected checkpoint or turn its fixed forecast into a re-entry rule.
+        if available != at:
+            return KALCBCoreResult(state)
 
     if not symbol_state.opening_range_built:
         if len(symbol_state.bars) >= config.opening_range_bars:
@@ -115,6 +153,9 @@ def step_kalcb_core(
                 "opening_range_complete",
                 metadata={"or_high": oh, "or_low": ol, "or_volume": ov, "n_bars": config.opening_range_bars},
             )
+            if checkpoint:
+                entry_result = _evaluate_entry(state, symbol_state, bar, _checkpoint_config(config), portfolio)
+                return KALCBCoreResult(state, entry_result.actions, [decision, *entry_result.decisions])
             if _is_first30_entry_plan(config):
                 entry_result = _evaluate_entry(state, symbol_state, bar, config, portfolio, first30_signal=True)
                 return KALCBCoreResult(state, entry_result.actions, [decision, *entry_result.decisions])
@@ -122,17 +163,55 @@ def step_kalcb_core(
         symbol_state.rejected_reason = "building_opening_range"
         return KALCBCoreResult(state)
 
+    if checkpoint:
+        return _evaluate_entry(state, symbol_state, bar, _checkpoint_config(config), portfolio)
+
     if not (config.entry_window_start <= bar.timestamp.time() <= config.entry_window_end):
         return KALCBCoreResult(state)
 
     return _evaluate_entry(state, symbol_state, bar, config, portfolio)
 
 
+def _checkpoint_config(config):
+    """One declared continuation action; sizing and every native risk gate remain."""
+    return replace(config, entry_plan_routes=({
+        "name": "checkpoint_continuation", "mode": "post_or_momentum",
+        "priority": 0, "after_bar": 0, "max_signal_bars": 12,
+        "min_bar_ret": 0., "min_vwap_ret": 0., "min_or_position": .5,
+        "min_close_location": .55, "max_session_trades": 1,
+        "risk_mult": .5, "notional_mult": .5, "min_quality_votes": 3,
+        "quality_min_bar_ret": 0., "quality_min_first30_range_atr": .3,
+        "quality_min_first30_rel_volume": .75, "quality_min_first30_signal_cpr": .55,
+        "require_initial_active": True,
+    },))
+
+
 def on_kalcb_fill(state: KALCBState, fill: KALCBFillEvent, config: KALCBConfig) -> KALCBCoreResult:
+    if is_duplicate_fill(state.meta, fill):
+        return KALCBCoreResult(state)
     symbol_state = state.symbol_state(fill.symbol)
-    role_meta = dict(state.order_roles.pop(fill.order_id, {}))
-    pending_metadata = dict(symbol_state.pending_entry_metadata or {}) if fill.side.upper() == "BUY" else {}
-    metadata = {**role_meta, **pending_metadata, **dict(fill.metadata or {})}
+    existing = symbol_state.position
+    if existing is None and fill.side.upper() == "BUY":
+        existing = deepcopy(symbol_state.entry_history.get(entry_order_key(fill)))
+    if existing is not None:
+        if fill.side.upper() == "BUY" and existing.entry_order_id != fill.order_id:
+            raise ValueError("Unrelated entry order cannot merge into an open trade")
+        if fill.side.upper() == "SELL" and fill.qty > existing.qty_open:
+            raise ValueError("Sell fill exceeds the managed position")
+    if existing is None and fill.side.upper() == "SELL":
+        raise ValueError("Sell execution requires a reconciled open lifecycle")
+    if not record_fill_delta(state.meta, fill):
+        return KALCBCoreResult(state)
+    symbol_state = state.symbol_state(fill.symbol)
+    if existing is not None and fill.side.upper() == "BUY":
+        symbol_state.position = existing
+    role_meta = dict(state.order_roles.get(fill.order_id, state.order_history.get(fill.order_id, {})))
+    matching_pending = symbol_state.pending_entry_order_id in {"", fill.order_id}
+    pending_metadata = dict(symbol_state.pending_entry_metadata or {}) if fill.side.upper() == "BUY" and matching_pending else {}
+    metadata = {**(existing.metadata if existing and fill.side.upper() == "BUY" else {}), **role_meta, **pending_metadata, **dict(fill.metadata or {})}
+    complete = order_fill_complete(fill, metadata)
+    if complete:
+        state.order_roles.pop(fill.order_id, None)
     role = str(metadata.get("order_role") or "").upper()
     event_ts = fill.timestamp
     actions: list[StrategyAction] = []
@@ -140,37 +219,68 @@ def on_kalcb_fill(state: KALCBState, fill: KALCBFillEvent, config: KALCBConfig) 
 
     if fill.side.upper() == "BUY":
         stop_price = round_price_for_krx(float(metadata.get("stop_price") or fill.price * 0.985), "protective_stop")
-        risk = max(float(fill.price) - stop_price, 1.0)
-        position = KALCBPositionState(
-            symbol=fill.symbol,
-            qty_entry=int(fill.qty),
-            qty_open=int(fill.qty),
-            entry_price=float(fill.price),
-            entry_time=event_ts,
-            initial_stop=stop_price,
-            current_stop=stop_price,
-            risk_per_share=risk,
-            entry_type=str(metadata.get("entry_type") or EntryType.OR_BREAKOUT.value),
-            momentum_score=int(metadata.get("momentum_score") or 0),
-            sector=str(metadata.get("sector") or "UNKNOWN"),
-            regime_tier=str(metadata.get("regime_tier") or "A"),
-            entry_order_id=fill.order_id,
-            avwap_at_entry=float(metadata.get("avwap") or 0.0),
-            or_high=float(metadata.get("or_high") or 0.0),
-            or_low=float(metadata.get("or_low") or 0.0),
-            metadata=dict(metadata),
-        )
+        # Use the risk unit that sized the order. A gap through the reference
+        # stop must not turn a 70R exit into a one-won-denominator target.
+        signal_risk = float(metadata.get("risk_per_share") or 0.0)
+        has_signal_risk = isfinite(signal_risk) and signal_risk > 0
+        risk = signal_risk if has_signal_risk else max(float(fill.price) - stop_price, 1.0)
+        position = symbol_state.position
+        additional_fragment = position is not None
+        if additional_fragment:
+            if position.entry_order_id != fill.order_id:
+                raise ValueError("Unrelated entry order cannot merge into an open KALCB trade")
+            position.entry_price = (position.entry_price * position.qty_open + fill.price * fill.qty) / (position.qty_open + fill.qty)
+            position.qty_open += int(fill.qty)
+            position.qty_entry += int(fill.qty)
+            position.metadata["entry_fees"] = float(position.metadata.get("entry_fees", 0)) + float(fill.metadata.get("fee") or 0)
+            position.metadata["entry_fees_complete"] = bool(position.metadata.get("entry_fees_complete")) and fill.metadata.get("fee") is not None
+        else:
+            position = KALCBPositionState(
+                symbol=fill.symbol,
+                qty_entry=int(fill.qty),
+                qty_open=int(fill.qty),
+                entry_price=float(fill.price),
+                entry_time=event_ts,
+                initial_stop=stop_price,
+                current_stop=stop_price,
+                risk_per_share=risk,
+                entry_type=str(metadata.get("entry_type") or EntryType.OR_BREAKOUT.value),
+                momentum_score=int(metadata.get("momentum_score") or 0),
+                sector=str(metadata.get("sector") or "UNKNOWN"),
+                regime_tier=str(metadata.get("regime_tier") or "A"),
+                entry_order_id=fill.order_id,
+                avwap_at_entry=float(metadata.get("avwap") or 0.0),
+                or_high=float(metadata.get("or_high") or 0.0),
+                or_low=float(metadata.get("or_low") or 0.0),
+                metadata={**metadata, "risk_reference_basis": "signal" if has_signal_risk else "first_fill_fallback",
+                    "management_risk_per_share": risk,
+                    "entry_fees": float(fill.metadata.get("fee") or 0),
+                    "entry_fees_complete": fill.metadata.get("fee") is not None},
+            )
+        position.metadata.setdefault("entry_lifecycle_key", entry_order_key(fill))
         symbol_state.position = position
         symbol_state.stage = SymbolStage.IN_POSITION
-        symbol_state.pending_entry_order_id = ""
-        symbol_state.pending_entry_metadata.clear()
+        if complete and matching_pending:
+            symbol_state.pending_entry_order_id = ""
+            symbol_state.pending_entry_metadata.clear()
+        late_reason = str(position.metadata.get("liquidation_reason") or metadata.get("cancel_late_fill_reason") or "")
+        if late_reason:
+            position.metadata["liquidation_reason"] = late_reason
+            position.exit_in_flight = True
+            actions.extend([
+                CancelOrders(STRATEGY_ID, fill.symbol, "late_entry_fill_cancel_resting"),
+                SubmitExit(STRATEGY_ID, fill.symbol, position.qty_open, "MARKET", None,
+                    late_reason, _exit_metadata(position, late_reason, {"order_role": "EXIT"})),
+            ])
+            return KALCBCoreResult(state, actions, [DecisionEvent(event_ts, STRATEGY_ID,
+                fill.symbol, "late_entry_liquidation", late_reason, actions=tuple(actions))])
         stop_action = None
         if config.exit_hard_stop_enabled:
-            stop_action = SubmitProtectiveStop(
+            stop_action = (ReplaceProtectiveStop if additional_fragment else SubmitProtectiveStop)(
                 strategy_id=STRATEGY_ID,
                 symbol=fill.symbol,
-                qty=fill.qty,
-                stop_price=stop_price,
+                qty=position.qty_open,
+                stop_price=position.current_stop,
                 reason="initial_stop",
                 metadata=_exit_metadata(position, "initial_stop", {"order_role": "STOP", "stop_kind": "initial_stop"}),
             )
@@ -191,17 +301,23 @@ def on_kalcb_fill(state: KALCBState, fill: KALCBFillEvent, config: KALCBConfig) 
     position = symbol_state.position
     if position is None:
         return KALCBCoreResult(state)
-    exit_qty = min(int(fill.qty), int(position.qty_open))
+    exit_qty = int(fill.qty)
+    if exit_qty > position.qty_open:
+        raise ValueError("KALCB sell fill exceeds managed quantity")
     if exit_qty <= 0:
         return KALCBCoreResult(state)
     position.qty_open -= exit_qty
     position.update_mark(high=fill.price, low=fill.price)
+    if position.qty_open > 0 and config.exit_hard_stop_enabled:
+        actions.append(ReplaceProtectiveStop(STRATEGY_ID, fill.symbol, position.current_stop,
+            qty=position.qty_open, reason="fill_quantity_resize", metadata={"order_role": "STOP"}))
     is_partial = role in {"TP", "PARTIAL"} or "partial" in fill.reason.lower()
     if is_partial and position.qty_open > 0:
         position.partial_taken = True
-        position.partial_order_id = ""
+        if complete:
+            position.partial_order_id = ""
         partial_metadata: dict[str, Any] = {"qty": exit_qty, "remaining_qty": position.qty_open, "core_version": KALCB_CORE_VERSION}
-        if config.partial_stop_to_breakeven and position.risk_per_share > 0:
+        if config.exit_hard_stop_enabled and config.partial_stop_to_breakeven and position.risk_per_share > 0:
             target = position.entry_price + config.partial_breakeven_buffer_r * position.risk_per_share
             rounded = _valid_protective_stop(target, fill.price)
             if rounded > position.current_stop:
@@ -223,6 +339,7 @@ def on_kalcb_fill(state: KALCBState, fill: KALCBFillEvent, config: KALCBConfig) 
                         },
                     ),
                 )
+                actions = [item for item in actions if not isinstance(item, ReplaceProtectiveStop)]
                 actions.append(action)
                 partial_metadata.update({"breakeven_stop": rounded, "breakeven_buffer_r": config.partial_breakeven_buffer_r})
         decisions.append(
@@ -241,11 +358,13 @@ def on_kalcb_fill(state: KALCBState, fill: KALCBFillEvent, config: KALCBConfig) 
     exit_reason = fill.reason or str(metadata.get("exit_reason") or "exit")
     position.last_exit_reason = exit_reason
     if position.qty_open <= 0:
+        actions.append(CancelOrders(STRATEGY_ID, fill.symbol, "position_closed_cancel_resting_orders"))
+        symbol_state.entry_history[position.metadata.get("entry_lifecycle_key", position.entry_order_id)] = deepcopy(position)
         symbol_state.position = None
         symbol_state.stage = SymbolStage.DONE
         symbol_state.pending_entry_order_id = ""
     else:
-        position.exit_in_flight = False
+        position.exit_in_flight = not complete
     decisions.append(
         DecisionEvent(
             timestamp=event_ts,
@@ -263,13 +382,19 @@ def on_kalcb_order_update(state: KALCBState, update: KALCBOrderUpdateEvent) -> K
     symbol_state = state.symbol_state(update.symbol)
     status = update.status.upper()
     terminal = status in {"BLOCKED", "REJECTED", "CANCELLED", "DEFERRED", "EXPIRED"}
-    role_meta = state.order_roles.pop(str(update.order_id), {}) if terminal else dict(state.order_roles.get(str(update.order_id), {}))
+    if terminal and str(update.order_id) in state.order_roles:
+        state.order_history[str(update.order_id)] = state.order_roles.pop(str(update.order_id))
+    role_meta = dict(state.order_roles.get(str(update.order_id), state.order_history.get(str(update.order_id), {})))
     metadata = {**dict(role_meta), **dict(update.metadata)}
     role = str(update.role or metadata.get("order_role") or "").upper()
+    if status == "EXPIRED" and (role in {"ENTRY", "BUY"}
+            or update.order_id == symbol_state.pending_entry_order_id):
+        metadata["cancel_late_fill_reason"] = "entry_window_expired"
+        state.order_history[str(update.order_id)] = metadata
     if terminal and update.order_id == symbol_state.pending_entry_order_id:
         symbol_state.pending_entry_order_id = ""
         symbol_state.pending_entry_metadata.clear()
-        symbol_state.stage = SymbolStage.WATCHING
+        symbol_state.stage = SymbolStage.IN_POSITION if symbol_state.position else SymbolStage.WATCHING
         symbol_state.rejected_reason = status.lower()
     if terminal and _is_retryable_entry_update(update, status, metadata) and symbol_state.position is None:
         symbol_state.entry_attempted = False
@@ -284,7 +409,7 @@ def on_kalcb_order_update(state: KALCBState, update: KALCBOrderUpdateEvent) -> K
             position.partial_order_id = ""
         if role == "STOP" and position.stop_order_id == str(update.order_id):
             position.stop_order_id = ""
-        if role == "EXIT":
+        if role == "EXIT" and position.metadata.get("current_exit_order_id", str(update.order_id)) == str(update.order_id):
             position.exit_in_flight = False
     return KALCBCoreResult(
         state,
@@ -331,14 +456,44 @@ def _is_retryable_entry_update(update: KALCBOrderUpdateEvent, status: str, metad
     return status in {"REJECTED", "BLOCKED"} and any(marker in reason_text for marker in retryable_markers)
 
 
+def _cancel_entry_remainder(state, symbol_state, reason):
+    order_id = symbol_state.pending_entry_order_id
+    if not order_id or symbol_state.pending_entry_metadata.get("cancel_late_fill_reason"):
+        return []
+    symbol_state.pending_entry_metadata["cancel_late_fill_reason"] = reason
+    state.order_roles.setdefault(order_id, {})["cancel_late_fill_reason"] = reason
+    # Retain the pending identity until an acknowledgement. A racing fill is
+    # reconciled against the archived role and immediately liquidated.
+    return [CancelOrders(STRATEGY_ID, symbol_state.symbol, reason,
+                         {"entry_order_id": order_id})]
+
+
 def on_kalcb_timer(state: KALCBState, timestamp: datetime, config: KALCBConfig) -> KALCBCoreResult:
     """Shared scheduled-event hook for live and replay adapters."""
 
-    if timestamp.time() < config.flatten_time:
-        return KALCBCoreResult(state)
+    config = kalcb_session_config(config, timestamp.date())
     actions: list[StrategyAction] = []
     decisions: list[DecisionEvent] = []
     for symbol_state in state.symbols.values():
+        expiry = symbol_state.pending_entry_metadata.get("expiry_timestamp")
+        if symbol_state.pending_entry_order_id and (
+            timestamp.time() >= config.flatten_time or
+            (expiry and timestamp > datetime.fromisoformat(expiry))
+        ):
+            cancellations = _cancel_entry_remainder(state, symbol_state, "entry_window_expired")
+            actions.extend(cancellations)
+            # CancelOrders is symbol-wide in both adapters. Restore protection
+            # for the filled portion when only its remaining entry expires.
+            position = symbol_state.position
+            if (cancellations and config.exit_hard_stop_enabled
+                    and position is not None and not position.exit_in_flight
+                    and (timestamp.time() < config.flatten_time
+                         or _late_trend_extension_allowed(symbol_state, position, timestamp, config))):
+                actions.append(SubmitProtectiveStop(STRATEGY_ID, position.symbol,
+                    position.qty_open, position.current_stop, "entry_expiry_restore_stop",
+                    _exit_metadata(position, "entry_expiry_restore_stop", {"order_role": "STOP"})))
+        if timestamp.time() < config.flatten_time:
+            continue
         position = symbol_state.position
         if position is None or position.exit_in_flight:
             continue
@@ -353,7 +508,12 @@ def on_kalcb_timer(state: KALCBState, timestamp: datetime, config: KALCBConfig) 
         )
         if carry_ok:
             continue
+        if _late_trend_extension_allowed(symbol_state, position, timestamp, config):
+            continue
         reason = "eod_flatten" if config.carry_mode == CarryMode.OFF else "eod_flatten_carry_shadow"
+        position.metadata["liquidation_reason"] = reason
+        actions.extend(_cancel_entry_remainder(state, symbol_state, reason))
+        actions.extend(_cancel_retention_partial(position, reason))
         action = FlattenPosition(
             strategy_id=STRATEGY_ID,
             symbol=position.symbol,
@@ -379,7 +539,7 @@ def on_kalcb_timer(state: KALCBState, timestamp: datetime, config: KALCBConfig) 
 def remember_submitted_order(state: KALCBState, order_id: str | None, action: StrategyAction) -> None:
     if not order_id:
         return
-    metadata = _action_role_metadata(action)
+    metadata = {**_action_role_metadata(action), "submitted_qty": getattr(action, "qty", None)}
     state.order_roles[order_id] = metadata
     symbol_state = state.symbol_state(getattr(action, "symbol", ""))
     if isinstance(action, SubmitEntry):
@@ -389,6 +549,9 @@ def remember_submitted_order(state: KALCBState, order_id: str | None, action: St
         symbol_state.position.stop_order_id = order_id
     elif isinstance(action, SubmitPartialExit) and symbol_state.position is not None:
         symbol_state.position.partial_order_id = order_id
+    elif isinstance(action, (SubmitExit, FlattenPosition)) and symbol_state.position is not None:
+        symbol_state.position.exit_in_flight = True
+        symbol_state.position.metadata["current_exit_order_id"] = str(order_id)
 
 
 def _ensure_session(state: KALCBState, bar: MarketBar, snapshot: KALCBDailySnapshot | None) -> None:
@@ -413,7 +576,7 @@ def _ensure_session(state: KALCBState, bar: MarketBar, snapshot: KALCBDailySnaps
             )
 
 
-def _update_portfolio_context(state: KALCBState, portfolio: KALCBPortfolioView) -> None:
+def _update_portfolio_context(state: KALCBState, portfolio: KALCBPortfolioView,config=None) -> None:
     equity = float(portfolio.equity or 0.0)
     if equity <= 0:
         equity = max(float(portfolio.cash or 0.0) + float(portfolio.open_notional or 0.0), 0.0)
@@ -425,8 +588,20 @@ def _update_portfolio_context(state: KALCBState, portfolio: KALCBPortfolioView) 
 
     session_text = state.session_date.isoformat() if state.session_date else ""
     if state.meta.get("portfolio_session_date") != session_text:
+        if config is not None and config.risk_daily_vol_target:
+            history=list(state.meta.get('portfolio_volatility_history',[]))
+            previous=state.meta.get('portfolio_session_date')
+            previous_start=state.meta.get('portfolio_session_start_equity',0)
+            last_equity=state.meta.get('portfolio_last_equity',0)
+            if previous and previous_start>0 and last_equity>0:
+                history.append({'day':previous,'return':last_equity/previous_start-1,
+                    'scale':state.meta.get('portfolio_volatility_scale',config.risk_volatility_warmup_mult)})
+            history=history[-config.risk_volatility_lookback:]
+            state.meta['portfolio_volatility_history']=history
+            state.meta['portfolio_volatility_scale']=volatility_quantity_scale(history,session_text,config)
         state.meta["portfolio_session_date"] = session_text
         state.meta["portfolio_session_start_equity"] = equity
+    if config is not None and config.risk_daily_vol_target:state.meta['portfolio_last_equity']=equity
     session_start = float(state.meta.get("portfolio_session_start_equity", equity) or equity)
 
     portfolio.equity = equity
@@ -1640,7 +1815,8 @@ def _evaluate_entry(
 
     qty = compute_entry_qty(
         cash=portfolio.cash,
-        open_notional=portfolio.open_notional,
+        open_notional=(_governed_open_notional(state,portfolio)
+            if config.risk_max_gross_equity_pct else portfolio.open_notional),
         portfolio_equity=portfolio.equity,
         portfolio_drawdown_pct=portfolio.drawdown_pct,
         portfolio_session_return_pct=portfolio.session_return_pct,
@@ -1653,6 +1829,8 @@ def _evaluate_entry(
         momentum_score=momentum_score,
         score_detail=score_detail,
     )
+    if config.risk_daily_vol_target:
+        qty=int(qty*float(state.meta.get('portfolio_volatility_scale',config.risk_volatility_warmup_mult)))
     if qty <= 0:
         gates.append(_gate("qty_sizing", 1, qty, False))
         return _rejected(state, bar, "qty_zero", gates, {**entry_meta, "candidate_rank": candidate_rank})
@@ -1687,6 +1865,8 @@ def _evaluate_entry(
         "flow_score": float(candidate.flow_score or 0.0),
         "accumulation_score": float(candidate.accumulation_score or 0.0),
         "entry_price_ref": bar.close,
+        "risk_reserved_entry_qty": qty,
+        "portfolio_volatility_scale": float(state.meta.get('portfolio_volatility_scale',1.0)),
         "stop_price": stop_price,
         "risk_per_share": max(bar.close - stop_price, 1.0),
         "effective_max_position_notional_pct": effective_notional_pct,
@@ -1702,7 +1882,11 @@ def _evaluate_entry(
         "entry_route_session_count_before": entry_route_session_count,
         "core_version": KALCB_CORE_VERSION,
     }
+    if config.entry_order_expiry_bars > 0:
+        metadata["expiry_timestamp"] = (bar.timestamp + timedelta(
+            minutes=5 * config.entry_order_expiry_bars)).isoformat()
     action = SubmitEntry(
+        # This also controls OMS-created durable protection after an entry fill.
         strategy_id=STRATEGY_ID,
         symbol=bar.symbol,
         qty=qty,
@@ -1710,7 +1894,7 @@ def _evaluate_entry(
         limit_price=None,
         stop_price=stop_price,
         reason="kalcb_next_5m_open",
-        metadata=metadata,
+        metadata={**metadata, "hard_stop_enabled": config.exit_hard_stop_enabled},
     )
     symbol_state.stage = SymbolStage.ENTRY_QUEUED
     symbol_state.entry_attempted = True
@@ -1844,6 +2028,19 @@ def _manage_position(state: KALCBState, symbol_state: KALCBSymbolState, bar: Mar
 
     exit_reason = _exit_reason(symbol_state, position, bar, config, current_r=current_r, mfe_r=mfe_r)
     if exit_reason:
+        actions.extend(_cancel_entry_remainder(state, symbol_state, exit_reason))
+        if (exit_reason == "profit_retention" and config.exit_profit_retention_reduce_fraction < 1
+                and position.qty_open >= 2 and not position.partial_order_id):
+            qty = max(1, min(position.qty_open - 1, int(position.qty_open * config.exit_profit_retention_reduce_fraction)))
+            action = SubmitPartialExit(STRATEGY_ID, position.symbol, qty, "MARKET", None,
+                "profit_retention_partial", _exit_metadata(position, "profit_retention_partial", {"order_role": "TP"}))
+            position.metadata["profit_retention_partial_attempted"] = True
+            position.partial_order_id = "__pending__"
+            actions.append(action)
+            decisions.append(_decision(bar, "partial_exit", "profit_retention_partial", actions=[action], metadata=dict(action.metadata)))
+            return KALCBCoreResult(state, actions, decisions)
+        position.metadata["liquidation_reason"] = exit_reason
+        actions.extend(_cancel_retention_partial(position, exit_reason))
         action: StrategyAction
         if exit_reason.startswith("eod"):
             action = FlattenPosition(
@@ -1868,6 +2065,46 @@ def _manage_position(state: KALCBState, symbol_state: KALCBSymbolState, bar: Mar
     return KALCBCoreResult(state, actions, decisions)
 
 
+def _governed_open_notional(state,portfolio):
+    marked=0.0;reserved=0.0
+    for symbol_state in state.symbols.values():
+        position=symbol_state.position
+        if position:
+            last=symbol_state.bars_today[-1].close if symbol_state.bars_today else position.entry_price
+            marked+=position.qty_open*max(position.entry_price,last)
+        if symbol_state.pending_entry_order_id or symbol_state.stage==SymbolStage.ENTRY_QUEUED:
+            meta=symbol_state.pending_entry_metadata
+            order=state.order_roles.get(symbol_state.pending_entry_order_id,{})
+            requested=int(meta.get('risk_reserved_entry_qty') or order.get('submitted_qty') or 0)
+            filled=position.qty_entry if position and position.entry_order_id==symbol_state.pending_entry_order_id else 0
+            reserved+=max(0,requested-filled)*float(meta.get('entry_price_ref') or order.get('entry_price_ref') or 0)
+    return max(float(portfolio.open_notional),marked)+reserved
+
+
+def _timed_acceptance_intact(symbol_state,bar):
+    prefix=[b for b in symbol_state.bars_today if b.timestamp<=bar.timestamp]
+    if len(prefix)<6 or symbol_state.or_high<=symbol_state.or_low:
+        return False
+    vwap=compute_session_vwap(prefix)
+    opening_volume=sum(b.volume for b in prefix[:6])/6
+    recent_volume=sum(b.volume for b in prefix[-3:])/3
+    return (vwap>0 and bar.close>=vwap and
+        bar.close>=(symbol_state.or_high+symbol_state.or_low)/2 and
+        opening_volume>0 and recent_volume>=.5*opening_volume)
+
+
+def _defer_timed_exit(symbol_state,position,bar,config,reason,threshold):
+    if not config.exit_timed_acceptance_extension_bars:
+        return False
+    pending=position.metadata.get('timed_acceptance_pending')
+    if pending:
+        return position.hold_bars<pending['deadline_bar'] and _timed_acceptance_intact(symbol_state,bar)
+    if not _timed_acceptance_intact(symbol_state,bar):return False
+    position.metadata['timed_acceptance_pending']={'reason':reason,'threshold_r':threshold,
+        'deadline_bar':position.hold_bars+config.exit_timed_acceptance_extension_bars}
+    return True
+
+
 def _exit_reason(
     symbol_state: KALCBSymbolState,
     position: KALCBPositionState,
@@ -1877,6 +2114,14 @@ def _exit_reason(
     current_r: float,
     mfe_r: float,
 ) -> str:
+    if position.metadata.get("liquidation_reason"):
+        return str(position.metadata["liquidation_reason"])
+    deferred=position.metadata.get('timed_acceptance_pending')
+    if config.exit_timed_acceptance_extension_bars and deferred:
+        if current_r > deferred['threshold_r']:
+            position.metadata.pop('timed_acceptance_pending',None)
+        elif position.hold_bars >= deferred['deadline_bar'] or not _timed_acceptance_intact(symbol_state,bar):
+            return str(deferred['reason'])
     if (
         config.exit_conditional_target_enabled
         and config.exit_conditional_target_r > 0
@@ -1900,7 +2145,8 @@ def _exit_reason(
         and mfe_r <= config.exit_failed_followthrough_mfe_r
         and current_r <= config.exit_failed_followthrough_close_r
     ):
-        return "failed_followthrough"
+        if not _defer_timed_exit(symbol_state,position,bar,config,'failed_followthrough',config.exit_failed_followthrough_close_r):
+            return "failed_followthrough"
     shadow_failed_followthrough_due = (
         position.hold_bars >= config.exit_shadow_failed_followthrough_bars
         if config.exit_shadow_failed_followthrough_persistent
@@ -1923,6 +2169,8 @@ def _exit_reason(
             position.vwap_fail_streak = 0
         if position.vwap_fail_streak >= config.exit_vwap_fail_bars:
             return "vwap_fail"
+    if _profit_retention_trigger(symbol_state, position, bar, config, current_r=current_r, mfe_r=mfe_r):
+        return "profit_retention"
     path_quality_reason = _path_quality_exit_reason(symbol_state, position, bar, config, current_r=current_r, mfe_r=mfe_r)
     if path_quality_reason:
         return path_quality_reason
@@ -1958,7 +2206,8 @@ def _exit_reason(
     if config.exit_max_hold_bars > 0 and position.hold_bars >= config.exit_max_hold_bars:
         return "max_hold"
     if should_quick_exit(position.hold_bars, current_r, config):
-        return "quick_exit"
+        if not _defer_timed_exit(symbol_state,position,bar,config,'quick_exit',config.quick_exit_min_r):
+            return "quick_exit"
     if should_mfe_conviction_exit(position.hold_bars, mfe_r, current_r, config):
         return "mfe_conviction"
     if should_flow_reversal(
@@ -1970,12 +2219,72 @@ def _exit_reason(
         config=config,
     ):
         return "flow_reversal"
-    if bar.timestamp.time() >= config.flatten_time:
+    if bar.timestamp.time() >= config.flatten_time and not _late_trend_extension_allowed(
+        symbol_state, position, bar.timestamp + timedelta(minutes=5), config
+    ):
         carry_ok = current_r >= config.carry_min_r and close_location_value(bar) >= config.carry_min_cpr and position.regime_tier in {"A", "B"}
         if config.carry_mode == CarryMode.STRICT_LIVE and carry_ok:
             return ""
         return "eod_flatten" if config.carry_mode == CarryMode.OFF else "eod_flatten_carry_shadow"
+    lock = price_lock_evidence(symbol_state.candidate, symbol_state.bars_today, config)
+    if lock:
+        position.metadata["price_lock_evidence"] = lock
+        return "upper_price_lock"
+    liquidity = liquidation_evidence(symbol_state, position, config)
+    if liquidity:
+        position.metadata["liquidation_evidence"] = liquidity
+        return "liquidity_headroom"
     return ""
+
+
+def _late_trend_extension_allowed(symbol_state, position, available, config):
+    """One bounded discretionary extension, using only completed prefix evidence.
+
+    The lower volume order statistic must cover liquidation even if the position
+    waits until the extension expires. It is a forecast, never a promised fill.
+    """
+    if not config.exit_late_trend_extension_minutes or not config.exit_liquidity_guard_enabled:
+        return False
+    from math import floor
+    from kis_core.trading_calendar import get_trading_calendar
+    from strategy_common.execution_session import bar_execution_issue, bar_has_periodic_auction
+    start = datetime.combine(available.date(), config.flatten_time, tzinfo=available.tzinfo)
+    hard = datetime.combine(available.date(), get_trading_calendar().session_hours(available.date())[1],
+                            tzinfo=available.tzinfo) - timedelta(minutes=10)
+    end = min(start + timedelta(minutes=config.exit_late_trend_extension_minutes), hard)
+    if not start <= available < end:
+        return False
+    prefix = [b for b in symbol_state.bars_today if b.timestamp.date() == available.date()
+              and b.timestamp + timedelta(minutes=5) <= available]
+    recent = prefix[-config.exit_liquidity_guard_lookback:]
+    if len(recent) < config.exit_liquidity_guard_lookback or recent[-1].timestamp + timedelta(minutes=5) != available:
+        return False
+    if any(b.symbol != position.symbol or b.timeframe != '5m' or bar_execution_issue(b)
+           or bar_has_periodic_auction(b) for b in recent):
+        return False
+    if any(b.timestamp-a.timestamp != timedelta(minutes=5) for a,b in zip(recent,recent[1:])):
+        return False
+    # Each confirmation close is compared with its own available session VWAP.
+    for last in recent[-2:]:
+        own = [b for b in prefix if b.timestamp <= last.timestamp]
+        vwap = compute_session_vwap(own)
+        if not vwap > 0 or last.close <= vwap:
+            return False
+    if recent[-1].close <= position.entry_price * (1 + config.exit_profit_retention_roundtrip_cost_bps / 10000):
+        return False
+    volumes = sorted(b.volume for b in recent)
+    volume = volumes[floor((len(volumes)-1)*config.exit_liquidity_guard_quantile)]
+    slots = max(0, int((hard-end).total_seconds()//300))
+    capacity = floor(slots * floor(volume*config.exit_liquidity_guard_participation)
+                     * (1-config.exit_liquidity_guard_reserve))
+    if position.qty_open > capacity:
+        return False
+    position.metadata['late_trend_extension_evidence'] = {
+        'available_at': available.isoformat(), 'discretionary_deadline': end.isoformat(),
+        'hard_deadline': hard.isoformat(), 'forecast_capacity_after_extension': capacity,
+        'inventory': position.qty_open, 'future_liquidity_verified': False,
+    }
+    return True
 
 
 def _mfe_floor_cohort_matches(position: KALCBPositionState, config: KALCBConfig) -> bool:
@@ -2037,6 +2346,75 @@ def _conditional_target_cohort_matches(position: KALCBPositionState, config: KAL
     route_modes = set(config.exit_conditional_target_entry_route_modes or ())
     if route_modes and str(metadata.get("entry_route_mode") or "") not in route_modes:
         return False
+    return True
+
+
+def _cancel_retention_partial(position, reason):
+    if position.metadata.get("profit_retention_partial_attempted") and position.partial_order_id:
+        return [CancelOrders(STRATEGY_ID, position.symbol, reason, {"retention_partial_order_id": position.partial_order_id})]
+    return []
+
+
+def _profit_retention_trigger(symbol_state, position, bar, config, *, current_r, mfe_r):
+    """Completed-close signal only; the normal exit lifecycle determines fills."""
+    if config.exit_profit_retention_enabled and config.exit_profit_retention_recent_overlay_atr > 0:
+        base=replace(config,exit_profit_retention_recent_overlay_atr=0.)
+        if _profit_retention_trigger(symbol_state,position,bar,base,current_r=current_r,mfe_r=mfe_r):
+            return True
+        overlay=replace(base,exit_profit_retention_confirmation='recent_vwap',
+            exit_profit_retention_start_atr=config.exit_profit_retention_recent_overlay_atr,
+            exit_profit_retention_fraction=config.exit_profit_retention_recent_overlay_fraction)
+        return _profit_retention_trigger(symbol_state,position,bar,overlay,current_r=current_r,mfe_r=mfe_r)
+    if not config.exit_profit_retention_enabled:
+        return False
+    if position.metadata.get("profit_retention_partial_attempted"):
+        return False
+    if position.hold_bars < config.exit_profit_retention_min_hold_bars:
+        return False
+    maturity_price = 0.0
+    if config.exit_profit_retention_start_atr > 0 or config.exit_profit_retention_cost_multiple > 0:
+        atr = float(position.metadata.get("daily_atr") or 0.0)
+        if not isfinite(atr) or atr <= 0:
+            return False
+        maturity_price = max(config.exit_profit_retention_start_atr * atr,
+            position.entry_price * config.exit_profit_retention_roundtrip_cost_bps / 10000 * config.exit_profit_retention_cost_multiple)
+        if mfe_r * position.risk_per_share < maturity_price:
+            return False
+    elif mfe_r < config.exit_profit_retention_start_r:
+        return False
+    if current_r > config.exit_profit_retention_fraction * mfe_r:
+        return False
+    prefix = sorted((b for b in symbol_state.bars_today
+                     if b.timestamp.date() == bar.timestamp.date() and b.timestamp <= bar.timestamp),
+                    key=lambda b: b.timestamp)
+    count = config.exit_profit_retention_vwap_closes
+    post = [b for b in prefix if b.timestamp >= position.entry_time]
+    if len(post) < count or post[-1].timestamp != bar.timestamp:
+        return False
+    tail = post[-count:]
+    if any(b.timestamp - a.timestamp != timedelta(minutes=5) for a, b in zip(tail, tail[1:])):
+        return False
+    # Each close is compared with its own contemporaneous VWAP, not today's
+    # final VWAP or a later bar's VWAP projected backwards.
+    for item in tail:
+        observed = [b for b in prefix if b.timestamp <= item.timestamp]
+        if config.exit_profit_retention_confirmation == "recent_vwap":
+            observed = observed[-config.exit_profit_retention_recent_bars:]
+            if len(observed) < config.exit_profit_retention_recent_bars:
+                return False
+            if any(b.timestamp - a.timestamp != timedelta(minutes=5) for a, b in zip(observed, observed[1:])):
+                return False
+        vwap = compute_session_vwap(observed)
+        if vwap <= 0 or item.close >= vwap:
+            return False
+    position.metadata["profit_retention_signal"] = {
+        "bar_timestamp": bar.timestamp.isoformat(), "current_r": float(current_r),
+        "mfe_r": float(mfe_r), "retained_fraction": float(config.exit_profit_retention_fraction),
+        "vwap_confirmation_closes": count,
+        "confirmation": config.exit_profit_retention_confirmation,
+        "recent_bars": config.exit_profit_retention_recent_bars,
+        "maturity_price": maturity_price,
+    }
     return True
 
 
@@ -2490,6 +2868,11 @@ def _exit_metadata(position: KALCBPositionState, cohort: str, extra: dict[str, A
             "portfolio_drawdown_pct",
             "portfolio_session_return_pct",
             "exit_path_quality_context",
+            "risk_reference_basis",
+            "management_risk_per_share",
+            "price_lock_evidence",
+            "liquidation_evidence",
+            "liquidation_reason",
         )
         if key in position.metadata
     }

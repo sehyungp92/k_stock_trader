@@ -938,8 +938,10 @@ def _audit_row(
 
 
 def _official_replay_pass(metrics: dict[str, float]) -> bool:
+    from backtests.engine.contracts import execution_valid
     return (
-        float(metrics.get("official_trade_plan_supported", 1.0) or 0.0) == 1.0
+        execution_valid(metrics)
+        and float(metrics.get("official_trade_plan_supported", 1.0) or 0.0) == 1.0
         and float(metrics.get("same_bar_fill_count", 0.0) or 0.0) == 0.0
         and float(metrics.get("end_open_position_count", 0.0) or 0.0) == 0.0
         and float(metrics.get("open_order_count", 0.0) or 0.0) == 0.0
@@ -1024,7 +1026,8 @@ def _read_official_audit_cache(
     if payload.get("evidence_version") != ALLOCATION_OFFICIAL_AUDIT_EVIDENCE_VERSION:
         return None
     audit = payload.get("audit")
-    return dict(audit) if isinstance(audit, dict) else None
+    from backtests.engine.contracts import execution_valid
+    return dict(audit) if isinstance(audit, dict) and execution_valid(audit.get("official_mtm_metrics") or {}) else None
 
 
 def _write_official_audit_cache(
@@ -1209,6 +1212,8 @@ def _official_allocation_report(
         "official_trade_plan_supported",
     )
     metrics = {key: float(result.metrics.get(key, 0.0) or 0.0) for key in keys}
+    for key in ("audit_pass", "audit_status", "audit_receipt", "audit_version", "metric_version", "execution_version"):
+        metrics[key] = result.metrics.get(key)
     metrics["official_trade_plan_supported"] = 1.0
     evidence = _official_audit_key_evidence(result, snapshots, audit_cfg, selected_pairs, needed_pairs, len(bars), bar_scope_hash, row.trade_spec)
     return metrics, evidence

@@ -38,6 +38,7 @@ from backtests.strategies.kalcb.candidate_surfacing_recovery import (  # noqa: E
 )
 from backtests.strategies.kalcb.fixed_trade_plan_phase import _configured_entry_routes, _route_candidate_passes  # noqa: E402
 from backtests.strategies.kalcb.shadow_ledger_reranker import read_jsonl, write_jsonl  # noqa: E402
+from backtests.strategies.kalcb.chronological import OUTCOME_FEATURES, validate_predictor_columns  # noqa: E402
 
 
 def _load_train_opt_module():
@@ -300,19 +301,17 @@ def feature_columns(df: pd.DataFrame, feature_set: str) -> list[str]:
     elif feature_set == "interaction_full":
         wanted = base + causal + DERIVED_FEATURES
     elif feature_set == "interaction_route":
-        wanted = base + causal + DERIVED_FEATURES + [
-            "surfaced_candidate",
-            "entered_shared_core",
-            "selected_first30",
-        ]
+        # Route outcomes belong in training labels, never in live predictors.
+        wanted = base + causal + DERIVED_FEATURES
     else:
         raise ValueError(f"Unknown feature set: {feature_set}")
     out: list[str] = []
     seen: set[str] = set()
     for key in wanted:
-        if key in df.columns and key not in seen:
+        if key in df.columns and key not in seen and key not in LEAKAGE_FEATURE_BLOCKLIST and key not in OUTCOME_FEATURES:
             out.append(key)
             seen.add(key)
+    validate_predictor_columns(out)
     return out
 
 
