@@ -87,7 +87,7 @@ def analyse(study_path, names):
     sys.path.insert(0, str(engine_root))
     import os
     os.chdir(engine_root)
-    from backtests.core.input_manifest import InputManifest, _VERIFIED_BYTES
+    from kis_core.input_manifest import InputManifest, _VERIFIED_BYTES
     from backtests.strategies.olr.research_sweep import _load_symbol_frame, _FRAME_CACHE
     from kis_core.trading_calendar import get_trading_calendar
     generation = InputManifest(spec["input_manifest"])

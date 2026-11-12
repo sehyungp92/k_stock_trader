@@ -9,7 +9,7 @@ def request_identity(config, mutations):
     config = dict(config or {})
     manifest = None
     if config.get("input_manifest_path"):
-        from backtests.core.input_manifest import InputManifest
+        from kis_core.input_manifest import InputManifest
         manifest = InputManifest(config["input_manifest_path"]).identity
     return stable_signature({"config": config, "mutations": dict(mutations or {}), "input_generation": manifest})
 
@@ -21,7 +21,7 @@ def bound_evaluation(function):
         config = dict(config or {})
         frozen = None
         if config.get("input_manifest_path"):
-            from backtests.core.input_manifest import InputManifest
+            from kis_core.input_manifest import InputManifest
             from backtests.auto.shared.cache_keys import source_generation_hash
             frozen = InputManifest(config["input_manifest_path"])
             if frozen.payload["source_generation_hash"] != source_generation_hash():

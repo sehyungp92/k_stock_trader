@@ -123,7 +123,7 @@ def refresh(study_path, output, register_current_policies=False, calendar_manife
     payload = {**parent, "files": files, "source_generation_hash": source}
     new_manifest = output / "inputs/manifest.json"
     write_json(new_manifest, {**payload, "manifest_hash": signature(payload)})
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     InputManifest(new_manifest).receipt()
     write_json(output / "study.json", {**study, "manifest": str(new_manifest.resolve()),
         "code": str(root.resolve()), "source_generation_hash": source})

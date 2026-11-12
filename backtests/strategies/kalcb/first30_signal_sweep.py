@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backtests.core.input_manifest import frozen_input_loader
+from kis_core.input_manifest import frozen_input_loader
 
 import argparse
 import bisect

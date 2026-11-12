@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from backtests.core.input_manifest import InputManifest, frozen_input_loader, signature
+from kis_core.input_manifest import InputManifest, frozen_input_loader, signature
 from backtests.core.shared_market_inputs import compare_consumed_bars, selected_intraday_paths
 from backtests.strategies.kalcb.replay_cache import _load_symbol_frame as kalcb_frame
 from backtests.strategies.olr.research_sweep import _load_symbol_frame as olr_frame
@@ -124,7 +124,7 @@ def test_config_relative_frozen_input_survives_original_removal(generation):
 
 
 def test_nested_loader_aggregates_parent_read_observations(generation):
-    from backtests.core.input_manifest import active_manifest, read_input_bytes
+    from kis_core.input_manifest import active_manifest, read_input_bytes
     @frozen_input_loader
     def loader(config):
         assert active_manifest() is generation

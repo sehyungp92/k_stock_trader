@@ -3,7 +3,7 @@ from __future__ import annotations
 from backtests.engine.contracts import CONTRACT_VERSIONS, execution_valid
 from backtests.engine.integrity import audit_broker, receipt_matches
 from backtests.engine.evaluation_identity import request_identity
-from backtests.core.input_manifest import InputManifest, active_manifest, input_stream, read_input_bytes, manifest_method
+from kis_core.input_manifest import InputManifest, active_manifest, input_stream, read_input_bytes, manifest_method
 
 import json
 import math

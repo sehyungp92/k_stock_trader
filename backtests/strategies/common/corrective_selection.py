@@ -9,7 +9,7 @@ from pathlib import Path
 from backtests.auto.shared.cache_keys import stable_signature, source_generation_hash
 from backtests.auto.shared.plugin import PhaseSpec, PhaseAnalysisPolicy
 from backtests.auto.shared.types import Experiment, ScoredCandidate, GateCriterion, EndOfRoundArtifacts
-from backtests.core.input_manifest import InputManifest
+from kis_core.input_manifest import InputManifest
 from backtests.engine.contracts import execution_valid
 from backtests.engine.capacity import CAPACITY_SCENARIOS
 

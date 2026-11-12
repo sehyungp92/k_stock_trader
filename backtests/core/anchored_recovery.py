@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backtests.core.input_manifest import signature
+from kis_core.input_manifest import signature
 from scripts.recover_flagged_sessions import reconstruct_session
 from scripts.update_kis_intraday import _normalize_kis_minute_row, normalize_bar_frame, aggregate_timeframe
 from kis_core.trading_calendar import get_trading_calendar

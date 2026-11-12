@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backtests.config import load_yaml_config
-from backtests.core.input_manifest import InputManifest, active_manifest, read_input_bytes
+from kis_core.input_manifest import InputManifest, active_manifest, read_input_bytes
 from backtests.core.shared_market_inputs import compare_consumed_bars, market_input_contract
 from backtests.strategies.portfolio_synergy.source_replay import (
     PromotedReplayInputs,
@@ -485,7 +485,7 @@ def _load_pinned_bars(pairs: set[tuple[date, str]]) -> list[MarketBar]:
 
 def _write_input_receipts(output, alignment, snapshots_by_strategy):
     """Keep new evidence beside the diagnostic; preserve original round artifacts."""
-    from backtests.core.input_manifest import signature
+    from kis_core.input_manifest import signature
     root = output.with_suffix(".inputs")
     receipts = {}
     for strategy, snapshots in snapshots_by_strategy.items():

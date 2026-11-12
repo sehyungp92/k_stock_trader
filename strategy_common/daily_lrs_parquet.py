@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backtests.core.input_manifest import parquet_input, read_input_bytes
+from kis_core.input_manifest import parquet_input, read_input_bytes
 
 import argparse
 import hashlib

@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import pytest
 
-from backtests.core.input_manifest import InputManifest
+from kis_core.input_manifest import InputManifest
 from backtests.core.session_replacement import apply_session_replacements
 from strategy_common.clock import KST
 

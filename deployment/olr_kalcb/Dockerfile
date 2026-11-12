@@ -17,6 +17,8 @@ COPY strategy_olr/ /app/strategy_olr/
 COPY kis_core/ /app/kis_core/
 RUN printf '%s\n' '"""Minimal kis_core package for OLR/KALCB runtime containers."""' > /app/kis_core/__init__.py
 COPY oms_client/ /app/oms_client/
+COPY instrumentation/__init__.py /app/instrumentation/__init__.py
+COPY instrumentation/src/ /app/instrumentation/src/
 COPY scripts/check_live_readiness_manifest.py /app/scripts/check_live_readiness_manifest.py
 COPY scripts/generate_olr_kalcb_artifacts.py /app/scripts/generate_olr_kalcb_artifacts.py
 COPY scripts/replay_paper_session.py /app/scripts/replay_paper_session.py

@@ -3,7 +3,7 @@ from dataclasses import asdict
 
 from backtests.auto.shared.cache_keys import stable_signature, source_generation_hash
 from backtests.auto.shared.types import ScoredCandidate
-from backtests.core.input_manifest import active_manifest
+from kis_core.input_manifest import active_manifest
 from backtests.engine.contracts import execution_valid
 from backtests.engine.integrity import audit_broker
 from backtests.engine.capacity import capacity_from_config

@@ -247,7 +247,7 @@ def replay_worker(spec, name, mode, mutation_file=None):
     from backtests.strategies.olr.final_diagnostics import export_case, write_rows, release_diagnostic_replay_memory, json_value
     from backtests.analysis.metrics import session_equity
     from kis_core.trading_calendar import get_trading_calendar
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     if source_generation_hash() != spec["source_generation_hash"]:
         raise ValueError("Execution source drift")
     mutations = read(mutation_file) if mutation_file else spec["cases"][name]["mutations"]

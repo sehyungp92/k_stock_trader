@@ -10,7 +10,7 @@ import pytest
 from backtests.auto.shared.types import Experiment
 from backtests.auto.shared.plugin_utils import CachedBatchEvaluator
 from backtests.auto.shared.phase_runner import _metric_contract_criteria
-from backtests.core.input_manifest import InputManifest, read_input_bytes
+from kis_core.input_manifest import InputManifest, read_input_bytes
 from backtests.core.replay_bundle import EventReplayBundle
 from backtests.core.replay_events import ReplayEvent
 from backtests.engine.contracts import execution_valid
@@ -126,7 +126,7 @@ def test_modified_frozen_evidence_fails_actual_worker(evidence_fixture, monkeypa
     path.write_text("[]", encoding="utf-8")
     monkeypatch.setattr(worker, "_worker_config", {"capability_level": "synthetic", "input_manifest_path": str(generation.path)})
     monkeypatch.setattr(worker, "_worker_replay_bundle", bundle)
-    from backtests.core.input_manifest import _VERIFIED_BYTES
+    from kis_core.input_manifest import _VERIFIED_BYTES
     _VERIFIED_BYTES.clear()
     result = worker.score_candidate(("tampered", {}, {}))
     assert result.rejected and not result.metrics["audit_pass"]

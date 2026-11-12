@@ -10,7 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from backtests.core.input_manifest import signature
+from kis_core.input_manifest import signature
 
 VERSION = "retained-parquet-acceptance-v1"
 
@@ -116,7 +116,7 @@ def verify_acceptance(read, evidence, *, generation=None):
     if report.get("version") != VERSION or report.get("scope") != "retained_archive_offline_research":
         raise ValueError("invalid_retained_source_acceptance")
     if generation is None:
-        from backtests.core.input_manifest import active_manifest
+        from kis_core.input_manifest import active_manifest
         generation = active_manifest()
     if generation is None:
         raise ValueError("retained_acceptance_requires_frozen_inputs")

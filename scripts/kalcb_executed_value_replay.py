@@ -138,7 +138,7 @@ def audit_configuration(plan):
 
 
 def run(plan, policies, name, scenario, output, audit_manifest=None):
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     from backtests.auto.shared.cache_keys import source_generation_hash
     from backtests.engine.capacity import BarParticipationScenario
     from backtests.engine.replay import drive_timestamp_batch
@@ -262,7 +262,7 @@ def main():
     p.add_argument("--output", required=True, type=Path)
     args = p.parse_args()
     if args.audit_manifest:
-        from backtests.core.input_manifest import InputManifest
+        from kis_core.input_manifest import InputManifest
         frozen_root = InputManifest(args.audit_manifest).root.resolve()
         if Path(__file__).resolve().parents[1] != frozen_root:
             raise ValueError(f"Run {frozen_root / 'scripts/kalcb_executed_value_replay.py'} so calendar dependencies resolve inside the audited bundle")

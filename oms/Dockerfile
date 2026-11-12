@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy shared libraries
 COPY kis_core/ /app/kis_core/
+COPY strategy_common/ /app/strategy_common/
+COPY instrumentation/__init__.py /app/instrumentation/__init__.py
+COPY instrumentation/src/ /app/instrumentation/src/
 
 # Copy OMS
 COPY oms/ /app/oms/

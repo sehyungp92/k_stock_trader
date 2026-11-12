@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backtests.core.input_manifest import frozen_input_loader, parquet_input, read_input_bytes
+from kis_core.input_manifest import frozen_input_loader, parquet_input, read_input_bytes
 from backtests.core.shared_market_inputs import selected_intraday_paths, market_input_contract
 
 import argparse

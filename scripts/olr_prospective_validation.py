@@ -281,7 +281,7 @@ def evaluate(contract_path, manifest_path, output, preflight_only):
     sys.path.insert(0, str(engine))
     os.chdir(engine)
     from backtests.auto.shared.cache_keys import source_generation_hash
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     from kis_core.trading_calendar import get_trading_calendar
     if source_generation_hash() != contract["source_generation_hash"]:
         raise ValueError("Executing source identity differs from contract")

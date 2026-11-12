@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from backtests.core.input_manifest import InputManifest, read_input_bytes
+from kis_core.input_manifest import InputManifest, read_input_bytes
 from backtests.engine.capacity import BarParticipationScenario
 from backtests.engine.integrity import audit_broker, receipt_matches
 from backtests.engine.contracts import AUDIT_VERSION, METRIC_VERSION, EXECUTION_VERSION

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backtests.core.input_manifest import InputManifest, signature
+from kis_core.input_manifest import InputManifest, signature
 from strategy_common.session_coverage import session_bar_coverage
 
 

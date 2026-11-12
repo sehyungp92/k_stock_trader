@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from backtests.core.input_manifest import read_input_bytes
+from kis_core.input_manifest import read_input_bytes
 
 
 def load_yaml_config(path: str | Path | None) -> dict[str, Any]:

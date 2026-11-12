@@ -152,7 +152,7 @@ def test_study_removes_count_floors_and_real_sizing_control_is_registered(monkey
 
 def test_olr_prepared_cache_preserves_current_recipe_config_and_rejects_changed_bytes(monkeypatch, tmp_path):
     from dataclasses import fields
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     from backtests.strategies.olr import replay_cache as cache
     from backtests.strategies.olr.research_sweep import OLRResearchSweepDataset
     from strategy_olr.config import OLRConfig

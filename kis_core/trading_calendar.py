@@ -36,7 +36,7 @@ class KRXTradingCalendar:
         if not path.exists():
             return
         import hashlib
-        from backtests.core.input_manifest import read_input_bytes
+        from kis_core.input_manifest import read_input_bytes
         content = read_input_bytes(path)
         data = yaml.safe_load(content)
         root = Path(__file__).resolve().parents[1]
@@ -91,7 +91,7 @@ class KRXTradingCalendar:
         if not path.exists():
             return
         import hashlib
-        from backtests.core.input_manifest import read_input_bytes
+        from kis_core.input_manifest import read_input_bytes
         content = read_input_bytes(path)
         data = yaml.safe_load(content)
         start, end = date.fromisoformat(data["coverage_start"]), date.fromisoformat(data["coverage_end"])
@@ -152,7 +152,7 @@ class KRXTradingCalendar:
             return holidays
 
         try:
-            from backtests.core.input_manifest import read_input_bytes
+            from kis_core.input_manifest import read_input_bytes
             data = yaml.safe_load(read_input_bytes(yaml_path))
             if data:
                 for year, dates in data.items():
@@ -201,7 +201,7 @@ class KRXTradingCalendar:
 
 def get_trading_calendar() -> KRXTradingCalendar:
     """Get the singleton trading calendar instance."""
-    from backtests.core.input_manifest import active_manifest
+    from kis_core.input_manifest import active_manifest
     generation = active_manifest()
     if generation is not None:
         if not hasattr(generation, "calendar"):

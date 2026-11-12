@@ -2,7 +2,7 @@
 from pathlib import Path
 from datetime import date
 
-from backtests.core.input_manifest import active_manifest, signature
+from kis_core.input_manifest import active_manifest, signature
 
 
 def market_input_contract(manifest=None):

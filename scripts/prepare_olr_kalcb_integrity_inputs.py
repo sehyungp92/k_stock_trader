@@ -8,7 +8,7 @@ import hashlib
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from backtests.core.input_manifest import InputManifest, signature
+from kis_core.input_manifest import InputManifest, signature
 
 
 def verified_supplement(root, symbol, entry, primary_paths):

@@ -49,7 +49,7 @@ def release_diagnostic_replay_memory(plugin):
     The caller retains its current bundle. Clearing cache dictionaries does not
     mutate that bundle, its bars, snapshots, exported results or audit receipts.
     """
-    from backtests.core import input_manifest
+    from kis_core import input_manifest
     from . import replay_cache, research_sweep
     plugin._result_cache.clear()
     plugin._last_result = None

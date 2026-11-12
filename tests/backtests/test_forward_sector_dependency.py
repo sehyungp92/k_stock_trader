@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from backtests.core.input_manifest import signature
+from kis_core.input_manifest import signature
 from scripts import kalcb_executed_value_study as study
 
 

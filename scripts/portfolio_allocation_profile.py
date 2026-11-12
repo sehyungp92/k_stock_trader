@@ -10,7 +10,7 @@ VERSION='portfolio-allocation-challenge-profile-v1'
 
 def verify_frozen_bytes(study,cache):
     """Hash current frozen bytes; deduplicate hardlinks within this verification."""
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     manifest=InputManifest(study['manifest'])
     for name,expected in manifest.files.items():
         path=Path(name);stat=path.stat()

@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from backtests.auto.shared.cache_keys import stable_signature, _default
-from backtests.core.input_manifest import InputManifest, signature
+from kis_core.input_manifest import InputManifest, signature
 from backtests.engine.qualification_evidence import source_rows
 from scripts.kalcb_executed_value_study import load_day
 from scripts.kalcb_executed_value_replay import observation_prefix

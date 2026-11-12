@@ -173,7 +173,7 @@ def test_full_diagnostics_are_observer_only_and_failed_receipts_prevent_publicat
 def test_diagnostic_memory_release_preserves_active_bundle_and_execution_contract():
     import weakref
     from backtests.strategies.olr import replay_cache, research_sweep
-    from backtests.core import input_manifest
+    from kis_core import input_manifest
     from backtests.strategies.olr.final_diagnostics import release_diagnostic_replay_memory
     from backtests.strategies.common.plugin_base import build_execution_contract
     plugin = OLROptimizationPlugin({"capability_level": "synthetic"}, max_workers=1)

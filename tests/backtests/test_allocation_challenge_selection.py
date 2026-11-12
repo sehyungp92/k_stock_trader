@@ -62,7 +62,7 @@ def test_publication_rehashes_frozen_source_bytes(tmp_path):
     import json
     from scripts.portfolio_allocation_profile import verify_frozen_bytes
     from scripts.replay_selected_portfolio import digest
-    from backtests.core.input_manifest import signature
+    from kis_core.input_manifest import signature
     files=tmp_path/'files';files.mkdir();source=files/'signal.json'
     source.write_text('{"value":1}',encoding='utf-8')
     payload={'files':{'signal.json':digest(source)}}

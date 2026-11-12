@@ -13,7 +13,7 @@ import json
 import math
 
 from backtests.auto.shared.cache_keys import source_generation_hash, stable_signature
-from backtests.core.input_manifest import InputManifest
+from kis_core.input_manifest import InputManifest
 from kis_core.trading_calendar import get_trading_calendar
 from strategy_common.session_coverage import session_bar_coverage
 from .source_basis import target_basis, conversion, converted_value, converted_timestamp

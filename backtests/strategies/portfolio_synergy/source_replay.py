@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backtests.core.input_manifest import parquet_input, read_input_bytes
+from kis_core.input_manifest import parquet_input, read_input_bytes
 from backtests.core.shared_market_inputs import market_bar_values, selected_intraday_paths
 
 import hashlib
@@ -865,7 +865,7 @@ def _file_hash(path: Path) -> str:
 def _repo_path(repo_root: Path, raw: Any) -> Path:
     path = Path(str(raw or ""))
     path = path if path.is_absolute() else repo_root / path
-    from backtests.core.input_manifest import active_manifest
+    from kis_core.input_manifest import active_manifest
     manifest = active_manifest()
     return manifest.resolve(path) if manifest else path
 

@@ -141,7 +141,7 @@ def test_capture_archives_zero_trade_session_and_refuses_overwrite(tmp_path, mon
 
 def test_explicit_execution_tree_hash_does_not_use_mutable_workspace(tmp_path):
     from backtests.auto.shared.cache_keys import source_generation_hash
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     source = tmp_path / "source"
     code = source / "strategy_olr/config.py"
     code.parent.mkdir(parents=True)

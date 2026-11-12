@@ -44,7 +44,7 @@ def build_cache_key(
     mutation_prefixes: Iterable[str] = (),
     extra: dict[str, Any] | None = None,
 ) -> str:
-    from backtests.core.input_manifest import active_manifest
+    from kis_core.input_manifest import active_manifest
     generation = active_manifest()
     if mutations is None:
         mutation_payload = None
@@ -87,7 +87,7 @@ def fingerprint_paths(paths: Iterable[Path], *, root: Path | None = None) -> str
 
 
 def file_content_hash(path: Path) -> str:
-    from backtests.core.input_manifest import active_manifest
+    from kis_core.input_manifest import active_manifest
     generation = active_manifest()
     if generation and generation.digest(path):
         return generation.digest(path)

@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd
 import yaml
 
-from backtests.core.input_manifest import InputManifest
+from kis_core.input_manifest import InputManifest
 from backtests.core.shared_market_inputs import market_input_contract, selected_intraday_paths
 from kis_core.trading_calendar import KRXTradingCalendar
 from strategy_common.session_coverage import session_bar_coverage

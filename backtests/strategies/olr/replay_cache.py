@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backtests.core.input_manifest import frozen_input_loader, frozen_research_loader, parquet_input, read_input_bytes
+from kis_core.input_manifest import frozen_input_loader, frozen_research_loader, parquet_input, read_input_bytes
 
 from dataclasses import asdict, replace
 from datetime import date
@@ -253,7 +253,7 @@ def _load_dataset(training_config: dict[str, Any], cfg: OLRConfig) -> OLRResearc
     cached = _DATASET_CACHE.get(key)
     if cached is not None:
         return replace(cached, config=dict(training_config))
-    from backtests.core.input_manifest import active_manifest
+    from kis_core.input_manifest import active_manifest
     generation = active_manifest()
     disk = None
     if generation and training_config.get("corrective_study_hash"):

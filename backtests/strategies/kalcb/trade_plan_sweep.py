@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backtests.core.input_manifest import frozen_input_loader
+from kis_core.input_manifest import frozen_input_loader
 
 import argparse
 import hashlib
@@ -19,7 +19,7 @@ from statistics import mean, median
 from typing import Any, Callable, Iterable
 
 from backtests.auto.shared.cache_keys import fingerprint_paths, fingerprint_tree, stable_signature
-from backtests.core.input_manifest import active_manifest, input_stream, read_input_bytes
+from kis_core.input_manifest import active_manifest, input_stream, read_input_bytes
 from backtests.auto.shared.phase_state import _utc_now_iso
 from backtests.analysis.metrics import compute_trade_metrics
 from backtests.config import load_yaml_config, normalize_runtime_config

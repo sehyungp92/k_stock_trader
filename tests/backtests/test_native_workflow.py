@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from backtests.core.input_manifest import InputManifest
+from kis_core.input_manifest import InputManifest
 from backtests.strategies.portfolio_synergy.native_workflow import validate_study, run_native_study, RESERVATION_CONTRACT
 
 

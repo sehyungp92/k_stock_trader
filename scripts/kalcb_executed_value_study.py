@@ -63,7 +63,7 @@ def emit(stream, row):
 def prepare(plan, output):
     import pandas as pd
     import yaml
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     from backtests.strategies.kalcb import first30_signal_sweep as native
     from backtests.strategies.kalcb.trade_plan_sweep import _candidate_from_context
     from kis_core.trading_calendar import get_trading_calendar

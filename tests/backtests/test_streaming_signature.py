@@ -7,7 +7,7 @@ import tracemalloc
 import pytest
 
 from backtests.auto.shared.cache_keys import _default, stable_signature
-from backtests.core.input_manifest import signature
+from kis_core.input_manifest import signature
 
 
 @pytest.mark.parametrize("sign,default", [(stable_signature, _default), (signature, str)])

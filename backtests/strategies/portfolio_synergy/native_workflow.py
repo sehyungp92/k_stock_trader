@@ -11,7 +11,7 @@ from pathlib import Path
 
 from backtests.auto.shared.cache_keys import source_generation_hash, stable_signature
 from backtests.auto.shared.types import Experiment
-from backtests.core.input_manifest import InputManifest, read_input_bytes
+from kis_core.input_manifest import InputManifest, read_input_bytes
 from backtests.engine.contracts import execution_valid
 from .native_evaluator import NativePortfolioPolicyEvaluator
 from .native_policy import native_policy_config

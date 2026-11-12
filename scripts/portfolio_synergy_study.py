@@ -187,7 +187,7 @@ def prepare(args):
 
 
 def replay(args):
-    from backtests.core.input_manifest import InputManifest
+    from kis_core.input_manifest import InputManifest
     from backtests.auto.shared.cache_keys import source_generation_hash
     from backtests.engine.capacity import BarParticipationScenario
     from backtests.engine.sim_broker import BrokerCosts
