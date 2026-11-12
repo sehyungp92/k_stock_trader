@@ -174,3 +174,9 @@ docs/optimisation/*
 # PCIM strategy: retired from the repo, kept local-only
 strategy_pcim/
 tests/strategy_pcim/
+
+# Tool caches and local audit/scratch output
+.ruff_cache/
+.kilo/
+.prune_audit/
+*.pkl
